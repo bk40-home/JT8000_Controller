@@ -1,0 +1,20 @@
+^C:\USERS\PCSADMIN\DOCUMENTS\JT8000_CONTROLLER\BUILD\CMAKEFILES\0CA7FC2CBD89A39B17A1C2D425EA68FA\JT8000_CONTROLLER_RESOURCES.RC.RULE
+setlocal
+juce_build\tools\extras\Build\juceaide\juceaide_artefacts\Custom\juceaide.exe rcfile C:/Users/pcsadmin/Documents/JT8000_Controller/build/JT8000_Controller_artefacts/JuceLibraryCode/Info.txt C:/Users/pcsadmin/Documents/JT8000_Controller/build/JT8000_Controller_artefacts/JuceLibraryCode/JT8000_Controller_resources.rc
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\PCSADMIN\DOCUMENTS\JT8000_CONTROLLER\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/pcsadmin/Documents/JT8000_Controller -BC:/Users/pcsadmin/Documents/JT8000_Controller/build --check-stamp-file C:/Users/pcsadmin/Documents/JT8000_Controller/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

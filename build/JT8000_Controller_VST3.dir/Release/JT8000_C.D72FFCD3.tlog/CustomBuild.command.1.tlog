@@ -1,0 +1,10 @@
+^C:\USERS\PCSADMIN\DOCUMENTS\JT8000_CONTROLLER\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/pcsadmin/Documents/JT8000_Controller -BC:/Users/pcsadmin/Documents/JT8000_Controller/build --check-stamp-file C:/Users/pcsadmin/Documents/JT8000_Controller/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

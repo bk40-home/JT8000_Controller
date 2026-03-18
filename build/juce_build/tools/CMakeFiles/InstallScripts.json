@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/cmake_install.cmake",
+		"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/modules/cmake_install.cmake",
+		"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/extras/Build/cmake_install.cmake",
+		"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/extras/Build/juceaide/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

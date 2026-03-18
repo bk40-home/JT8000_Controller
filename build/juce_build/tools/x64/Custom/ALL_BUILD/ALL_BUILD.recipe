@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ProjectOutputs>
+    <ProjectOutput>
+      <FullPath>C:\Users\pcsadmin\Documents\JT8000_Controller\build\juce_build\tools\x64\Custom\ZERO_CHECK</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>C:\Users\pcsadmin\Documents\JT8000_Controller\build\juce_build\tools\extras\Build\juceaide\juceaide_artefacts\Custom\juceaide.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>C:\Users\pcsadmin\Documents\JT8000_Controller\build\juce_build\tools\x64\Custom\ALL_BUILD</FullPath>
+    </ProjectOutput>
+  </ProjectOutputs>
+  <ContentFiles />
+  <SatelliteDlls />
+  <NonRecipeFileRefs />
+</Project>

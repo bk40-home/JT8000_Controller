@@ -1,0 +1,13 @@
+# CMake generation dependency list for this directory.
+C:/Program Files/CMake/share/cmake-4.3/Modules/BasicConfigVersion-ExactVersion.cmake.in
+C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDependentOption.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/CMakePackageConfigHelpers.cmake
+C:/Program Files/CMake/share/cmake-4.3/Modules/WriteBasicConfigVersionFile.cmake
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/CMakeFiles/cmake.verify_globs
+C:/Users/pcsadmin/Documents/JUCE/CMakeLists.txt
+C:/Users/pcsadmin/Documents/JUCE/extras/Build/CMake/JUCECheckAtomic.cmake
+C:/Users/pcsadmin/Documents/JUCE/extras/Build/CMake/JUCEConfig.cmake.in
+C:/Users/pcsadmin/Documents/JUCE/extras/Build/CMake/JUCEHelperTargets.cmake
+C:/Users/pcsadmin/Documents/JUCE/extras/Build/CMake/JUCEModuleSupport.cmake
+C:/Users/pcsadmin/Documents/JUCE/extras/Build/CMake/JUCEUtils.cmake
+C:/Users/pcsadmin/Documents/JUCE/extras/Build/CMake/juce_runtime_arch_detection.cpp

@@ -1,0 +1,7 @@
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/INSTALL.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/ALL_BUILD.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/ZERO_CHECK.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/modules/CMakeFiles/INSTALL.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/extras/Build/CMakeFiles/INSTALL.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/extras/Build/juceaide/CMakeFiles/juceaide.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/extras/Build/juceaide/CMakeFiles/INSTALL.dir

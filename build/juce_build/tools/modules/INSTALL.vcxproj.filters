@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\pcsadmin\Documents\JT8000_Controller\build\juce_build\tools\CMakeFiles\b189d6c1b228ba156ef8d556f5a69c68\INSTALL_force.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{2183F7DB-07DE-3120-A50D-2E37D60F0FCF}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

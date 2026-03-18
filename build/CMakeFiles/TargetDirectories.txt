@@ -1,0 +1,14 @@
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/CMakeFiles/JT8000_Controller.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/CMakeFiles/JT8000_Controller_All.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/CMakeFiles/JT8000_Controller_Standalone.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/CMakeFiles/JT8000_Controller_rc_lib.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/CMakeFiles/JT8000_Controller_VST3.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/CMakeFiles/JT8000_Controller_vst3_helper.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/CMakeFiles/INSTALL.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/CMakeFiles/ZERO_CHECK.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/CMakeFiles/INSTALL.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/CMakeFiles/ALL_BUILD.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/modules/CMakeFiles/INSTALL.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/extras/Build/CMakeFiles/INSTALL.dir
+C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/extras/Build/juceaide/CMakeFiles/INSTALL.dir

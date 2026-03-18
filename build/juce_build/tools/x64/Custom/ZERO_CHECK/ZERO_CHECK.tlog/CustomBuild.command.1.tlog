@@ -1,0 +1,10 @@
+^C:\USERS\PCSADMIN\DOCUMENTS\JT8000_CONTROLLER\BUILD\JUCE_BUILD\TOOLS\CMAKEFILES\936BEEF4B5258A6C5F588732D8619854\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/pcsadmin/Documents/JUCE -BC:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/JUCE.slnx
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

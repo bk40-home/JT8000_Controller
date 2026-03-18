@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Solution>
+	<Configurations>
+		<BuildType Name="Debug"/>
+		<BuildType Name="Release"/>
+		<BuildType Name="MinSizeRel"/>
+		<BuildType Name="RelWithDebInfo"/>
+		<Platform Name="x64"/>
+	</Configurations>
+	<Project Path="JT8000_Controller_rc_lib.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="03833379-2f62-3594-80bd-e51a3743cd23">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+	</Project>
+	<Project Path="JT8000_Controller_vst3_helper.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="834d45f2-f026-352f-b98d-2e2c92ec063a">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+	</Project>
+	<Folder Name="/CMakePredefinedTargets/">
+		<Project Path="ALL_BUILD.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="a2062d7f-0b09-30a3-b245-5b44cf99c56e" DefaultStartup="true">
+			<BuildDependency Project="JT8000_Controller.vcxproj"/>
+			<BuildDependency Project="JT8000_Controller_Standalone.vcxproj"/>
+			<BuildDependency Project="JT8000_Controller_VST3.vcxproj"/>
+			<BuildDependency Project="JT8000_Controller_rc_lib.vcxproj"/>
+			<BuildDependency Project="JT8000_Controller_vst3_helper.vcxproj"/>
+			<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		</Project>
+		<Project Path="INSTALL.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="b2af2156-8ff0-393b-9ed3-c17327446c7a">
+			<BuildDependency Project="ALL_BUILD.vcxproj"/>
+			<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+			<Build Solution="Debug|*" Project="false"/>
+			<Build Solution="Release|*" Project="false"/>
+			<Build Solution="MinSizeRel|*" Project="false"/>
+			<Build Solution="RelWithDebInfo|*" Project="false"/>
+		</Project>
+		<Project Path="ZERO_CHECK.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="9d4a74cb-ad8f-35cc-8533-98344d9d60c8"/>
+	</Folder>
+	<Folder Name="/JT8000_Controller/">
+		<Project Path="JT8000_Controller.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="34d6304e-da1b-3772-aa98-bd6fb5bd78f2">
+			<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		</Project>
+		<Project Path="JT8000_Controller_All.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="4ffc383f-b0b1-37ca-b2e6-17012f83bbbc">
+			<BuildDependency Project="JT8000_Controller_Standalone.vcxproj"/>
+			<BuildDependency Project="JT8000_Controller_VST3.vcxproj"/>
+			<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+			<Build Solution="Debug|*" Project="false"/>
+			<Build Solution="Release|*" Project="false"/>
+			<Build Solution="MinSizeRel|*" Project="false"/>
+			<Build Solution="RelWithDebInfo|*" Project="false"/>
+		</Project>
+		<Project Path="JT8000_Controller_Standalone.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="dd09ee50-4f0b-3053-852b-b33cce11f3fd">
+			<BuildDependency Project="JT8000_Controller.vcxproj"/>
+			<BuildDependency Project="JT8000_Controller_rc_lib.vcxproj"/>
+			<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		</Project>
+		<Project Path="JT8000_Controller_VST3.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="d72ffcd3-01fa-3d33-a3a6-c85f720d9714">
+			<BuildDependency Project="JT8000_Controller.vcxproj"/>
+			<BuildDependency Project="JT8000_Controller_rc_lib.vcxproj"/>
+			<BuildDependency Project="JT8000_Controller_vst3_helper.vcxproj"/>
+			<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		</Project>
+	</Folder>
+</Solution>

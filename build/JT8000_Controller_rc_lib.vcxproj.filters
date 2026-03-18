@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\pcsadmin\Documents\JT8000_Controller\build\CMakeFiles\0ca7fc2cbd89a39b17a1c2d425ea68fa\JT8000_Controller_resources.rc.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\pcsadmin\Documents\JT8000_Controller\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\build\JT8000_Controller_artefacts\JuceLibraryCode\JT8000_Controller_resources.rc">
+      <Filter>Source Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{8E039D5D-64E2-3D47-B0B6-8D5A8DBA1AAD}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{AEE174DA-5988-3B27-8276-A72AB470FA27}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,10 @@
+^C:\USERS\PCSADMIN\DOCUMENTS\JT8000_CONTROLLER\BUILD\CMAKEFILES\31115E53D0B254ED55833F240966D25D\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/pcsadmin/Documents/JT8000_Controller -BC:/Users/pcsadmin/Documents/JT8000_Controller/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/pcsadmin/Documents/JT8000_Controller/build/JT8000_Controller.slnx
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
