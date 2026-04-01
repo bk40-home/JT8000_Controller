@@ -4,35 +4,39 @@
  * Each section draws a dark rounded rectangle with a coloured header.
  * Click the header to toggle open/closed.
  *
- * Contains knobs, vertical sliders, combo boxes, and toggles in a
- * flow layout that wraps to the next row when the available width
- * is exceeded.
+ * Controls are plain JUCE widgets (Slider, ComboBox, ToggleButton) styled
+ * via JT8000LookAndFeel.  No custom widget subclasses needed.
  *
  * Changes from previous version:
- *   - Added addSlider() for JT8000Slider (vertical fader) controls
- *   - Fixed initial height calculation (fallback width when getWidth()==0)
- *   - ControlEntry tracks a row height hint so slider rows are taller
+ *   - Removed dependency on JT8000Knob and JT8000Slider classes
+ *   - Knobs are juce::Slider with RotaryHorizontalVerticalDrag + setRotaryParameters
+ *   - Faders are juce::Slider with LinearVertical
+ *   - Labels managed as paired components (below knobs, above combos)
  */
 
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "CCDefinitions.h"
-#include "KnobComponent.h"
-#include "SliderComponent.h"
+#include "JT8000LookAndFeel.h"
+#include "StepSequencerGrid.h"
 
 class SectionComponent : public juce::Component
 {
 public:
-    SectionComponent(const juce::String& title, juce::Colour ledColour);
+    SectionComponent(const juce::String& title, juce::Colour ledColour,
+                     JT8000LookAndFeel& lnf);
 
-    // Add controls — call these during buildSections(), one per CCParam
+    // Add controls — call during buildSections(), one per CCParam
     void addKnob(juce::AudioProcessorValueTreeState& apvts, const CCParam& param);
     void addSlider(juce::AudioProcessorValueTreeState& apvts, const CCParam& param);
     void addComboBox(juce::AudioProcessorValueTreeState& apvts, const CCParam& param);
     void addToggle(juce::AudioProcessorValueTreeState& apvts, const CCParam& param);
+    void addStepGrid(std::function<void(int,int)> sendCCPair);
 
-    // Collapse / expand
+    /* Access step grids for Send All */
+    const juce::OwnedArray<StepSequencerGrid>& getStepGrids() const { return _stepGrids; }
+
     void setOpen(bool open);
     bool isOpen() const { return _open; }
 
@@ -43,9 +47,7 @@ public:
     void resized() override;
     void mouseDown(const juce::MouseEvent& e) override;
 
-    // Calculate the height this section needs at a given width.
-    // Pass the allocated width explicitly to avoid the getWidth()==0 bug
-    // on first layout before resized() has been called.
+    // Height this section needs at a given width (explicit to avoid getWidth()==0 on first layout)
     int getDesiredHeight(int allocatedWidth) const;
 
     static constexpr int kHeaderHeight = 32;
@@ -54,24 +56,28 @@ private:
     juce::String _title;
     juce::Colour _ledColour;
     bool         _open = true;
+    JT8000LookAndFeel& _lnf;
 
-    // Owned widget storage — OwnedArray handles lifetime
-    juce::OwnedArray<JT8000Knob>      _knobs;
-    juce::OwnedArray<JT8000Slider>    _sliders;
-    juce::OwnedArray<juce::ComboBox>  _combos;
-    juce::OwnedArray<juce::ToggleButton> _toggles;
-    juce::OwnedArray<juce::Label>     _labels;
+    // Owned widgets and attachments
+    juce::OwnedArray<juce::Slider>        _sliders;
+    juce::OwnedArray<juce::ComboBox>      _combos;
+    juce::OwnedArray<juce::ToggleButton>  _toggles;
+    juce::OwnedArray<juce::Label>         _labels;
+    juce::OwnedArray<StepSequencerGrid>   _stepGrids;
 
-    // APVTS attachment storage — must outlive the widgets
+    // Attachments — must outlive the widgets they bind
+    juce::OwnedArray<juce::AudioProcessorValueTreeState::SliderAttachment>   _sliderAtts;
     juce::OwnedArray<juce::AudioProcessorValueTreeState::ComboBoxAttachment> _comboAtts;
     juce::OwnedArray<juce::AudioProcessorValueTreeState::ButtonAttachment>   _btnAtts;
 
-    // Flow layout entry — one per control added to this section
+    // Flow layout entry
     struct ControlEntry
     {
         juce::Component* comp;
         int preferredWidth;
         int preferredHeight;
+        juce::Label* label;    // Associated label (below knobs, above combos), or nullptr
+        bool labelAbove;       // true = label above (combos), false = label below (knobs/sliders)
     };
     std::vector<ControlEntry> _controls;
 

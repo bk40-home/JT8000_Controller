@@ -7,13 +7,13 @@
     <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\PluginEditor.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\KnobComponent.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\SliderComponent.cpp">
+    <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\JT8000LookAndFeel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\SectionComponent.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\StepSequencerGrid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="C:\Users\pcsadmin\Documents\JUCE\modules\juce_audio_processors\juce_audio_processors.cpp">
@@ -78,13 +78,16 @@
     <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\CCDefinitions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\KnobComponent.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\SliderComponent.h">
+    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\JT8000LookAndFeel.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\SectionComponent.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\StepSequencerGrid.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\JP8000SyxImporter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

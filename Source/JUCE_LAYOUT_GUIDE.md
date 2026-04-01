@@ -180,13 +180,13 @@ In `CCDefinitions.h`, change the style macro:
 
 ```cmd
 :: First time / after CMakeLists.txt changes:
-rmdir /s /q build
+rmdir /s /q C:\Users\pcsadmin\Documents\JT8000_Controller\
 mkdir build && cd build
 cmake .. -DJUCE_DIR=C:\Users\pcsadmin\Documents\JUCE
 cmake --build . --config Release
 
 :: After source file changes only:
-cd build
+cd C:\Users\pcsadmin\Documents\JT8000_Controller\build
 cmake --build . --config Release
 ```
 

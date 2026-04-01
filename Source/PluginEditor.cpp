@@ -1,292 +1,591 @@
 /*
  * PluginEditor.cpp — JT-8000 Controller Main Window
  *
- * Changes from previous version:
- *   - buildSections() now routes ControlStyle::Slider to addSlider()
- *   - layoutSections() implements multi-column row grouping:
- *     sections that share the same sectionRow[] value are placed
- *     side-by-side, each getting an equal share of the available width.
- *     Uses a two-pass approach: set widths first, then query heights.
- *   - Underscore prefix on all private members
+ * Two-row header layout:
+ *   Row 1: Title | LCD Patch Name | MIDI Out | MIDI In | Channel
+ *   Row 2: Send All | Load SYX | Save | Load | Init | Expand | Collapse
  */
 
 #include "PluginEditor.h"
 
-// -----------------------------------------------------------------------
-// Colour palette
-// -----------------------------------------------------------------------
-static const juce::Colour kBg       (0xff0b0e14);   // Window background
-static const juce::Colour kHeaderBg (0xff141a28);   // Header bar background
-static const juce::Colour kBorder   (0xff1e2a3e);   // Header separator line
-static const juce::Colour kOrange   (0xfff08020);   // Accent colour
-static const juce::Colour kTextHi   (0xffc8d8f4);   // Bright text
-static const juce::Colour kText     (0xff8090b0);   // Subdued text
+// Colour palette — matches HTML editor's CSS variables
+static const juce::Colour kBg       (0xff0b0e14);
+static const juce::Colour kHeaderBg (0xff141a28);
+static const juce::Colour kBorder   (0xff1e2a3e);
+static const juce::Colour kOrange   (0xfff08020);
+static const juce::Colour kGreen    (0xff28ff58);
+static const juce::Colour kPurple   (0xff9040ff);
+static const juce::Colour kTextHi   (0xffc8d8f4);
+static const juce::Colour kText     (0xff8090b0);
+static const juce::Colour kLcdBg    (0xff0a0c10);
+static const juce::Colour kLcdText  (0xfff08020);
 
-// -----------------------------------------------------------------------
-// Section LED colours — one per section category
-// -----------------------------------------------------------------------
-static juce::Colour sectionLed(Section s)
-{
-    switch (s)
-    {
-        case Section::OSC1:
-        case Section::OSC2:        return juce::Colour(0xfff08020u);   // Orange
-        case Section::MIXER:       return juce::Colour(0xffc0c8d8u);   // Silver
-        case Section::FILTER:      return juce::Colour(0xff40a0ffu);   // Blue
-        case Section::AMP_ENV:     return juce::Colour(0xff28ff58u);   // Green
-        case Section::FILTER_ENV:  return juce::Colour(0xff40a0ffu);   // Blue
-        case Section::PITCH_ENV:
-        case Section::VELOCITY:    return juce::Colour(0xff9040ffu);   // Purple
-        case Section::LFO1:
-        case Section::LFO2:        return juce::Colour(0xfff08020u);   // Orange
-        case Section::FX_EQ:
-        case Section::FX_MOD:
-        case Section::FX_MOD_TUNE:
-        case Section::FX_DELAY:
-        case Section::FX_REVERB:
-        case Section::FX_OUTPUT:   return juce::Colour(0xffff2828u);   // Red
-        case Section::STEP_SEQ:    return juce::Colour(0xff96fc00u);   // Lime green
-        default:                   return juce::Colour(0xffc0c8d8u);   // Silver
-    }
-}
+// Property key — must match PluginProcessor.cpp
+static const juce::Identifier kPatchNameProp("patchName");
 
-// -----------------------------------------------------------------------
-// Constructor — build header bar, viewport, and all sections
-// -----------------------------------------------------------------------
+// =============================================================================
+// Constructor
+// =============================================================================
 JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     : AudioProcessorEditor(p), _proc(p)
 {
-    // --- Title ---
+    setLookAndFeel(&_lnf);
+
+    // --- Title label --------------------------------------------------------
     _titleLabel.setText("JT-8000", juce::dontSendNotification);
     _titleLabel.setColour(juce::Label::textColourId, kOrange);
     _titleLabel.setFont(juce::FontOptions(18.0f, juce::Font::bold));
     addAndMakeVisible(_titleLabel);
 
-    // --- MIDI channel selector (1-16) ---
+    // --- LCD patch name display ---------------------------------------------
+    _patchNameLabel.setText(_proc.getPatchName(), juce::dontSendNotification);
+    _patchNameLabel.setColour(juce::Label::textColourId, kLcdText);
+    _patchNameLabel.setColour(juce::Label::backgroundColourId, kLcdBg);
+    _patchNameLabel.setColour(juce::Label::outlineColourId, kBorder);
+    _patchNameLabel.setFont(juce::FontOptions(14.0f, juce::Font::bold));
+    _patchNameLabel.setJustificationType(juce::Justification::centred);
+    _patchNameLabel.setEditable(true, true, false);
+    _patchNameLabel.onTextChange = [this]
+    {
+        _proc.setPatchName(_patchNameLabel.getText());
+    };
+    addAndMakeVisible(_patchNameLabel);
+
+    // Listen for external patch name changes (load, SYX import, etc.)
+    _proc.apvts.state.addListener(this);
+
+    // --- MIDI channel selector ----------------------------------------------
     for (int i = 1; i <= 16; ++i)
         _midiChSelector.addItem("Ch " + juce::String(i), i);
     _midiChSelector.setSelectedId(_proc.midiChannel.load());
-    _midiChSelector.onChange = [this] {
+    _midiChSelector.onChange = [this]
+    {
         _proc.midiChannel.store(_midiChSelector.getSelectedId());
     };
-    _midiChSelector.setColour(juce::ComboBox::backgroundColourId, kBg);
-    _midiChSelector.setColour(juce::ComboBox::textColourId, kTextHi);
-    _midiChSelector.setColour(juce::ComboBox::outlineColourId, kBorder);
     addAndMakeVisible(_midiChSelector);
 
-    // --- MIDI output device selector ---
-    _midiOutSelector.setColour(juce::ComboBox::backgroundColourId, kBg);
-    _midiOutSelector.setColour(juce::ComboBox::textColourId, kTextHi);
-    _midiOutSelector.setColour(juce::ComboBox::outlineColourId, kBorder);
-    _midiOutSelector.onChange = [this] {
+    // --- MIDI output selector -----------------------------------------------
+    _midiOutSelector.onChange = [this]
+    {
         const int sel = _midiOutSelector.getSelectedId();
-        if (sel <= 0)
-        {
-            _proc.setMidiOutput(nullptr);
-            return;
-        }
+        if (sel <= 0) { _proc.setMidiOutput(nullptr); return; }
         auto devices = juce::MidiOutput::getAvailableDevices();
         const int idx = sel - 1;
         if (idx >= 0 && idx < devices.size())
-        {
-            auto out = juce::MidiOutput::openDevice(devices[idx].identifier);
-            _proc.setMidiOutput(std::move(out));
-        }
+            _proc.setMidiOutput(juce::MidiOutput::openDevice(devices[idx].identifier));
     };
     addAndMakeVisible(_midiOutSelector);
     refreshMidiOutputList();
 
-    // --- Toolbar buttons ---
-    auto styleButton = [](juce::TextButton& b, juce::Colour c) {
+    // --- MIDI input selector (standalone thru) ------------------------------
+    _midiInSelector.onChange = [this]
+    {
+        const int sel = _midiInSelector.getSelectedId();
+        if (sel <= 0) { _proc.closeMidiInput(); return; }
+        auto devices = juce::MidiInput::getAvailableDevices();
+        const int idx = sel - 1;
+        if (idx >= 0 && idx < devices.size())
+            _proc.openMidiInput(devices[idx].identifier);
+    };
+    addAndMakeVisible(_midiInSelector);
+    refreshMidiInputList();
+
+    // --- Style helper for buttons -------------------------------------------
+    auto styleBtn = [](juce::TextButton& b, juce::Colour c)
+    {
         b.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff161c28));
         b.setColour(juce::TextButton::textColourOffId, c);
     };
-    styleButton(_sendAllBtn,  kOrange);
-    styleButton(_expandBtn,   kText);
-    styleButton(_collapseBtn, kText);
 
-    _sendAllBtn.onClick  = [this] { _proc.sendAllCCs(); };
+    // --- Send All -----------------------------------------------------------
+    styleBtn(_sendAllBtn, kOrange);
+    _sendAllBtn.onClick = [this]
+    {
+        // Start paced CC send (builds queue from APVTS, starts timer)
+        _proc.sendAllCCsPaced();
+
+        // Append step sequencer data to the same paced queue so
+        // everything is serialised at 1ms intervals — no burst.
+        for (auto* sec : _sections)
+        {
+            for (auto* grid : sec->getStepGrids())
+            {
+                for (int s = 0; s < StepSequencerGrid::kNumSteps; ++s)
+                {
+                    _proc.appendPacedCC(17, s);                   // SEQ_STEP_SELECT
+                    _proc.appendPacedCC(18, grid->getStepValue(s)); // SEQ_STEP_VALUE
+                }
+            }
+        }
+    };
+
+    // --- Load SYX -----------------------------------------------------------
+    styleBtn(_loadSyxBtn, kPurple);
+    _loadSyxBtn.onClick = [this] { loadSyxFile(); };
+
+    // --- Save / Load patch --------------------------------------------------
+    styleBtn(_savePatchBtn, kGreen);
+    styleBtn(_loadPatchBtn, kGreen);
+    _savePatchBtn.onClick = [this] { savePatchFile(); };
+    _loadPatchBtn.onClick = [this] { loadPatchFile(); };
+
+    // --- Init patch ---------------------------------------------------------
+    styleBtn(_initPatchBtn, kGreen);
+    _initPatchBtn.onClick = [this] { initPatch(); };
+
+    // --- Expand / Collapse --------------------------------------------------
+    styleBtn(_expandBtn, kText);
+    styleBtn(_collapseBtn, kText);
     _expandBtn.onClick   = [this] { for (auto* s : _sections) s->setOpen(true); };
     _collapseBtn.onClick = [this] { for (auto* s : _sections) s->setOpen(false); };
 
-    addAndMakeVisible(_sendAllBtn);
-    addAndMakeVisible(_expandBtn);
-    addAndMakeVisible(_collapseBtn);
+    // --- Add all buttons to the component -----------------------------------
+    for (auto* b : { &_sendAllBtn, &_loadSyxBtn, &_savePatchBtn, &_loadPatchBtn,
+                     &_initPatchBtn, &_expandBtn, &_collapseBtn })
+        addAndMakeVisible(b);
 
-    // --- Scrollable viewport ---
+    // --- Scrollable viewport ------------------------------------------------
     _viewport.setViewedComponent(&_contentPanel, false);
     _viewport.setScrollBarsShown(true, false);
     _viewport.getVerticalScrollBar().setColour(
         juce::ScrollBar::thumbColourId, juce::Colour(0xff283850));
     addAndMakeVisible(_viewport);
 
-    // --- Build and populate all sections ---
+    // --- Build sections and size --------------------------------------------
     buildSections();
-
     setSize(1080, 820);
     setResizable(true, true);
     setResizeLimits(400, 400, 1600, 2400);
+
+    // --- Timer for MIDI device hot-plug refresh (every 2 seconds) -----------
+    startTimer(2000);
 }
 
-// -----------------------------------------------------------------------
-// refreshMidiOutputList — populate the MIDI output dropdown
-// -----------------------------------------------------------------------
+JT8000ControllerEditor::~JT8000ControllerEditor()
+{
+    stopTimer();
+    _proc.apvts.state.removeListener(this);
+    setLookAndFeel(nullptr);
+}
+
+// =============================================================================
+// MIDI device list refresh
+// =============================================================================
 void JT8000ControllerEditor::refreshMidiOutputList()
 {
     _midiOutSelector.clear(juce::dontSendNotification);
-    _midiOutSelector.addItem(juce::String::fromUTF8("— No MIDI Output —"), -1);
-
+    _midiOutSelector.addItem(juce::String::fromUTF8("\xe2\x80\x94 No MIDI Output \xe2\x80\x94"), -1);
     auto devices = juce::MidiOutput::getAvailableDevices();
     for (int i = 0; i < devices.size(); ++i)
         _midiOutSelector.addItem(devices[i].name, i + 1);
-
     _midiOutSelector.setSelectedId(-1, juce::dontSendNotification);
 }
 
-// -----------------------------------------------------------------------
-// buildSections — create one SectionComponent per Section enum value,
-// then populate each with the appropriate controls from kAllParams[]
-// -----------------------------------------------------------------------
+void JT8000ControllerEditor::refreshMidiInputList()
+{
+    const auto currentId = _proc.getActiveMidiInputId();
+    _midiInSelector.clear(juce::dontSendNotification);
+    _midiInSelector.addItem(juce::String::fromUTF8("\xe2\x80\x94 No MIDI Input \xe2\x80\x94"), -1);
+    auto devices = juce::MidiInput::getAvailableDevices();
+    int selectedId = -1;
+    for (int i = 0; i < devices.size(); ++i)
+    {
+        _midiInSelector.addItem(devices[i].name, i + 1);
+        if (devices[i].identifier == currentId)
+            selectedId = i + 1;
+    }
+    _midiInSelector.setSelectedId(selectedId, juce::dontSendNotification);
+}
+
+// =============================================================================
+// Timer — refresh MIDI device lists for hot-plug
+// =============================================================================
+void JT8000ControllerEditor::timerCallback()
+{
+    // Only refresh the combo items; don't change selection unless device vanished
+    const int outSel = _midiOutSelector.getSelectedId();
+    const int inSel  = _midiInSelector.getSelectedId();
+
+    auto outDevices = juce::MidiOutput::getAvailableDevices();
+    auto inDevices  = juce::MidiInput::getAvailableDevices();
+
+    // Rebuild output list only if count changed (cheap check)
+    if (outDevices.size() + 1 != _midiOutSelector.getNumItems())
+    {
+        refreshMidiOutputList();
+        // Restore selection if still valid
+        if (outSel > 0 && outSel <= outDevices.size())
+            _midiOutSelector.setSelectedId(outSel, juce::dontSendNotification);
+    }
+
+    if (inDevices.size() + 1 != _midiInSelector.getNumItems())
+    {
+        refreshMidiInputList();
+        if (inSel > 0 && inSel <= inDevices.size())
+            _midiInSelector.setSelectedId(inSel, juce::dontSendNotification);
+    }
+}
+
+// =============================================================================
+// Build sections — identical logic to original
+// =============================================================================
 void JT8000ControllerEditor::buildSections()
 {
-    // Create empty sections
     for (int s = 0; s < static_cast<int>(Section::NUM_SECTIONS); ++s)
     {
         auto* sec = _sections.add(
-            new SectionComponent(sectionNames[s], sectionLed(static_cast<Section>(s))));
-
-        // Wire relayout callback so collapse/expand triggers a full relayout
+            new SectionComponent(sectionNames[s], juce::Colour(0xfff08020u), _lnf));
         sec->onLayoutChanged = [this] { layoutSections(); };
-
         _contentPanel.addAndMakeVisible(sec);
     }
 
-    // Populate sections from the master parameter table
     for (int i = 0; i < kNumParams; ++i)
     {
         const auto& p = kAllParams[i];
         auto* sec = _sections[static_cast<int>(p.section)];
-
         switch (p.style)
         {
-            case ControlStyle::Knob:
-                sec->addKnob(_proc.apvts, p);
-                break;
-
-            case ControlStyle::Slider:
-                sec->addSlider(_proc.apvts, p);
-                break;
-
-            case ControlStyle::Combo:
-                sec->addComboBox(_proc.apvts, p);
-                break;
-
-            case ControlStyle::Toggle:
-                sec->addToggle(_proc.apvts, p);
+            case ControlStyle::Knob:   sec->addKnob(_proc.apvts, p);     break;
+            case ControlStyle::Slider: sec->addSlider(_proc.apvts, p);   break;
+            case ControlStyle::Combo:  sec->addComboBox(_proc.apvts, p); break;
+            case ControlStyle::Toggle: sec->addToggle(_proc.apvts, p);   break;
+            case ControlStyle::StepGrid:
+                sec->addStepGrid([this](int step, int value) {
+                    _proc.sendCC(17, step);    // SEQ_STEP_SELECT
+                    _proc.sendCC(18, value);   // SEQ_STEP_VALUE
+                });
                 break;
         }
     }
 }
 
-// -----------------------------------------------------------------------
-// layoutSections — arrange sections in the content panel
-//
-// Multi-column row grouping:
-//   Sections that share the same sectionRow[] value (>= 0) are placed
-//   side-by-side on the same row, dividing the available width equally.
-//   Sections with sectionRow == -1 get their own full-width row.
-//
-// Two-pass approach:
-//   Pass 1: Set each section's width (needed before getDesiredHeight)
-//   Pass 2: Query heights and set final bounds
-// -----------------------------------------------------------------------
+// =============================================================================
+// Layout sections — unchanged logic from original
+// =============================================================================
 void JT8000ControllerEditor::layoutSections()
 {
     const int scrollBarW = _viewport.getScrollBarThickness();
-    const int totalW     = _viewport.getWidth() - scrollBarW - 8;
-    const int gap        = 4;
-
+    const int totalW = _viewport.getWidth() - scrollBarW - 8;
+    const int gap = 4;
     if (totalW <= 0) return;
 
-    int y = gap;
-    int idx = 0;
-    const int numSections = _sections.size();
+    int y = gap, idx = 0;
+    const int n = _sections.size();
 
-    while (idx < numSections)
+    while (idx < n)
     {
         const int row = sectionRow[idx];
-
         if (row < 0)
         {
-            // --- Single section on its own row ---
+            // Full-width section
             auto* sec = _sections[idx];
-            const int h = sec->getDesiredHeight(totalW);
+            int h = sec->getDesiredHeight(totalW);
             sec->setBounds(gap, y, totalW, h);
             y += h + gap;
             ++idx;
         }
         else
         {
-            // --- Collect all consecutive sections sharing this row number ---
-            int groupStart = idx;
-            while (idx < numSections && sectionRow[idx] == row)
-                ++idx;
-            int groupCount = idx - groupStart;
-
-            // Calculate width per section (equal share minus gaps)
-            int sectionW = (totalW - (groupCount - 1) * gap) / groupCount;
-
-            // Find the tallest section in this row
+            // Grouped row — find all sections sharing this row number
+            int gs = idx;
+            while (idx < n && sectionRow[idx] == row) ++idx;
+            int gc = idx - gs;
+            int sw = (totalW - (gc - 1) * gap) / gc;
             int maxH = 0;
-            for (int g = 0; g < groupCount; ++g)
+            for (int g = 0; g < gc; ++g)
+                maxH = juce::jmax(maxH, _sections[gs + g]->getDesiredHeight(sw));
+            int xp = gap;
+            for (int g = 0; g < gc; ++g)
             {
-                auto* sec = _sections[groupStart + g];
-                maxH = juce::jmax(maxH, sec->getDesiredHeight(sectionW));
+                _sections[gs + g]->setBounds(xp, y, sw, maxH);
+                xp += sw + gap;
             }
-
-            // Place all sections in this row side-by-side at the max height
-            int x = gap;
-            for (int g = 0; g < groupCount; ++g)
-            {
-                auto* sec = _sections[groupStart + g];
-                sec->setBounds(x, y, sectionW, maxH);
-                x += sectionW + gap;
-            }
-
             y += maxH + gap;
         }
     }
-
     _contentPanel.setSize(totalW + 2 * gap, y + gap);
 }
 
-// -----------------------------------------------------------------------
-// paint — window background and header bar
-// -----------------------------------------------------------------------
+// =============================================================================
+// Paint — two-row header
+// =============================================================================
 void JT8000ControllerEditor::paint(juce::Graphics& g)
 {
     g.fillAll(kBg);
+
+    // Header background
     g.setColour(kHeaderBg);
     g.fillRect(0, 0, getWidth(), kHeaderHeight);
+
+    // Header bottom border
     g.setColour(kBorder);
     g.drawHorizontalLine(kHeaderHeight - 1, 0.0f, static_cast<float>(getWidth()));
+
+    // Divider between row 1 and row 2
+    const int rowDivY = kHeaderHeight / 2;
+    g.setColour(kBorder.withAlpha(0.4f));
+    g.drawHorizontalLine(rowDivY, 6.0f, static_cast<float>(getWidth() - 6));
 }
 
-// -----------------------------------------------------------------------
-// resized — position header widgets and viewport
-// -----------------------------------------------------------------------
+// =============================================================================
+// Resized — two-row header layout
+// =============================================================================
 void JT8000ControllerEditor::resized()
 {
     auto area = getLocalBounds();
-    auto hdr  = area.removeFromTop(kHeaderHeight).reduced(6, 6);
+    auto hdrFull = area.removeFromTop(kHeaderHeight);
 
-    _titleLabel.setBounds(hdr.removeFromLeft(90));
-    _collapseBtn.setBounds(hdr.removeFromRight(66));
-    _expandBtn.setBounds(hdr.removeFromRight(60));
-    _sendAllBtn.setBounds(hdr.removeFromRight(66));
-    _midiChSelector.setBounds(hdr.removeFromRight(60));
-    _midiOutSelector.setBounds(hdr.removeFromRight(juce::jmin(180, hdr.getWidth())));
+    const int rowH = kHeaderHeight / 2;
+    const int pad = 4;
 
+    // --- Row 1: Title | LCD | MIDI Out | MIDI In | Channel ------------------
+    auto row1 = hdrFull.removeFromTop(rowH).reduced(pad, 2);
+
+    _titleLabel.setBounds(row1.removeFromLeft(72));
+    row1.removeFromLeft(pad);
+
+    // LCD patch name gets a generous central area
+    const int lcdW = juce::jmin(220, row1.getWidth() / 3);
+    _patchNameLabel.setBounds(row1.removeFromLeft(lcdW));
+    row1.removeFromLeft(pad);
+
+    // Right side: Channel | MIDI In | MIDI Out
+    _midiChSelector.setBounds(row1.removeFromRight(58));
+    row1.removeFromRight(pad);
+
+    const int midiBoxW = juce::jmin(160, (row1.getWidth() - pad) / 2);
+    _midiInSelector.setBounds(row1.removeFromRight(midiBoxW));
+    row1.removeFromRight(pad);
+    _midiOutSelector.setBounds(row1.removeFromRight(juce::jmin(midiBoxW, row1.getWidth())));
+
+    // --- Row 2: Buttons -----------------------------------------------------
+    auto row2 = hdrFull.reduced(pad, 2);
+
+    _sendAllBtn.setBounds(row2.removeFromLeft(66));
+    row2.removeFromLeft(pad);
+    _loadSyxBtn.setBounds(row2.removeFromLeft(72));
+    row2.removeFromLeft(pad);
+    _savePatchBtn.setBounds(row2.removeFromLeft(50));
+    row2.removeFromLeft(pad);
+    _loadPatchBtn.setBounds(row2.removeFromLeft(50));
+    row2.removeFromLeft(pad);
+    _initPatchBtn.setBounds(row2.removeFromLeft(44));
+
+    // Right-aligned
+    _collapseBtn.setBounds(row2.removeFromRight(66));
+    row2.removeFromRight(pad);
+    _expandBtn.setBounds(row2.removeFromRight(60));
+
+    // --- Viewport fills remaining area --------------------------------------
     _viewport.setBounds(area);
     layoutSections();
+}
+
+// =============================================================================
+// ValueTree::Listener — patch name property changed externally
+// =============================================================================
+void JT8000ControllerEditor::valueTreePropertyChanged(
+    juce::ValueTree& tree, const juce::Identifier& property)
+{
+    if (property == kPatchNameProp)
+    {
+        const auto name = tree.getProperty(property).toString();
+        // Must be on the message thread for GUI updates
+        juce::MessageManager::callAsync([this, name]
+        {
+            _patchNameLabel.setText(name, juce::dontSendNotification);
+        });
+    }
+}
+
+// =============================================================================
+// Init Patch — reset all parameters to defaults
+// =============================================================================
+void JT8000ControllerEditor::initPatch()
+{
+    for (int i = 0; i < kNumParams; ++i)
+    {
+        const auto& p = kAllParams[i];
+        if (p.style == ControlStyle::StepGrid) continue;
+
+        if (auto* param = _proc.apvts.getParameter(p.id))
+            param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(p.defVal)));
+    }
+
+    _proc.setPatchName("INIT PATCH");
+    _proc.sendAllCCsPaced();
+
+    // Reset step grids to zero and append to paced queue
+    for (auto* sec : _sections)
+    {
+        for (auto* grid : sec->getStepGrids())
+        {
+            for (int s = 0; s < StepSequencerGrid::kNumSteps; ++s)
+            {
+                grid->setStepValue(s, 0, false);       // Update visual, no immediate send
+                _proc.appendPacedCC(17, s);             // SEQ_STEP_SELECT
+                _proc.appendPacedCC(18, 0);             // SEQ_STEP_VALUE = 0
+            }
+        }
+    }
+}
+
+// =============================================================================
+// SYX import — updated to set patch name from SYX data
+// =============================================================================
+void JT8000ControllerEditor::loadSyxFile()
+{
+    _fileChooser = std::make_unique<juce::FileChooser>(
+        "Load JP-8000 SysEx",
+        juce::File::getSpecialLocation(juce::File::userDesktopDirectory),
+        "*.syx;*.mid;*.SYX;*.MID");
+
+    _fileChooser->launchAsync(
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [this](const juce::FileChooser& fc)
+        {
+            auto results = fc.getResults();
+            if (results.isEmpty()) return;
+
+            auto file = results.getFirst();
+            juce::MemoryBlock mb;
+            if (!file.loadFileAsData(mb) || mb.getSize() == 0) return;
+
+            _syxBuffer = std::move(mb);
+            _syxPatches = JP8000SyxImporter::parseFile(
+                static_cast<const uint8_t*>(_syxBuffer.getData()),
+                _syxBuffer.getSize(),
+                file.getFileExtension().toLowerCase() == ".mid");
+
+            if (_syxPatches.empty())
+            {
+                juce::AlertWindow::showMessageBoxAsync(
+                    juce::MessageBoxIconType::WarningIcon,
+                    "No Patches Found",
+                    "No JP-8000 patches found in " + file.getFileName());
+                return;
+            }
+            showPatchPicker(file.getFileName());
+        });
+}
+
+void JT8000ControllerEditor::showPatchPicker(const juce::String& fileName)
+{
+    auto* dlg = new juce::AlertWindow(
+        "Load SysEx \xe2\x80\x94 " + juce::String(static_cast<int>(_syxPatches.size())) + " patches",
+        fileName, juce::MessageBoxIconType::NoIcon);
+
+    juce::StringArray items;
+    for (int i = 0; i < static_cast<int>(_syxPatches.size()); ++i)
+        items.add(juce::String(i).paddedLeft('0', 2) + "  "
+                  + _syxPatches[static_cast<size_t>(i)].name);
+
+    dlg->addComboBox("patchList", items, "Select patch:");
+    dlg->addButton("Load + Send", 1);
+    dlg->addButton("Load Only", 2);
+    dlg->addButton("Cancel", 0);
+    dlg->setColour(juce::AlertWindow::backgroundColourId, juce::Colour(0xff111620));
+    dlg->setColour(juce::AlertWindow::textColourId, juce::Colour(0xffc8d8f4));
+    dlg->setColour(juce::AlertWindow::outlineColourId, juce::Colour(0xff1e2a3e));
+
+    // Capture pointer before entering modal state (JUCE removes from modal
+    // stack before callback fires — established pattern from JP8000SyxImporter)
+    juce::AlertWindow* dlgPtr = dlg;
+
+    dlg->enterModalState(true, juce::ModalCallbackFunction::create(
+        [this, dlgPtr](int result)
+        {
+            if (result == 0 || _syxPatches.empty()) return;
+
+            auto* combo = dlgPtr->getComboBoxComponent("patchList");
+            int idx = combo ? combo->getSelectedItemIndex() : 0;
+
+            if (idx >= 0 && idx < static_cast<int>(_syxPatches.size()))
+            {
+                JP8000SyxImporter::loadPatch(
+                    _proc.apvts, _syxPatches[static_cast<size_t>(idx)]);
+
+                // Update patch name from SYX data
+                _proc.setPatchName(_syxPatches[static_cast<size_t>(idx)].name);
+
+                if (result == 1)
+                    _proc.sendAllCCsPaced();
+            }
+        }), true);
+}
+
+// =============================================================================
+// Patch file save / load — updated to set patch name from filename
+// =============================================================================
+void JT8000ControllerEditor::savePatchFile()
+{
+    _fileChooser = std::make_unique<juce::FileChooser>(
+        "Save JT-8000 Patch",
+        juce::File::getSpecialLocation(juce::File::userDesktopDirectory),
+        "*.jt8k");
+
+    _fileChooser->launchAsync(
+        juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
+        [this](const juce::FileChooser& fc)
+        {
+            auto results = fc.getResults();
+            if (results.isEmpty()) return;
+
+            auto file = results.getFirst();
+            if (!file.hasFileExtension("jt8k"))
+                file = file.withFileExtension("jt8k");
+
+            // Store the filename as the patch name before saving
+            _proc.setPatchName(file.getFileNameWithoutExtension());
+
+            auto xml = _proc.apvts.copyState().createXml();
+            if (xml && !xml->writeTo(file))
+                juce::AlertWindow::showMessageBoxAsync(
+                    juce::MessageBoxIconType::WarningIcon,
+                    "Save Failed", "Could not write to " + file.getFileName());
+        });
+}
+
+void JT8000ControllerEditor::loadPatchFile()
+{
+    _fileChooser = std::make_unique<juce::FileChooser>(
+        "Load JT-8000 Patch",
+        juce::File::getSpecialLocation(juce::File::userDesktopDirectory),
+        "*.jt8k");
+
+    _fileChooser->launchAsync(
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [this](const juce::FileChooser& fc)
+        {
+            auto results = fc.getResults();
+            if (results.isEmpty()) return;
+
+            auto file = results.getFirst();
+            auto xml = juce::XmlDocument::parse(file);
+
+            if (!xml)
+            {
+                juce::AlertWindow::showMessageBoxAsync(
+                    juce::MessageBoxIconType::WarningIcon,
+                    "Load Failed", "Could not parse " + file.getFileName());
+                return;
+            }
+            if (!xml->hasTagName(_proc.apvts.state.getType()))
+            {
+                juce::AlertWindow::showMessageBoxAsync(
+                    juce::MessageBoxIconType::WarningIcon,
+                    "Invalid File",
+                    file.getFileName() + " is not a valid JT-8000 patch.");
+                return;
+            }
+
+            _proc.apvts.replaceState(juce::ValueTree::fromXml(*xml));
+
+            // If the loaded state has a patch name, the ValueTree listener
+            // will update the LCD automatically.  If not, use the filename.
+            if (_proc.getPatchName().isEmpty())
+                _proc.setPatchName(file.getFileNameWithoutExtension());
+
+            _proc.sendAllCCsPaced();
+        });
 }

@@ -317,12 +317,13 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\PluginEditor.cpp" />
     <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\PluginEditor.h" />
     <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\CCDefinitions.h" />
-    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\KnobComponent.h" />
-    <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\KnobComponent.cpp" />
-    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\SliderComponent.h" />
-    <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\SliderComponent.cpp" />
+    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\JT8000LookAndFeel.h" />
+    <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\JT8000LookAndFeel.cpp" />
     <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\SectionComponent.h" />
     <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\SectionComponent.cpp" />
+    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\StepSequencerGrid.h" />
+    <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\StepSequencerGrid.cpp" />
+    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\JP8000SyxImporter.h" />
     <ClCompile Include="C:\Users\pcsadmin\Documents\JUCE\modules\juce_audio_processors\juce_audio_processors.cpp" />
     <ClCompile Include="C:\Users\pcsadmin\Documents\JUCE\modules\juce_gui_extra\juce_gui_extra.cpp" />
     <ClCompile Include="C:\Users\pcsadmin\Documents\JUCE\modules\juce_gui_basics\juce_gui_basics.cpp" />

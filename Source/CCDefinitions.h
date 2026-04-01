@@ -3,81 +3,85 @@
  *
  * Single source of truth mirroring CCDefs.h from the Teensy firmware.
  *
- * Every CC parameter lives in this table.  The processor, editor, and
- * section components all read from it — add/remove/reorder a CC by
- * changing ONE line here.
+ * PARAMETER TYPES:
+ *   Knob / Slider → AudioParameterInt (0-127), sent as raw CC value
+ *   Combo / Toggle → AudioParameterChoice (0..N-1 index)
  *
- * ControlStyle determines the UI widget:
- *   Knob     — rotary arc knob (default for continuous params)
- *   Slider   — vertical fader with scale marks (ADSR, depth, etc.)
- *   Combo    — dropdown list (enum params with >2 options)
- *   Toggle   — on/off checkbox (2-option enum)
+ * CC VALUE CONVERSION:
+ *   The firmware does NOT use a single bucket formula for all enums.
+ *   Each CC has its own decode logic:
+ *     - Toggles: some use (value >= 1), others (value >= 64)
+ *     - Poly mode: custom 3-zone thresholds (0-42, 43-84, 85-127)
+ *     - Drive: custom 3-zone (<16, <64, >=64)
+ *     - Mod FX / Delay FX: zero = Off, rest = bucket
+ *     - Waveforms, filter types: standard bucket (v*N/128)
  *
- * sectionRow groups sections onto the same horizontal row in the editor.
- * Sections sharing the same non-negative row number are laid out
- * side-by-side.  Use -1 for "own row" (the default).
+ *   choiceIndexToCC() now checks for a per-param ccLUT (lookup table).
+ *   If ccLUT is non-null, it returns the exact CC value for that index.
+ *   If ccLUT is null, it falls back to the bucket-midpoint formula.
+ *
+ * SYNC LOG:
+ *   2026-03-31 — CRITICAL FIX: toggles now send 0/127 (not bucket midpoint 32)
+ *              — Added ccLUT field to CCParam for firmware-specific thresholds
+ *              — Fixed sectionRow[] missing comma (18 entries, was 17)
+ *              — Fixed pitch/detune defVals 65→64 (firmware special-cases CC 64)
+ *              — Added CC 71 (Hi Damp) and CC 93 (Lo Damp) to reverb section
+ *              — Seq defaults match HTML editor (all zero)
+ *              — EQ defaults match HTML editor (0, not 64)
  */
 
 #pragma once
 #include <juce_core/juce_core.h>
 
 // -----------------------------------------------------------------------
-// Section identifiers — order here determines display order in the editor
+// Section identifiers — order determines display order in the editor
 // -----------------------------------------------------------------------
 enum class Section : int
 {
     OSC1 = 0, OSC2, MIXER, FILTER,
     AMP_ENV, FILTER_ENV, PITCH_ENV,
     LFO1, LFO2,
-    FX_EQ, FX_MOD, FX_MOD_TUNE, FX_DELAY, FX_REVERB, FX_OUTPUT,
+    FX_EQ, FX_MOD, FX_DELAY,
+    FX_REVERB,
+    FX_OUTPUT,
     VELOCITY, PERFORMANCE, BPM,
     STEP_SEQ,
     NUM_SECTIONS
 };
 
-// Display names — must match Section enum order exactly
 static const char* sectionNames[] = {
     "Oscillator 1", "Oscillator 2", "Mixer", "Filter",
     "Amp Envelope", "Filter Envelope", "Pitch Envelope",
     "LFO 1", "LFO 2",
-    "EQ & Drive", "Mod FX", "Mod Tuning", "Delay", "Reverb", "Output Mix",
+    "EQ & Drive", "Mod FX", "Delay",
+    "Reverb",
+    "Output Mix",
     "Velocity", "Performance", "BPM Clock",
     "Step Sequencer"
 };
 
-// Row grouping — sections with the same non-negative value share a row.
-// Use -1 to place a section on its own row.
+// Row grouping for side-by-side layout. -1 = full width.
+// Sections sharing the same non-negative row number are placed side by side.
 static const int sectionRow[] = {
-    -1,     // OSC1         — own row
-    -1,     // OSC2         — own row
-    -1,     // MIXER        — own row
-    -1,     // FILTER       — own row
-     0,     // AMP_ENV      — row 0 (envelopes side-by-side)
-     0,     // FILTER_ENV   — row 0
-     0,     // PITCH_ENV    — row 0
-    -1,     // LFO1         — own row
-    -1,     // LFO2         — own row
-    -1,     // FX_EQ        — own row
-    -1,     // FX_MOD       — own row
-    -1,     // FX_MOD_TUNE  — own row
-    -1,     // FX_DELAY     — own row
-    -1,     // FX_REVERB    — own row
-     1,     // FX_OUTPUT    — row 1 (small sections side-by-side)
-     1,     // VELOCITY     — row 1
-     1,     // PERFORMANCE  — row 1 (gets wider due to more controls)
-    -1,     // BPM          — own row
-    -1,     // STEP_SEQ     — own row
+    -1, -1, -1, -1,        // OSC1, OSC2, MIXER, FILTER
+     0,  0,  0,            // AMP_ENV, FILTER_ENV, PITCH_ENV
+    -1, -1,                // LFO1, LFO2
+     1,  1,                // FX_EQ, FX_MOD
+     2,  2,                // FX_DELAY, FX_REVERB
+     3,  3,  3,            // FX_OUTPUT, VELOCITY, PERFORMANCE
+    -1, -1,                // BPM, STEP_SEQ
 };
 
 // -----------------------------------------------------------------------
-// Control style — determines which UI widget is created
+// Control style — determines widget type AND JUCE parameter type
 // -----------------------------------------------------------------------
 enum class ControlStyle : int
 {
-    Knob = 0,   // Rotary arc knob (continuous 0-127)
-    Slider,     // Vertical fader with scale marks (ADSR, depth)
-    Combo,      // Dropdown list (enum params)
-    Toggle      // On/off checkbox (2-option enum)
+    Knob = 0,
+    Slider,
+    Combo,
+    Toggle,
+    StepGrid
 };
 
 // -----------------------------------------------------------------------
@@ -85,18 +89,56 @@ enum class ControlStyle : int
 // -----------------------------------------------------------------------
 struct CCParam
 {
-    int               cc;           // MIDI CC number (must match Teensy CCDefs.h)
+    int               cc;           // MIDI CC number (must match firmware CCDefs.h)
     const char*       id;           // Unique JUCE parameter ID (no spaces)
     const char*       name;         // User-facing label
     Section           section;      // Which collapsible panel this belongs to
-    int               defVal;       // Default value (0-127)
-    ControlStyle      style;        // UI widget type
+    int               defVal;       // Default: CC value for Knob/Slider, choice INDEX for Combo/Toggle
+    ControlStyle      style;        // Widget + parameter type selector
     const char* const* enumNames;   // Named options (nullptr for continuous)
     int               enumCount;    // Number of enum options (0 for continuous)
+    const int*        ccLUT;        // Per-choice CC values (nullptr = use bucket formula)
 };
 
 // -----------------------------------------------------------------------
-// Named option arrays for enum parameters
+// CC conversion — respects firmware decode logic per parameter
+//
+// If a param has a ccLUT, use it directly.
+// Otherwise, fall back to bucket-midpoint formula (for waveforms, filter
+// types, timing modes, LFO dests, arb banks — all use (v*N)/128 decode).
+// -----------------------------------------------------------------------
+
+/* Convert a choice index (0..N-1) to the CC value the firmware expects */
+inline int choiceIndexToCC(int index, int numChoices, const int* lut = nullptr)
+{
+    if (numChoices <= 0) return 0;
+    if (index < 0) index = 0;
+    if (index >= numChoices) index = numChoices - 1;
+
+    // Per-param lookup table — exact match to firmware thresholds
+    if (lut != nullptr)
+        return lut[index];
+
+    // Bucket midpoint — works for params where firmware uses (v*N)/128
+    return ((2 * index + 1) * 128) / (2 * numChoices);
+}
+
+/* Convert a raw CC value (0..127) to a choice index (0..N-1) */
+inline int ccToChoiceIndex(int ccVal, int numChoices)
+{
+    if (numChoices <= 0) return 0;
+    int idx = (ccVal * numChoices) / 128;
+    return (idx >= numChoices) ? numChoices - 1 : idx;
+}
+
+/* Check if a param uses AudioParameterChoice (Combo or Toggle) */
+inline bool isChoiceParam(const CCParam& p)
+{
+    return p.style == ControlStyle::Combo || p.style == ControlStyle::Toggle;
+}
+
+// -----------------------------------------------------------------------
+// Named option arrays
 // -----------------------------------------------------------------------
 static const char* const kWaveNames[] = {
     "Sine","Sawtooth","Square","Triangle","Arbitrary","Pulse",
@@ -108,7 +150,8 @@ static const char* const kLfoWaveNames[] = {
 };
 static const char* const kLfoDestNames[]  = { "None","Pitch","Filter","PWM","Amp" };
 static const char* const kTimingNames[] = {
-    "Free","1/16","1/8T","1/8","1/4T","1/4","1/2T","1/2","1 bar","2 bar","3 bar","4 bar"
+    "Free","4 Bar","2 Bar","1 Bar","1/2","1/4","1/8","1/16","1/32",
+    "1/4 T","1/8 T","1/16 T"
 };
 static const char* const kModFxNames[] = {
     "Off","Chorus 1","Chorus 2","Chorus 3",
@@ -119,8 +162,6 @@ static const char* const kDelayFxNames[] = {
     "Off","Mono Short","Mono Long","Pan L>R","Pan R>L","Pan Stereo"
 };
 static const char* const kDriveNames[]   = { "Bypass","Soft Clip","Hard Clip" };
-static const char* const kModTapNames[]  = { "1 Tap","3 Tap (Ensemble)" };
-static const char* const kModLfoNames[]  = { "Triangle (BBD)","Sine (Smooth)" };
 static const char* const kFltEngNames[]  = { "OBXa","VA Bank" };
 static const char* const kFltModeNames[] = {
     "4-Pole LP","2-Pole LP","2-Pole BP","2-Pole Push","Xpander","Xpander+M"
@@ -144,22 +185,57 @@ static const char* const kArbBankNames[] = {
 static const char* const kSeqDirNames[]  = { "Forward","Reverse","Bounce","Random" };
 static const char* const kSeqDestNames[] = { "None","Pitch","Filter","PWM","Amp" };
 
-// Shorthand macros for readability in the parameter table
-#define KNOB    ControlStyle::Knob,   nullptr, 0
-#define VSLIDER ControlStyle::Slider, nullptr, 0
-#define COMBO(names, n)  ControlStyle::Combo, names, n
-#define TOGGLE(names, n) ControlStyle::Combo, names, n
+// -----------------------------------------------------------------------
+// CC lookup tables for params with firmware-specific decode thresholds.
+// Each array maps choice index → exact CC value the firmware expects.
+// -----------------------------------------------------------------------
+
+// Toggles: firmware uses (value >= 1) or (value >= 64) → send 0 or 127
+static const int kToggleLUT[]   = { 0, 127 };
+
+// 2-choice with >= 64 threshold (BPM source, filter engine)
+static const int kMidpointLUT[] = { 0, 127 };
+
+// Poly mode: firmware uses <=42 / <=84 / >84
+static const int kPolyLUT[]     = { 0, 63, 106 };
+
+// Drive: firmware uses <16 / <64 / >=64
+static const int kDriveLUT[]    = { 0, 32, 96 };
+
+// Mod FX: firmware checks rawVal==0 for Off, then maps rest via bucket
+// Off=0, then bucket midpoints for indices 1-11 within range 1-127
+static const int kModFxLUT[]    = { 0, 12, 23, 35, 46, 58, 69, 81, 92, 104, 115, 127 };
+
+// Delay FX: firmware checks rawVal==0 for Off, then maps rest
+static const int kDelayFxLUT[]  = { 0, 22, 43, 64, 85, 107 };
+
+// Seq direction: firmware uses (v*3)/127
+static const int kSeqDirLUT[]   = { 0, 42, 85, 127 };
+
+// Seq destination: firmware uses (v*4)/127
+static const int kSeqDestLUT[]  = { 0, 32, 64, 95, 127 };
 
 // -----------------------------------------------------------------------
-// Master parameter table — one entry per CC
+// Shorthand macros for kAllParams[] — includes ccLUT field
+// -----------------------------------------------------------------------
+#define KNOB              ControlStyle::Knob,   nullptr, 0, nullptr
+#define VSLIDER           ControlStyle::Slider, nullptr, 0, nullptr
+#define COMBO(names, n)   ControlStyle::Combo,  names, n, nullptr
+#define COMBO_LUT(names, n, lut) ControlStyle::Combo, names, n, lut
+#define TOGGLE(names, n)  ControlStyle::Toggle, names, n, kToggleLUT
+#define TOGGLE_LUT(names, n, lut) ControlStyle::Toggle, names, n, lut
+
+// -----------------------------------------------------------------------
+// Master parameter table
+// defVal: raw CC 0-127 for Knob/Slider, choice index 0..N-1 for Combo/Toggle
 // -----------------------------------------------------------------------
 static const CCParam kAllParams[] =
 {
     // === OSC 1 ===
     { 21,  "osc1_wave",      "OSC1 Wave",       Section::OSC1,     0,   COMBO(kWaveNames, 14) },
-    { 41,  "osc1_pitch",     "OSC1 Pitch",      Section::OSC1,     65,  KNOB },
+    { 41,  "osc1_pitch",     "OSC1 Pitch",      Section::OSC1,     64,  KNOB },
     { 45,  "osc1_fine",      "OSC1 Fine",       Section::OSC1,     64,  KNOB },
-    { 43,  "osc1_detune",    "OSC1 Detune",     Section::OSC1,     65,  KNOB },
+    { 43,  "osc1_detune",    "OSC1 Detune",     Section::OSC1,     64,  KNOB },
     { 77,  "osc1_ss_det",    "SS1 Detune",      Section::OSC1,     0,   KNOB },
     { 78,  "osc1_ss_mix",    "SS1 Mix",         Section::OSC1,     0,   KNOB },
     { 123, "osc1_fb_amt",    "OSC1 FB Amt",     Section::OSC1,     0,   KNOB },
@@ -172,9 +248,9 @@ static const CCParam kAllParams[] =
 
     // === OSC 2 ===
     { 22,  "osc2_wave",      "OSC2 Wave",       Section::OSC2,     0,   COMBO(kWaveNames, 14) },
-    { 42,  "osc2_pitch",     "OSC2 Pitch",      Section::OSC2,     65,  KNOB },
+    { 42,  "osc2_pitch",     "OSC2 Pitch",      Section::OSC2,     64,  KNOB },
     { 46,  "osc2_fine",      "OSC2 Fine",       Section::OSC2,     64,  KNOB },
-    { 44,  "osc2_detune",    "OSC2 Detune",     Section::OSC2,     65,  KNOB },
+    { 44,  "osc2_detune",    "OSC2 Detune",     Section::OSC2,     64,  KNOB },
     { 79,  "osc2_ss_det",    "SS2 Detune",      Section::OSC2,     0,   KNOB },
     { 80,  "osc2_ss_mix",    "SS2 Mix",         Section::OSC2,     0,   KNOB },
     { 124, "osc2_fb_amt",    "OSC2 FB Amt",     Section::OSC2,     0,   KNOB },
@@ -191,33 +267,35 @@ static const CCParam kAllParams[] =
     { 61,  "osc2_mix",       "OSC2 Level",      Section::MIXER,    0,   KNOB },
     { 58,  "sub_mix",        "Sub",             Section::MIXER,    0,   KNOB },
     { 59,  "noise_mix",      "Noise",           Section::MIXER,    0,   KNOB },
+    { 19,  "xmod_depth",     "XMod Depth",      Section::MIXER,    0,   KNOB },
+    { 20,  "osc_sync",       "Osc Sync",        Section::MIXER,    0,   TOGGLE(kOnOffNames, 2) },
 
     // === FILTER ===
     { 23,  "flt_cut",        "Cutoff",          Section::FILTER,   127, KNOB },
     { 24,  "flt_res",        "Resonance",       Section::FILTER,   0,   KNOB },
-    { 48,  "flt_env",        "Flt Env Amt",     Section::FILTER,   65,  KNOB },
-    { 50,  "flt_key",        "Key Track",       Section::FILTER,   65,  KNOB },
+    { 48,  "flt_env",        "Flt Env Amt",     Section::FILTER,   64,  KNOB },
+    { 50,  "flt_key",        "Key Track",       Section::FILTER,   64,  KNOB },
     { 84,  "flt_oct",        "Oct Ctrl",        Section::FILTER,   0,   KNOB },
-    { 113, "flt_engine",     "Engine",          Section::FILTER,   0,   COMBO(kFltEngNames, 2) },
+    { 113, "flt_engine",     "Engine",          Section::FILTER,   1,   COMBO_LUT(kFltEngNames, 2, kMidpointLUT) },
     { 112, "flt_mode",       "OBXa Mode",       Section::FILTER,   0,   COMBO(kFltModeNames, 6) },
     { 115, "va_type",        "VA Type",         Section::FILTER,   0,   COMBO(kVaTypeNames, 13) },
     { 111, "flt_multi",      "Multimode",       Section::FILTER,   0,   KNOB },
     { 117, "flt_resmod",     "Res Mod",         Section::FILTER,   0,   KNOB },
     { 114, "flt_xp",         "Xpander Mode",    Section::FILTER,   0,   COMBO(kXpModeNames, 15) },
 
-    // === AMP ENV (vertical sliders for ADSR) ===
+    // === AMP ENV ===
     { 25,  "amp_a",  "Atk",   Section::AMP_ENV,    0,   VSLIDER },
     { 26,  "amp_d",  "Dec",   Section::AMP_ENV,    0,   VSLIDER },
     { 27,  "amp_s",  "Sus",   Section::AMP_ENV,    127, VSLIDER },
     { 28,  "amp_r",  "Rel",   Section::AMP_ENV,    0,   VSLIDER },
 
-    // === FILTER ENV (vertical sliders for ADSR) ===
+    // === FILTER ENV ===
     { 29,  "fe_a",   "Atk",   Section::FILTER_ENV, 0,   VSLIDER },
     { 30,  "fe_d",   "Dec",   Section::FILTER_ENV, 0,   VSLIDER },
     { 31,  "fe_s",   "Sus",   Section::FILTER_ENV, 127, VSLIDER },
     { 32,  "fe_r",   "Rel",   Section::FILTER_ENV, 0,   VSLIDER },
 
-    // === PITCH ENV (vertical sliders + knob for depth) ===
+    // === PITCH ENV ===
     { 65,  "pe_a",     "Atk",       Section::PITCH_ENV, 0,   VSLIDER },
     { 66,  "pe_d",     "Dec",       Section::PITCH_ENV, 0,   VSLIDER },
     { 67,  "pe_s",     "Sus",       Section::PITCH_ENV, 0,   VSLIDER },
@@ -249,34 +327,28 @@ static const CCParam kAllParams[] =
     { 64,  "l2_delay", "L2 Delay",     Section::LFO2, 0,  KNOB },
 
     // === FX EQ ===
-    { 99,  "fx_bass",   "Bass",    Section::FX_EQ, 64, KNOB },
-    { 100, "fx_treble", "Treble",  Section::FX_EQ, 64, KNOB },
-    { 16,  "fx_drive",  "Drive",   Section::FX_EQ, 0,  COMBO(kDriveNames, 3) },
+    { 99,  "fx_bass",   "Bass",    Section::FX_EQ, 0,  KNOB },
+    { 100, "fx_treble", "Treble",  Section::FX_EQ, 0,  KNOB },
+    { 16,  "fx_drive",  "Drive",   Section::FX_EQ, 0,  COMBO_LUT(kDriveNames, 3, kDriveLUT) },
 
     // === FX MOD ===
-    { 103, "fx_mod_type", "Mod Type",  Section::FX_MOD, 0, COMBO(kModFxNames, 12) },
+    { 103, "fx_mod_type", "Mod Type",  Section::FX_MOD, 0, COMBO_LUT(kModFxNames, 12, kModFxLUT) },
     { 104, "fx_mod_mix",  "Mod Mix",   Section::FX_MOD, 0, KNOB },
     { 105, "fx_mod_rate", "Mod Rate",  Section::FX_MOD, 0, KNOB },
     { 106, "fx_mod_fb",   "Mod FB",    Section::FX_MOD, 0, KNOB },
 
-    // === FX MOD TUNE ===
-    { 95,  "fx_mod_depth", "Mod Depth",     Section::FX_MOD_TUNE, 4,  KNOB },
-    { 96,  "fx_mod_base",  "Mod Base Dly",  Section::FX_MOD_TUNE, 13, KNOB },
-    { 97,  "fx_mod_taps",  "Mod Taps",      Section::FX_MOD_TUNE, 0,  COMBO(kModTapNames, 2) },
-    { 98,  "fx_mod_lfo",   "Mod LFO",       Section::FX_MOD_TUNE, 0,  COMBO(kModLfoNames, 2) },
-
     // === FX DELAY ===
-    { 107, "fx_dly_type", "Delay Type",  Section::FX_DELAY, 0, COMBO(kDelayFxNames, 6) },
+    { 107, "fx_dly_type", "Delay Type",  Section::FX_DELAY, 0, COMBO_LUT(kDelayFxNames, 6, kDelayFxLUT) },
     { 110, "fx_dly_time", "Delay Time",  Section::FX_DELAY, 0, KNOB },
     { 108, "fx_dly_mix",  "Delay Mix",   Section::FX_DELAY, 0, KNOB },
     { 109, "fx_dly_fb",   "Delay FB",    Section::FX_DELAY, 0, KNOB },
 
     // === FX REVERB ===
     { 70,  "fx_rv_size",   "Rev Size",    Section::FX_REVERB, 0, KNOB },
-    { 71,  "fx_rv_damp",   "Rev HiDamp",  Section::FX_REVERB, 0, KNOB },
-    { 93,  "fx_rv_lodamp", "Rev LoDamp",  Section::FX_REVERB, 0, KNOB },
+    { 71,  "fx_rv_damp",   "Hi Damp",     Section::FX_REVERB, 0, KNOB },
+    { 93,  "fx_rv_lodamp", "Lo Damp",     Section::FX_REVERB, 0, KNOB },
     { 75,  "fx_rv_mix",    "Rev Mix",     Section::FX_REVERB, 0, KNOB },
-    { 94,  "fx_rv_bypass", "Rev Bypass",  Section::FX_REVERB, 0, COMBO(kBypassNames, 2) },
+    { 94,  "fx_rv_bypass", "Rev Bypass",  Section::FX_REVERB, 0, COMBO_LUT(kBypassNames, 2, kMidpointLUT) },
 
     // === FX OUTPUT ===
     { 74,  "fx_dry",  "Dry Mix",  Section::FX_OUTPUT, 127, KNOB },
@@ -288,38 +360,38 @@ static const CCParam kAllParams[] =
     { 12,  "vel_env", "Vel Env",    Section::VELOCITY, 0, KNOB },
 
     // === PERFORMANCE ===
-    { 81,  "glide_on",   "Glide",        Section::PERFORMANCE, 0,   COMBO(kOnOffNames, 2) },
+    { 81,  "glide_on",   "Glide",        Section::PERFORMANCE, 0,   TOGGLE(kOnOffNames, 2) },
     { 82,  "glide_time", "Glide Time",   Section::PERFORMANCE, 0,   KNOB },
     { 127, "bend_range", "Bend Range",   Section::PERFORMANCE, 12,  KNOB },
     { 90,  "amp_level",  "Amp Level",    Section::PERFORMANCE, 127, KNOB },
-    { 14,  "poly_mode",  "Voice Mode",   Section::PERFORMANCE, 21,  COMBO(kPolyNames, 3) },
+    { 14,  "poly_mode",  "Voice Mode",   Section::PERFORMANCE, 0,   COMBO_LUT(kPolyNames, 3, kPolyLUT) },
     { 15,  "uni_det",    "Unison Det",   Section::PERFORMANCE, 0,   KNOB },
 
     // === BPM ===
-    { 118, "bpm_src",   "Clock",      Section::BPM, 0, COMBO(kClockNames, 2) },
+    { 118, "bpm_src",   "Clock",      Section::BPM, 0, COMBO_LUT(kClockNames, 2, kMidpointLUT) },
     { 119, "bpm_tempo", "Int BPM",    Section::BPM, 0, KNOB },
     { 122, "dly_sync",  "Delay Sync", Section::BPM, 0, COMBO(kTimingNames, 12) },
 
     // === STEP SEQUENCER ===
-    { 2,   "seq_enable",    "Enable",     Section::STEP_SEQ, 0,   COMBO(kOnOffNames, 2) },
-    { 3,   "seq_steps",     "Steps",      Section::STEP_SEQ, 64,  KNOB },
-    { 4,   "seq_gate",      "Gate",       Section::STEP_SEQ, 127, KNOB },
+    { 2,   "seq_enable",    "Enable",     Section::STEP_SEQ, 0,   TOGGLE(kOnOffNames, 2) },
+    { 3,   "seq_steps",     "Steps",      Section::STEP_SEQ, 0,   KNOB },
+    { 4,   "seq_gate",      "Gate",       Section::STEP_SEQ, 0,   KNOB },
     { 5,   "seq_slide",     "Slide",      Section::STEP_SEQ, 0,   KNOB },
-    { 6,   "seq_dir",       "Direction",  Section::STEP_SEQ, 0,   COMBO(kSeqDirNames, 4) },
+    { 6,   "seq_dir",       "Direction",  Section::STEP_SEQ, 0,   COMBO_LUT(kSeqDirNames, 4, kSeqDirLUT) },
     { 7,   "seq_rate",      "Rate",       Section::STEP_SEQ, 0,   KNOB },
     { 8,   "seq_depth",     "Depth",      Section::STEP_SEQ, 0,   KNOB },
-    { 9,   "seq_dest",      "Destination",Section::STEP_SEQ, 0,   COMBO(kSeqDestNames, 5) },
-    { 13,  "seq_retrigger", "Retrigger",  Section::STEP_SEQ, 127, COMBO(kOnOffNames, 2) },
+    { 9,   "seq_dest",      "Destination",Section::STEP_SEQ, 0,   COMBO_LUT(kSeqDestNames, 5, kSeqDestLUT) },
+    { 13,  "seq_retrigger", "Retrigger",  Section::STEP_SEQ, 0,   TOGGLE(kOnOffNames, 2) },
     { 116, "seq_sync",      "Sync",       Section::STEP_SEQ, 0,   COMBO(kTimingNames, 12) },
-    { 17,  "seq_step_sel",  "Step Sel",   Section::STEP_SEQ, 0,   KNOB },
-    { 18,  "seq_step_val",  "Step Val",   Section::STEP_SEQ, 64,  KNOB },
+    { 17,  "seq_step_sel",  "Step Grid",  Section::STEP_SEQ, 0,   ControlStyle::StepGrid, nullptr, 0, nullptr },
 };
 
-// Undefine table macros — they are only for use inside kAllParams[]
 #undef KNOB
 #undef VSLIDER
 #undef COMBO
+#undef COMBO_LUT
 #undef TOGGLE
+#undef TOGGLE_LUT
 
 static constexpr int kNumParams = sizeof(kAllParams) / sizeof(kAllParams[0]);
 
