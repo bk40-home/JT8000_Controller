@@ -1,9 +1,16 @@
 /*
  * PluginProcessor.cpp — JT-8000 Controller Processor
  *
- * v3: sendAllCCsPaced() replaces the burst-mode sendAllCCs().
- *     A juce::Timer drip-feeds CCs at 1ms intervals to avoid overflowing
- *     the Teensy's USB MIDI receive buffer.
+ * Ableton-compatible MIDI CC mapper with dummy stereo audio buses.
+ *
+ * processBlock():
+ *   1. Silence the audio buffer (dummy buses, no audio processing)
+ *   2. Reflect incoming CCs into APVTS so the UI tracks hardware state
+ *   3. Drain the outgoing CC FIFO into the host MIDI buffer
+ *
+ * Paced send:
+ *   juce::Timer drip-feeds CCs at 1ms intervals to avoid overflowing
+ *   the Teensy's USB MIDI receive buffer (~120ms for a full patch).
  */
 
 #include "PluginProcessor.h"
@@ -12,12 +19,31 @@
 static const juce::Identifier kPatchNameProp("patchName");
 
 // =============================================================================
+// Bus layout — Ableton workaround
+//
+// Ableton Live refuses to instantiate VST3 plugins with zero audio buses
+// (Ableton bug ABLDEV-00057, open since 2019, still present in 2025).
+// JUCE's own MidiLoggerPluginDemo uses PluginHostType().isAbletonLive()
+// to conditionally add a stereo output.
+//
+// We always add stereo I/O to keep the moduleinfo.json deterministic —
+// the audio buses are silenced in processBlock(). This avoids needing
+// two different .vst3 bundles and ensures the Ableton plugin cache
+// always sees the same bus layout.
+// =============================================================================
+juce::AudioProcessor::BusesProperties
+JT8000ControllerProcessor::makeBusLayout()
+{
+    return BusesProperties()
+        .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
+        .withOutput("Output", juce::AudioChannelSet::stereo(), true);
+}
+
+// =============================================================================
 // Construction / Destruction
 // =============================================================================
 JT8000ControllerProcessor::JT8000ControllerProcessor()
-    : AudioProcessor(BusesProperties()
-          .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
-          .withOutput("Output", juce::AudioChannelSet::stereo(), true))
+    : AudioProcessor(makeBusLayout())
     , apvts(*this, nullptr, "JT8000State", createParameterLayout())
 {
     for (int i = 0; i < kNumParams; ++i)
@@ -77,37 +103,151 @@ juce::AudioProcessorEditor* JT8000ControllerProcessor::createEditor()
 }
 
 // =============================================================================
-// processBlock — drain FIFO into host MIDI buffer
+// isStandaloneMode
+// =============================================================================
+bool JT8000ControllerProcessor::isStandaloneMode() const
+{
+    return wrapperType == wrapperType_Standalone;
+}
+
+// =============================================================================
+// processBlock — silence audio, filter MIDI, inject CCs
+//
+// Audio buses exist only as an Ableton compatibility shim.
+//
+// MIDI strategy:
+//   - Incoming CCs are consumed (reflected into APVTS for UI update)
+//     but NOT passed through. This plugin is a one-way CC injector.
+//     If incoming CCs were passed through, any CC we send would echo
+//     back from Ableton and create an infinite feedback loop.
+//   - Notes, pitch bend, aftertouch, channel pressure pass through.
+//   - Our own CCs from the FIFO are appended (these are the only CCs
+//     that should reach the output).
 // =============================================================================
 void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midiMessages)
 {
-    for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
-        buffer.clear(ch, 0, buffer.getNumSamples());
+    // Silence dummy audio buses
+    buffer.clear();
 
-    const int ready = fifo.getNumReady();
-    if (ready <= 0) return;
+    // --- Build a filtered copy: keep non-CC messages, consume CCs -----------
+    juce::MidiBuffer filtered;
 
-    int s1, sz1, s2, sz2;
-    fifo.prepareToRead(ready, s1, sz1, s2, sz2);
-
-    auto emitRange = [&](int start, int count)
+    for (const auto metadata : midiMessages)
     {
-        for (int i = start; i < start + count; ++i)
-            midiMessages.addEvent(
-                juce::MidiMessage(messageBuffer[i].data, messageBuffer[i].numBytes), 0);
-    };
+        const auto msg = metadata.getMessage();
 
-    emitRange(s1, sz1);
-    emitRange(s2, sz2);
-    fifo.finishedRead(ready);
+        if (msg.isController())
+        {
+            // Reflect into APVTS for UI update — do NOT pass through
+            applyIncomingCC(msg.getControllerNumber(), msg.getControllerValue());
+        }
+        else
+        {
+            // Notes, pitch bend, aftertouch etc. — pass through
+            filtered.addEvent(msg, metadata.samplePosition);
+        }
+    }
+
+    // --- Drain outgoing CC FIFO (our CCs only) ------------------------------
+    const int ready = fifo.getNumReady();
+    if (ready > 0)
+    {
+        int s1, sz1, s2, sz2;
+        fifo.prepareToRead(ready, s1, sz1, s2, sz2);
+
+        // Place our CCs at the end of the buffer
+        const int samplePos = filtered.isEmpty()
+                            ? 0
+                            : filtered.getLastEventTime();
+
+        auto emitRange = [&](int start, int count)
+        {
+            for (int i = start; i < start + count; ++i)
+            {
+                const auto& slot = messageBuffer[i];
+                filtered.addEvent(
+                    juce::MidiMessage(slot.data, slot.numBytes), samplePos);
+            }
+        };
+
+        emitRange(s1, sz1);
+        emitRange(s2, sz2);
+        fifo.finishedRead(ready);
+    }
+
+    // Replace the host buffer with our filtered version
+    midiMessages.swapWith(filtered);
 }
 
 // =============================================================================
-// parameterChanged — convert to CC and send immediately (single knob change)
+// applyIncomingCC — update APVTS/UI from an incoming CC, without sending
+//
+// Called when a CC arrives from the hardware (via host MidiBuffer or
+// standalone MIDI input). Updates the APVTS parameter so the UI reflects
+// the hardware state, but must NOT send a CC back out to the Teensy.
+//
+// Guard 1: The caller (handleIncomingMidiMessage / processBlock) never
+//          queues the CC back out — only this function is called.
+//
+// Guard 2: _suppressEcho is set true around setValueNotifyingHost().
+//          parameterChanged() checks this flag and skips sendCC().
+//          setValueNotifyingHost fires the listener synchronously on the
+//          same call stack, so the flag is guaranteed to be true when
+//          parameterChanged runs.
+// =============================================================================
+void JT8000ControllerProcessor::applyIncomingCC(int cc, int value)
+{
+    if (cc < 0 || cc > 127)
+        return;
+
+    const CCParam* p = findParamByCC(cc);
+    if (p == nullptr)
+        return;
+
+    if (p->style == ControlStyle::StepGrid)
+        return;
+
+    auto* param = apvts.getParameter(p->id);
+    if (param == nullptr)
+        return;
+
+    float normVal;
+    if (isChoiceParam(*p))
+    {
+        int idx = ccToChoiceIndex(juce::jlimit(0, 127, value), p->enumCount);
+        normVal = param->convertTo0to1(static_cast<float>(idx));
+    }
+    else
+    {
+        normVal = param->convertTo0to1(static_cast<float>(juce::jlimit(0, 127, value)));
+    }
+
+    // Guard: tell parameterChanged() not to send a CC for this update
+    _suppressEcho.store(true);
+    param->setValueNotifyingHost(normVal);
+    _suppressEcho.store(false);
+}
+
+// =============================================================================
+// parameterChanged — convert to CC and send (UI/automation changes only)
+//
+// Skips sending when the change originated from an incoming CC
+// (_suppressEcho == true). This is Guard 2 of the echo suppression:
+//
+//   incoming CC → applyIncomingCC → _suppressEcho = true
+//              → setValueNotifyingHost → parameterChanged
+//              → [guard active, skip sendCC] → done.
+//
+// UI-initiated changes (slider drag, combo selection) arrive here with
+// _suppressEcho == false, so sendCC proceeds normally.
 // =============================================================================
 void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float newValue)
 {
+    // Do not send a CC back out if this change came from an incoming CC
+    if (_suppressEcho.load())
+        return;
+
     const CCParam* p = findParamByID(id);
     if (!p) return;
 
@@ -121,7 +261,7 @@ void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float n
 }
 
 // =============================================================================
-// sendCC — single CC, immediate (knob tweak, step grid pair)
+// sendCC
 // =============================================================================
 void JT8000ControllerProcessor::sendCC(int cc, int value)
 {
@@ -135,14 +275,12 @@ void JT8000ControllerProcessor::sendCC(int cc, int value)
 // =============================================================================
 void JT8000ControllerProcessor::queueMidiMessage(const juce::MidiMessage& msg)
 {
-    // Direct output for standalone mode
     {
         const juce::ScopedLock sl(midiOutLock);
         if (directMidiOut != nullptr)
             directMidiOut->sendMessageNow(msg);
     }
 
-    // Queue for processBlock (DAW / VST3 path)
     const int rawSize = juce::jmin(msg.getRawDataSize(), 3);
     if (rawSize <= 0) return;
 
@@ -158,18 +296,8 @@ void JT8000ControllerProcessor::queueMidiMessage(const juce::MidiMessage& msg)
 }
 
 // =============================================================================
-// PACED SEND — timer-based drip feed
-//
-// Why: The Teensy USB MIDI receive buffer is finite (~64-128 messages).
-// Firing 120+ CCs in a tight loop overflows it — messages get silently
-// dropped, causing random parameters to not apply.  The HTML editor
-// avoids this naturally (JS event loop adds ~0.1-1ms between sends).
-//
-// How: buildPacedQueue() snapshots all APVTS values into _pacedQueue.
-// startTimer(1) fires timerCallback() every 1ms, sending one CC per
-// tick.  At 120 CCs, the full patch takes ~120ms — imperceptible.
+// Paced send
 // =============================================================================
-
 void JT8000ControllerProcessor::buildPacedQueue()
 {
     _pacedQueue.clear();
@@ -196,22 +324,15 @@ void JT8000ControllerProcessor::buildPacedQueue()
 
 void JT8000ControllerProcessor::sendAllCCsPaced()
 {
-    // If already sending, restart from the beginning
     stopTimer();
-
     buildPacedQueue();
     _pacedIndex = 0;
     _pacedSendActive.store(true);
-
-    // 1ms per CC — fast enough to feel instant, slow enough for Teensy
     startTimer(1);
 }
 
 void JT8000ControllerProcessor::appendPacedCC(int cc, int value)
 {
-    // Append to the queue. Call AFTER sendAllCCsPaced() but the timer
-    // will still be running — new items get picked up naturally since
-    // timerCallback checks _pacedQueue.size() each tick.
     _pacedQueue.push_back({
         static_cast<uint8_t>(juce::jlimit(0, 127, cc)),
         static_cast<uint8_t>(juce::jlimit(0, 127, value))
@@ -222,7 +343,6 @@ void JT8000ControllerProcessor::timerCallback()
 {
     if (_pacedIndex >= static_cast<int>(_pacedQueue.size()))
     {
-        // Done — stop timer
         stopTimer();
         _pacedSendActive.store(false);
         return;
@@ -309,14 +429,30 @@ juce::String JT8000ControllerProcessor::getActiveMidiInputId() const
 }
 
 // =============================================================================
-// handleIncomingMidiMessage — forward channel voice messages to output
+// handleIncomingMidiMessage — standalone MIDI input callback
+//
+// Runs on the MIDI device thread, NOT the message thread.
+//
+// ECHO SUPPRESSION: Incoming CCs are consumed here — they update the
+// APVTS/UI via applyIncomingCC() but are NEVER forwarded back out.
+// Only performance messages (notes, pitch bend, aftertouch) pass through.
+//
+// This mirrors processBlock() which applies the same CC-filtering rule
+// for the VST/DAW path.
 // =============================================================================
 void JT8000ControllerProcessor::handleIncomingMidiMessage(
     juce::MidiInput*, const juce::MidiMessage& msg)
 {
-    if (msg.isNoteOnOrOff() || msg.isController()
-        || msg.isPitchWheel() || msg.isAftertouch()
-        || msg.isChannelPressure())
+    if (msg.isController())
+    {
+        // CC from hardware → update UI only, do NOT send back
+        applyIncomingCC(msg.getControllerNumber(), msg.getControllerValue());
+        return;
+    }
+
+    // Performance messages pass through (notes, pitch bend, aftertouch)
+    if (msg.isNoteOnOrOff() || msg.isPitchWheel()
+        || msg.isAftertouch() || msg.isChannelPressure())
     {
         queueMidiMessage(msg);
     }

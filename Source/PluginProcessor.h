@@ -1,12 +1,23 @@
 /*
  * PluginProcessor.h — JT-8000 Controller Processor
  *
- * ADDITIONS (v3):
- *   - sendAllCCsPaced(): timer-based drip feed at ~1ms per CC to avoid
- *     overflowing the Teensy USB MIDI receive buffer.  Replaces the old
- *     burst-mode sendAllCCs() for all UI-triggered "Send All" actions.
- *   - isSendingAll(): lets the editor disable the Send All button while
- *     a paced send is in progress.
+ * MIDI CC mapper plugin with Ableton Live compatibility.
+ *
+ * ABLETON WORKAROUND:
+ *   Ableton refuses to load VST3 plugins with no audio buses (ABLDEV-00057).
+ *   We declare dummy stereo I/O buses and silence them in processBlock().
+ *   isMidiEffect() returns false for the same reason — Ableton ignores
+ *   MIDI-only plugins. This matches JUCE's MidiLoggerPluginDemo pattern.
+ *
+ * MIDI ECHO SUPPRESSION:
+ *   Both processBlock (VST) and handleIncomingMidiMessage (standalone)
+ *   consume incoming CCs without forwarding them back out.
+ *   Only notes, pitch bend, aftertouch, and channel pressure pass through.
+ *   Incoming CCs update the APVTS/UI via applyIncomingCC() only.
+ *
+ * FEATURES:
+ *   - sendAllCCsPaced(): timer-based drip feed at ~1ms per CC
+ *   - Incoming CC reflection: hardware CCs update the APVTS/UI
  */
 
 #pragma once
@@ -34,7 +45,11 @@ public:
     const juce::String getName() const override { return "JT-8000 Controller"; }
     bool acceptsMidi()  const override { return true; }
     bool producesMidi() const override { return true; }
+
+    // FALSE — not TRUE. Ableton cannot load MIDI-only VST3 plugins.
+    // We use dummy audio buses instead. See class-level comment.
     bool isMidiEffect() const override { return false; }
+
     double getTailLengthSeconds() const override { return 0.0; }
 
     int  getNumPrograms()    override { return 1; }
@@ -51,40 +66,56 @@ public:
     std::atomic<int> midiChannel { 1 };
 
     void setMidiOutput(std::unique_ptr<juce::MidiOutput> output);
-
-    /* Direct CC send — single CC, immediate. Used by knob changes and
-       StepSequencerGrid select+value pairs. */
     void sendCC(int cc, int value);
-
-    /* Paced send — snapshots the entire APVTS, then drip-feeds CCs at
-       ~1ms intervals via a juce::Timer.  Safe for Teensy USB MIDI.
-       Call from UI: Send All, Init, Load Patch, Load SYX. */
     void sendAllCCsPaced();
-
-    /* Append extra CC pairs to the paced queue BEFORE starting the timer.
-       Used by the editor to include step sequencer data in Send All. */
     void appendPacedCC(int cc, int value);
-
-    /* True while the timer is drip-feeding CCs */
     bool isSendingAll() const { return _pacedSendActive.load(); }
 
-    // --- Patch name (stored in APVTS state tree) ----------------------------
     juce::String getPatchName() const;
     void         setPatchName(const juce::String& name);
 
-    // --- MIDI input for standalone mode -------------------------------------
     void openMidiInput(const juce::String& deviceIdentifier);
     void closeMidiInput();
     juce::String getActiveMidiInputId() const;
 
-    /* Send note / pitch messages directly */
     void sendNoteOn(int channel, int note, float velocity);
     void sendNoteOff(int channel, int note);
     void sendPitchWheel(int channel, int value);
 
+    /* True when running as standalone (not inside a DAW) */
+    bool isStandaloneMode() const;
+
 private:
+    // Bus layout — Ableton workaround (see MidiLoggerPluginDemo)
+    static juce::AudioProcessor::BusesProperties makeBusLayout();
+
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     void parameterChanged(const juce::String& id, float newValue) override;
+
+    // --- Incoming CC echo suppression ---------------------------------------
+    //
+    // When a CC arrives from the hardware we update the APVTS so the UI
+    // reflects the change.  setValueNotifyingHost() triggers
+    // parameterChanged(), which would normally call sendCC() — creating
+    // an infinite feedback loop:
+    //
+    //   Teensy → CC in → applyIncomingCC → setValueNotifyingHost
+    //                   → parameterChanged → sendCC → Teensy → echo → …
+    //
+    // Two guards work together to prevent this:
+    //
+    //   1. handleIncomingMidiMessage / processBlock NEVER forward incoming
+    //      CCs back out. Only notes, pitch bend, aftertouch pass through.
+    //
+    //   2. _suppressEcho is set true around setValueNotifyingHost() so
+    //      that parameterChanged() skips sendCC() for the notification
+    //      triggered by the incoming value.
+    //
+    // _suppressEcho is atomic because handleIncomingMidiMessage runs on
+    // the MIDI device thread (not the message thread).
+    // -----------------------------------------------------------------------
+    void applyIncomingCC(int cc, int value);
+    std::atomic<bool> _suppressEcho { false };
 
     // --- MIDI output FIFO (DAW processBlock path) ---------------------------
     struct MidiQueueMsg { uint8_t data[3]; int numBytes; };
@@ -104,9 +135,7 @@ private:
     void handleIncomingMidiMessage(juce::MidiInput* source,
                                    const juce::MidiMessage& msg) override;
 
-    // --- Paced send (timer drip feed) ---------------------------------------
-    // Teensy USB MIDI can overflow if 120+ CCs arrive in one burst.
-    // The timer sends 1 CC per tick at 1ms intervals (~120ms total).
+    // --- Paced send ---------------------------------------------------------
     struct PacedCC { uint8_t cc; uint8_t value; };
     std::vector<PacedCC> _pacedQueue;
     int _pacedIndex = 0;

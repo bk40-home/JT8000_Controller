@@ -2,13 +2,14 @@
  * PluginEditor.cpp — JT-8000 Controller Main Window
  *
  * Two-row header layout:
- *   Row 1: Title | LCD Patch Name | MIDI Out | MIDI In | Channel
+ *   Row 1: Title | LCD Patch Name | [MIDI Out | MIDI In]* | Channel
  *   Row 2: Send All | Load SYX | Save | Load | Init | Expand | Collapse
+ *
+ * * MIDI Out and MIDI In selectors only visible in standalone mode.
  */
 
 #include "PluginEditor.h"
 
-// Colour palette — matches HTML editor's CSS variables
 static const juce::Colour kBg       (0xff0b0e14);
 static const juce::Colour kHeaderBg (0xff141a28);
 static const juce::Colour kBorder   (0xff1e2a3e);
@@ -20,7 +21,6 @@ static const juce::Colour kText     (0xff8090b0);
 static const juce::Colour kLcdBg    (0xff0a0c10);
 static const juce::Colour kLcdText  (0xfff08020);
 
-// Property key — must match PluginProcessor.cpp
 static const juce::Identifier kPatchNameProp("patchName");
 
 // =============================================================================
@@ -30,6 +30,7 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     : AudioProcessorEditor(p), _proc(p)
 {
     setLookAndFeel(&_lnf);
+    _isStandalone = _proc.isStandaloneMode();
 
     // --- Title label --------------------------------------------------------
     _titleLabel.setText("JT-8000", juce::dontSendNotification);
@@ -51,7 +52,6 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     };
     addAndMakeVisible(_patchNameLabel);
 
-    // Listen for external patch name changes (load, SYX import, etc.)
     _proc.apvts.state.addListener(this);
 
     // --- MIDI channel selector ----------------------------------------------
@@ -64,7 +64,7 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     };
     addAndMakeVisible(_midiChSelector);
 
-    // --- MIDI output selector -----------------------------------------------
+    // --- MIDI output selector (standalone only) -----------------------------
     _midiOutSelector.onChange = [this]
     {
         const int sel = _midiOutSelector.getSelectedId();
@@ -75,9 +75,9 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
             _proc.setMidiOutput(juce::MidiOutput::openDevice(devices[idx].identifier));
     };
     addAndMakeVisible(_midiOutSelector);
-    refreshMidiOutputList();
+    _midiOutSelector.setVisible(_isStandalone);
 
-    // --- MIDI input selector (standalone thru) ------------------------------
+    // --- MIDI input selector (standalone only) ------------------------------
     _midiInSelector.onChange = [this]
     {
         const int sel = _midiInSelector.getSelectedId();
@@ -88,7 +88,13 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
             _proc.openMidiInput(devices[idx].identifier);
     };
     addAndMakeVisible(_midiInSelector);
-    refreshMidiInputList();
+    _midiInSelector.setVisible(_isStandalone);
+
+    if (_isStandalone)
+    {
+        refreshMidiOutputList();
+        refreshMidiInputList();
+    }
 
     // --- Style helper for buttons -------------------------------------------
     auto styleBtn = [](juce::TextButton& b, juce::Colour c)
@@ -101,19 +107,15 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     styleBtn(_sendAllBtn, kOrange);
     _sendAllBtn.onClick = [this]
     {
-        // Start paced CC send (builds queue from APVTS, starts timer)
         _proc.sendAllCCsPaced();
-
-        // Append step sequencer data to the same paced queue so
-        // everything is serialised at 1ms intervals — no burst.
         for (auto* sec : _sections)
         {
             for (auto* grid : sec->getStepGrids())
             {
                 for (int s = 0; s < StepSequencerGrid::kNumSteps; ++s)
                 {
-                    _proc.appendPacedCC(17, s);                   // SEQ_STEP_SELECT
-                    _proc.appendPacedCC(18, grid->getStepValue(s)); // SEQ_STEP_VALUE
+                    _proc.appendPacedCC(17, s);
+                    _proc.appendPacedCC(18, grid->getStepValue(s));
                 }
             }
         }
@@ -139,7 +141,6 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     _expandBtn.onClick   = [this] { for (auto* s : _sections) s->setOpen(true); };
     _collapseBtn.onClick = [this] { for (auto* s : _sections) s->setOpen(false); };
 
-    // --- Add all buttons to the component -----------------------------------
     for (auto* b : { &_sendAllBtn, &_loadSyxBtn, &_savePatchBtn, &_loadPatchBtn,
                      &_initPatchBtn, &_expandBtn, &_collapseBtn })
         addAndMakeVisible(b);
@@ -151,14 +152,13 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
         juce::ScrollBar::thumbColourId, juce::Colour(0xff283850));
     addAndMakeVisible(_viewport);
 
-    // --- Build sections and size --------------------------------------------
     buildSections();
     setSize(1080, 820);
     setResizable(true, true);
     setResizeLimits(400, 400, 1600, 2400);
 
-    // --- Timer for MIDI device hot-plug refresh (every 2 seconds) -----------
-    startTimer(2000);
+    if (_isStandalone)
+        startTimer(2000);
 }
 
 JT8000ControllerEditor::~JT8000ControllerEditor()
@@ -169,7 +169,7 @@ JT8000ControllerEditor::~JT8000ControllerEditor()
 }
 
 // =============================================================================
-// MIDI device list refresh
+// MIDI device list refresh (standalone only)
 // =============================================================================
 void JT8000ControllerEditor::refreshMidiOutputList()
 {
@@ -198,22 +198,21 @@ void JT8000ControllerEditor::refreshMidiInputList()
 }
 
 // =============================================================================
-// Timer — refresh MIDI device lists for hot-plug
+// Timer — refresh MIDI device lists (standalone only)
 // =============================================================================
 void JT8000ControllerEditor::timerCallback()
 {
-    // Only refresh the combo items; don't change selection unless device vanished
+    if (!_isStandalone) return;
+
     const int outSel = _midiOutSelector.getSelectedId();
     const int inSel  = _midiInSelector.getSelectedId();
 
     auto outDevices = juce::MidiOutput::getAvailableDevices();
     auto inDevices  = juce::MidiInput::getAvailableDevices();
 
-    // Rebuild output list only if count changed (cheap check)
     if (outDevices.size() + 1 != _midiOutSelector.getNumItems())
     {
         refreshMidiOutputList();
-        // Restore selection if still valid
         if (outSel > 0 && outSel <= outDevices.size())
             _midiOutSelector.setSelectedId(outSel, juce::dontSendNotification);
     }
@@ -227,7 +226,7 @@ void JT8000ControllerEditor::timerCallback()
 }
 
 // =============================================================================
-// Build sections — identical logic to original
+// Build sections
 // =============================================================================
 void JT8000ControllerEditor::buildSections()
 {
@@ -251,8 +250,8 @@ void JT8000ControllerEditor::buildSections()
             case ControlStyle::Toggle: sec->addToggle(_proc.apvts, p);   break;
             case ControlStyle::StepGrid:
                 sec->addStepGrid([this](int step, int value) {
-                    _proc.sendCC(17, step);    // SEQ_STEP_SELECT
-                    _proc.sendCC(18, value);   // SEQ_STEP_VALUE
+                    _proc.sendCC(17, step);
+                    _proc.sendCC(18, value);
                 });
                 break;
         }
@@ -260,7 +259,7 @@ void JT8000ControllerEditor::buildSections()
 }
 
 // =============================================================================
-// Layout sections — unchanged logic from original
+// Layout sections
 // =============================================================================
 void JT8000ControllerEditor::layoutSections()
 {
@@ -277,7 +276,6 @@ void JT8000ControllerEditor::layoutSections()
         const int row = sectionRow[idx];
         if (row < 0)
         {
-            // Full-width section
             auto* sec = _sections[idx];
             int h = sec->getDesiredHeight(totalW);
             sec->setBounds(gap, y, totalW, h);
@@ -286,7 +284,6 @@ void JT8000ControllerEditor::layoutSections()
         }
         else
         {
-            // Grouped row — find all sections sharing this row number
             int gs = idx;
             while (idx < n && sectionRow[idx] == row) ++idx;
             int gc = idx - gs;
@@ -307,28 +304,22 @@ void JT8000ControllerEditor::layoutSections()
 }
 
 // =============================================================================
-// Paint — two-row header
+// Paint
 // =============================================================================
 void JT8000ControllerEditor::paint(juce::Graphics& g)
 {
     g.fillAll(kBg);
-
-    // Header background
     g.setColour(kHeaderBg);
     g.fillRect(0, 0, getWidth(), kHeaderHeight);
-
-    // Header bottom border
     g.setColour(kBorder);
     g.drawHorizontalLine(kHeaderHeight - 1, 0.0f, static_cast<float>(getWidth()));
-
-    // Divider between row 1 and row 2
     const int rowDivY = kHeaderHeight / 2;
     g.setColour(kBorder.withAlpha(0.4f));
     g.drawHorizontalLine(rowDivY, 6.0f, static_cast<float>(getWidth() - 6));
 }
 
 // =============================================================================
-// Resized — two-row header layout
+// Resized
 // =============================================================================
 void JT8000ControllerEditor::resized()
 {
@@ -338,29 +329,26 @@ void JT8000ControllerEditor::resized()
     const int rowH = kHeaderHeight / 2;
     const int pad = 4;
 
-    // --- Row 1: Title | LCD | MIDI Out | MIDI In | Channel ------------------
     auto row1 = hdrFull.removeFromTop(rowH).reduced(pad, 2);
 
     _titleLabel.setBounds(row1.removeFromLeft(72));
     row1.removeFromLeft(pad);
 
-    // LCD patch name gets a generous central area
-    const int lcdW = juce::jmin(220, row1.getWidth() / 3);
-    _patchNameLabel.setBounds(row1.removeFromLeft(lcdW));
-    row1.removeFromLeft(pad);
-
-    // Right side: Channel | MIDI In | MIDI Out
     _midiChSelector.setBounds(row1.removeFromRight(58));
     row1.removeFromRight(pad);
 
-    const int midiBoxW = juce::jmin(160, (row1.getWidth() - pad) / 2);
-    _midiInSelector.setBounds(row1.removeFromRight(midiBoxW));
-    row1.removeFromRight(pad);
-    _midiOutSelector.setBounds(row1.removeFromRight(juce::jmin(midiBoxW, row1.getWidth())));
+    if (_isStandalone)
+    {
+        const int midiBoxW = juce::jmin(160, (row1.getWidth() - pad) / 3);
+        _midiInSelector.setBounds(row1.removeFromRight(midiBoxW));
+        row1.removeFromRight(pad);
+        _midiOutSelector.setBounds(row1.removeFromRight(midiBoxW));
+        row1.removeFromRight(pad);
+    }
 
-    // --- Row 2: Buttons -----------------------------------------------------
+    _patchNameLabel.setBounds(row1);
+
     auto row2 = hdrFull.reduced(pad, 2);
-
     _sendAllBtn.setBounds(row2.removeFromLeft(66));
     row2.removeFromLeft(pad);
     _loadSyxBtn.setBounds(row2.removeFromLeft(72));
@@ -371,18 +359,19 @@ void JT8000ControllerEditor::resized()
     row2.removeFromLeft(pad);
     _initPatchBtn.setBounds(row2.removeFromLeft(44));
 
-    // Right-aligned
     _collapseBtn.setBounds(row2.removeFromRight(66));
     row2.removeFromRight(pad);
     _expandBtn.setBounds(row2.removeFromRight(60));
 
-    // --- Viewport fills remaining area --------------------------------------
     _viewport.setBounds(area);
     layoutSections();
+
+    if (_syxOverlay != nullptr)
+        _syxOverlay->setBounds(getLocalBounds());
 }
 
 // =============================================================================
-// ValueTree::Listener — patch name property changed externally
+// ValueTree::Listener
 // =============================================================================
 void JT8000ControllerEditor::valueTreePropertyChanged(
     juce::ValueTree& tree, const juce::Identifier& property)
@@ -390,7 +379,6 @@ void JT8000ControllerEditor::valueTreePropertyChanged(
     if (property == kPatchNameProp)
     {
         const auto name = tree.getProperty(property).toString();
-        // Must be on the message thread for GUI updates
         juce::MessageManager::callAsync([this, name]
         {
             _patchNameLabel.setText(name, juce::dontSendNotification);
@@ -399,7 +387,7 @@ void JT8000ControllerEditor::valueTreePropertyChanged(
 }
 
 // =============================================================================
-// Init Patch — reset all parameters to defaults
+// Init Patch
 // =============================================================================
 void JT8000ControllerEditor::initPatch()
 {
@@ -407,7 +395,6 @@ void JT8000ControllerEditor::initPatch()
     {
         const auto& p = kAllParams[i];
         if (p.style == ControlStyle::StepGrid) continue;
-
         if (auto* param = _proc.apvts.getParameter(p.id))
             param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(p.defVal)));
     }
@@ -415,23 +402,22 @@ void JT8000ControllerEditor::initPatch()
     _proc.setPatchName("INIT PATCH");
     _proc.sendAllCCsPaced();
 
-    // Reset step grids to zero and append to paced queue
     for (auto* sec : _sections)
     {
         for (auto* grid : sec->getStepGrids())
         {
             for (int s = 0; s < StepSequencerGrid::kNumSteps; ++s)
             {
-                grid->setStepValue(s, 0, false);       // Update visual, no immediate send
-                _proc.appendPacedCC(17, s);             // SEQ_STEP_SELECT
-                _proc.appendPacedCC(18, 0);             // SEQ_STEP_VALUE = 0
+                grid->setStepValue(s, 0, false);
+                _proc.appendPacedCC(17, s);
+                _proc.appendPacedCC(18, 0);
             }
         }
     }
 }
 
 // =============================================================================
-// SYX import — updated to set patch name from SYX data
+// SYX import — non-modal overlay (safe in all VST3 hosts)
 // =============================================================================
 void JT8000ControllerEditor::loadSyxFile()
 {
@@ -471,51 +457,39 @@ void JT8000ControllerEditor::loadSyxFile()
 
 void JT8000ControllerEditor::showPatchPicker(const juce::String& fileName)
 {
-    auto* dlg = new juce::AlertWindow(
-        "Load SysEx \xe2\x80\x94 " + juce::String(static_cast<int>(_syxPatches.size())) + " patches",
-        fileName, juce::MessageBoxIconType::NoIcon);
-
     juce::StringArray items;
     for (int i = 0; i < static_cast<int>(_syxPatches.size()); ++i)
         items.add(juce::String(i).paddedLeft('0', 2) + "  "
                   + _syxPatches[static_cast<size_t>(i)].name);
 
-    dlg->addComboBox("patchList", items, "Select patch:");
-    dlg->addButton("Load + Send", 1);
-    dlg->addButton("Load Only", 2);
-    dlg->addButton("Cancel", 0);
-    dlg->setColour(juce::AlertWindow::backgroundColourId, juce::Colour(0xff111620));
-    dlg->setColour(juce::AlertWindow::textColourId, juce::Colour(0xffc8d8f4));
-    dlg->setColour(juce::AlertWindow::outlineColourId, juce::Colour(0xff1e2a3e));
+    const juce::String title =
+        "Load SysEx \xe2\x80\x94 " +
+        juce::String(static_cast<int>(_syxPatches.size())) +
+        " patches \xe2\x80\x94 " + fileName;
 
-    // Capture pointer before entering modal state (JUCE removes from modal
-    // stack before callback fires — established pattern from JP8000SyxImporter)
-    juce::AlertWindow* dlgPtr = dlg;
+    _syxOverlay = std::make_unique<SyxPickerOverlay>(title, items);
+    _syxOverlay->setBounds(getLocalBounds());
 
-    dlg->enterModalState(true, juce::ModalCallbackFunction::create(
-        [this, dlgPtr](int result)
+    _syxOverlay->onResult = [this](int result, int patchIndex)
+    {
+        if (result != 0 && !_syxPatches.empty()
+            && patchIndex >= 0
+            && patchIndex < static_cast<int>(_syxPatches.size()))
         {
-            if (result == 0 || _syxPatches.empty()) return;
+            JP8000SyxImporter::loadPatch(
+                _proc.apvts, _syxPatches[static_cast<size_t>(patchIndex)]);
+            _proc.setPatchName(_syxPatches[static_cast<size_t>(patchIndex)].name);
+            if (result == 1)
+                _proc.sendAllCCsPaced();
+        }
+        _syxOverlay.reset();
+    };
 
-            auto* combo = dlgPtr->getComboBoxComponent("patchList");
-            int idx = combo ? combo->getSelectedItemIndex() : 0;
-
-            if (idx >= 0 && idx < static_cast<int>(_syxPatches.size()))
-            {
-                JP8000SyxImporter::loadPatch(
-                    _proc.apvts, _syxPatches[static_cast<size_t>(idx)]);
-
-                // Update patch name from SYX data
-                _proc.setPatchName(_syxPatches[static_cast<size_t>(idx)].name);
-
-                if (result == 1)
-                    _proc.sendAllCCsPaced();
-            }
-        }), true);
+    addAndMakeVisible(_syxOverlay.get());
 }
 
 // =============================================================================
-// Patch file save / load — updated to set patch name from filename
+// Patch file save / load
 // =============================================================================
 void JT8000ControllerEditor::savePatchFile()
 {
@@ -535,7 +509,6 @@ void JT8000ControllerEditor::savePatchFile()
             if (!file.hasFileExtension("jt8k"))
                 file = file.withFileExtension("jt8k");
 
-            // Store the filename as the patch name before saving
             _proc.setPatchName(file.getFileNameWithoutExtension());
 
             auto xml = _proc.apvts.copyState().createXml();
@@ -581,8 +554,6 @@ void JT8000ControllerEditor::loadPatchFile()
 
             _proc.apvts.replaceState(juce::ValueTree::fromXml(*xml));
 
-            // If the loaded state has a patch name, the ValueTree listener
-            // will update the LCD automatically.  If not, use the filename.
             if (_proc.getPatchName().isEmpty())
                 _proc.setPatchName(file.getFileNameWithoutExtension());
 
