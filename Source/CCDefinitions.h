@@ -28,6 +28,15 @@
  *              — Added CC 71 (Hi Damp) and CC 93 (Lo Damp) to reverb section
  *              — Seq defaults match HTML editor (all zero)
  *              — EQ defaults match HTML editor (0, not 64)
+ *   2026-04-23 — Phase 2: Layering support (firmware refactor)
+ *              — Added seven perf CCs (140..146) as local-only APVTS params
+ *              — isLocalOnly flag on CCParam skips MIDI emit (CCs > 127
+ *                cannot travel on class-compliant USB MIDI)
+ *              — Added PERFORMANCE_GLOBAL pseudo-section (header-only,
+ *                not rendered as a collapsible panel)
+ *              — Added kChannelNames/kMidiChannelLUT for Ch A/B combos
+ *              — Plugin now tracks Layer A/B channels and Edit Target
+ *              — Live MIDI routing uses Edit Target to pick Ch A / Ch B
  */
 
 #pragma once
@@ -35,6 +44,12 @@
 
 // -----------------------------------------------------------------------
 // Section identifiers — order determines display order in the editor
+// -----------------------------------------------------------------------
+// PERFORMANCE_GLOBAL is a pseudo-section: the seven perf params (CCs
+// 140..146) live here purely so they become APVTS parameters (for state
+// save/restore). They are NOT rendered inside a section panel — the main
+// editor lays them out directly in the top header bar. PluginEditor
+// skips this section when building the collapsible section list.
 // -----------------------------------------------------------------------
 enum class Section : int
 {
@@ -46,6 +61,7 @@ enum class Section : int
     FX_OUTPUT,
     VELOCITY, PERFORMANCE, BPM,
     STEP_SEQ,
+    PERFORMANCE_GLOBAL,   // pseudo: rendered in header, not as a section
     NUM_SECTIONS
 };
 
@@ -57,7 +73,9 @@ static const char* sectionNames[] = {
     "Reverb",
     "Output Mix",
     "Velocity", "Performance", "BPM Clock",
-    "Step Sequencer"
+    "Step Sequencer",
+    "Voice mode",
+    "Performance Global",   // PERFORMANCE_GLOBAL — header-only, no panel
 };
 
 // Row grouping for side-by-side layout. -1 = full width.
@@ -70,6 +88,8 @@ static const int sectionRow[] = {
      2,  2,                // FX_DELAY, FX_REVERB
      3,  3,  3,            // FX_OUTPUT, VELOCITY, PERFORMANCE
     -1, -1,                // BPM, STEP_SEQ
+    4,                     // VOICE_MODE
+    -1,                    // PERFORMANCE_GLOBAL (ignored by section builder)
 };
 
 // -----------------------------------------------------------------------
@@ -98,6 +118,12 @@ struct CCParam
     const char* const* enumNames;   // Named options (nullptr for continuous)
     int               enumCount;    // Number of enum options (0 for continuous)
     const int*        ccLUT;        // Per-choice CC values (nullptr = use bucket formula)
+    bool              isLocalOnly;  // true = UI/state only, never transmitted as MIDI.
+                                    // Used for perf CCs 140..146 which are above
+                                    // the 7-bit MIDI wire limit (CC numbers > 127
+                                    // cannot travel as class-compliant MIDI).
+                                    // Set to true on the seven perf params below;
+                                    // defaults to false for everything else.
 };
 
 // -----------------------------------------------------------------------
@@ -214,6 +240,40 @@ static const int kSeqDirLUT[]   = { 0, 42, 85, 127 };
 
 // Seq destination: firmware uses (v*4)/127
 static const int kSeqDestLUT[]  = { 0, 32, 64, 95, 127 };
+
+// -----------------------------------------------------------------------
+// Performance-global parameter tables (CCs 140..146 — local-only params)
+//
+// These are NOT sent as live MIDI (CC numbers above 127 can't travel on
+// class-compliant USB MIDI), so they exist purely as APVTS parameters
+// for UI display and state save/restore. The plugin header renders
+// these controls directly; they are NOT placed into section panels.
+// -----------------------------------------------------------------------
+
+// Perf Mode (CC 140): firmware decodes <=42 / <=84 / >84 → Single/Layer/Split.
+// LUT values are bucket midpoints so round-tripping the choice index
+// through choiceIndexToCC → ccToChoiceIndex is stable.
+static const char* const kPerfModeNames[] = { "Single", "Layer", "Split" };
+static const int        kPerfModeLUT[]   = { 21, 63, 106 };
+
+// Edit Target (CC 144): same three-zone decode as Perf Mode.
+// A / B / Both controls which layer receives edits AND which channel
+// the plugin sends CCs on (PluginProcessor handles the routing).
+static const char* const kEditTargetNames[] = { "A", "B", "Both" };
+static const int        kEditTargetLUT[]   = { 21, 63, 106 };
+
+// MIDI Channel A / B (CC 145, 146): firmware decodes as
+//   channel = ((v * 16) / 128) + 1   (range 1..16, JP-8000 authentic).
+// The reverse map is v = (channel-1) * 8 + 4 (centre of each bucket).
+// Used for CCs 145/146 and in PluginProcessor when selecting the
+// outgoing channel number.
+static const char* const kChannelNames[] = {
+    "Ch 1","Ch 2","Ch 3","Ch 4","Ch 5","Ch 6","Ch 7","Ch 8",
+    "Ch 9","Ch 10","Ch 11","Ch 12","Ch 13","Ch 14","Ch 15","Ch 16"
+};
+static const int kMidiChannelLUT[] = {
+    4, 12, 20, 28, 36, 44, 52, 60, 68, 76, 84, 92, 100, 108, 116, 124
+};
 
 // -----------------------------------------------------------------------
 // Shorthand macros for kAllParams[] — includes ccLUT field
@@ -344,11 +404,21 @@ static const CCParam kAllParams[] =
     { 109, "fx_dly_fb",   "Delay FB",    Section::FX_DELAY, 0, KNOB },
 
     // === FX REVERB ===
-    { 70,  "fx_rv_size",   "Rev Size",    Section::FX_REVERB, 0, KNOB },
-    { 71,  "fx_rv_damp",   "Hi Damp",     Section::FX_REVERB, 0, KNOB },
-    { 93,  "fx_rv_lodamp", "Lo Damp",     Section::FX_REVERB, 0, KNOB },
-    { 75,  "fx_rv_mix",    "Rev Mix",     Section::FX_REVERB, 0, KNOB },
-    { 94,  "fx_rv_bypass", "Rev Bypass",  Section::FX_REVERB, 0, COMBO_LUT(kBypassNames, 2, kMidpointLUT) },
+    // Core controls — tank character and output level
+    { 70,  "fx_rv_size",    "Rev Size",   Section::FX_REVERB, 0, KNOB },
+    { 71,  "fx_rv_damp",    "Hi Damp",    Section::FX_REVERB, 0, KNOB },
+    { 93,  "fx_rv_lodamp",  "Lo Damp",    Section::FX_REVERB, 0, KNOB },
+    { 75,  "fx_rv_mix",     "Rev Mix",    Section::FX_REVERB, 0, KNOB },
+    { 94,  "fx_rv_bypass",  "Rev Bypass", Section::FX_REVERB, 0, COMBO_LUT(kBypassNames, 2, kMidpointLUT) },
+    // Extended — performance controls (CC 95-98)
+    // Shimmer: pitch-shifted feedback inside the tank. Zero CPU when off.
+    { 95,  "fx_rv_shimmer", "Shimmer",    Section::FX_REVERB, 0, KNOB },
+    // Freeze: saves all params, sets decay=1.0, mutes input. Toggle >63 = on.
+    { 96,  "fx_rv_freeze",  "Freeze",     Section::FX_REVERB, 0, TOGGLE(kOnOffNames, 2) },
+    // Post-tank output EQ on wet signal only. Different from Hi/Lo Damp
+    // which act inside the tank loop and affect how quickly the tail decays.
+    { 97,  "fx_rv_lp",      "Out LP",     Section::FX_REVERB, 0, KNOB },
+    { 98,  "fx_rv_hp",      "Out HP",     Section::FX_REVERB, 0, KNOB },
 
     // === FX OUTPUT ===
     { 74,  "fx_dry",  "Dry Mix",  Section::FX_OUTPUT, 127, KNOB },
@@ -384,6 +454,24 @@ static const CCParam kAllParams[] =
     { 13,  "seq_retrigger", "Retrigger",  Section::STEP_SEQ, 0,   TOGGLE(kOnOffNames, 2) },
     { 116, "seq_sync",      "Sync",       Section::STEP_SEQ, 0,   COMBO(kTimingNames, 12) },
     { 17,  "seq_step_sel",  "Step Grid",  Section::STEP_SEQ, 0,   ControlStyle::StepGrid, nullptr, 0, nullptr },
+
+    // === PERFORMANCE GLOBAL — local-only (not sent as MIDI) ===============
+    // These seven entries have isLocalOnly = true. All upstream code paths
+    // (parameterChanged, buildPacedQueue) check this flag and skip emitting
+    // MIDI. They exist only so APVTS state save/restore works and the
+    // editor header can bind UI controls to them.
+    // defVal for combos is the CHOICE INDEX (not raw CC value):
+    //   perf_mode:        0 = Single
+    //   perf_edit_target: 0 = Layer A
+    //   perf_midi_ch_a/b: 0 = Ch 1
+    // ======================================================================
+    { 140, "perf_mode",         "Perf Mode",    Section::PERFORMANCE_GLOBAL, 0,  COMBO_LUT(kPerfModeNames,   3,  kPerfModeLUT),   true },
+    { 141, "perf_voice_split",  "Voice Split",  Section::PERFORMANCE_GLOBAL, 64, KNOB,                                              true },
+    { 142, "perf_split_note",   "Split Note",   Section::PERFORMANCE_GLOBAL, 60, KNOB,                                              true },
+    { 143, "perf_balance",      "Balance",      Section::PERFORMANCE_GLOBAL, 64, KNOB,                                              true },
+    { 144, "perf_edit_target",  "Edit Target",  Section::PERFORMANCE_GLOBAL, 0,  COMBO_LUT(kEditTargetNames, 3,  kEditTargetLUT), true },
+    { 145, "perf_midi_ch_a",    "Ch A",         Section::PERFORMANCE_GLOBAL, 0,  COMBO_LUT(kChannelNames,    16, kMidiChannelLUT),true },
+    { 146, "perf_midi_ch_b",    "Ch B",         Section::PERFORMANCE_GLOBAL, 0,  COMBO_LUT(kChannelNames,    16, kMidiChannelLUT),true },
 };
 
 #undef KNOB

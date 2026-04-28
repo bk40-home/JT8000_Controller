@@ -54,15 +54,90 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
 
     _proc.apvts.state.addListener(this);
 
-    // --- MIDI channel selector ----------------------------------------------
-    for (int i = 1; i <= 16; ++i)
-        _midiChSelector.addItem("Ch " + juce::String(i), i);
-    _midiChSelector.setSelectedId(_proc.midiChannel.load());
-    _midiChSelector.onChange = [this]
+    // =========================================================================
+    // Perf-Global header controls (Phase 2 — see PluginProcessor.h commentary)
+    //
+    // These replace the single MIDI-channel selector that existed pre-Phase-2.
+    // All seven perf CCs (140..146) now have visible header controls.
+    // Bound to APVTS via attachments — state save/restore works automatically.
+    //
+    // Visual layout (bottom header row, left to right):
+    //   [Layers:]  [Edit Target A/B/Both]  [Ch A 1..16]  [Ch B 1..16]
+    //   [Perf:]    [Mode Single/Layer/Split]  [Voice]  [Split]  [Balance]
+    // =========================================================================
+
+    auto styleLabel = [](juce::Label& lbl, const juce::String& text)
     {
-        _proc.midiChannel.store(_midiChSelector.getSelectedId());
+        lbl.setText(text, juce::dontSendNotification);
+        lbl.setColour(juce::Label::textColourId, kText);
+        lbl.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        lbl.setJustificationType(juce::Justification::centredRight);
     };
-    addAndMakeVisible(_midiChSelector);
+    styleLabel(_perfLabel,    "Layers:");
+    styleLabel(_perfSetLabel, "Perf:");
+    addAndMakeVisible(_perfLabel);
+    addAndMakeVisible(_perfSetLabel);
+
+    auto styleCombo = [](juce::ComboBox& cb)
+    {
+        cb.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff0b0e14));
+        cb.setColour(juce::ComboBox::textColourId,       kTextHi);
+        cb.setColour(juce::ComboBox::outlineColourId,    kBorder);
+    };
+    auto styleKnob = [](juce::Slider& s)
+    {
+        s.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+        s.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    };
+
+    // Populate combo items — must match the ccLUT-based choice ordering
+    // in CCDefinitions.h so the ComboBoxAttachment below lines up 1:1.
+    // (JUCE ComboBox::addItem IDs are 1-based; the attachment maps
+    //  index 0..N-1 to combo IDs 1..N.)
+    _editTargetCombo.addItem("A",    1);
+    _editTargetCombo.addItem("B",    2);
+    _editTargetCombo.addItem("Both", 3);
+
+    _perfModeCombo.addItem("Single", 1);
+    _perfModeCombo.addItem("Layer",  2);
+    _perfModeCombo.addItem("Split",  3);
+
+    for (int i = 1; i <= 16; ++i)
+    {
+        _chACombo.addItem("Ch " + juce::String(i), i);
+        _chBCombo.addItem("Ch " + juce::String(i), i);
+    }
+
+    styleCombo(_editTargetCombo);
+    styleCombo(_chACombo);
+    styleCombo(_chBCombo);
+    styleCombo(_perfModeCombo);
+
+    styleKnob(_voiceSplitKnob);
+    styleKnob(_splitNoteKnob);
+    styleKnob(_balanceKnob);
+
+    addAndMakeVisible(_editTargetCombo);
+    addAndMakeVisible(_chACombo);
+    addAndMakeVisible(_chBCombo);
+    addAndMakeVisible(_perfModeCombo);
+    addAndMakeVisible(_voiceSplitKnob);
+    addAndMakeVisible(_splitNoteKnob);
+    addAndMakeVisible(_balanceKnob);
+
+    // Bind each control to its APVTS parameter. JUCE handles the two-way
+    // sync; our parameterChanged() in PluginProcessor still fires for the
+    // atomic-mirror updates and the isLocalOnly skip-send logic.
+    using ComboAtt  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
+    using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
+
+    _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_edit_target", _editTargetCombo));
+    _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_midi_ch_a",   _chACombo));
+    _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_midi_ch_b",   _chBCombo));
+    _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_mode",        _perfModeCombo));
+    _headerSliderAtts.add(new SliderAtt(_proc.apvts, "perf_voice_split", _voiceSplitKnob));
+    _headerSliderAtts.add(new SliderAtt(_proc.apvts, "perf_split_note",  _splitNoteKnob));
+    _headerSliderAtts.add(new SliderAtt(_proc.apvts, "perf_balance",     _balanceKnob));
 
     // --- MIDI output selector (standalone only) -----------------------------
     _midiOutSelector.onChange = [this]
@@ -227,6 +302,13 @@ void JT8000ControllerEditor::timerCallback()
 
 // =============================================================================
 // Build sections
+//
+// Creates a SectionComponent for every Section enum value EXCEPT
+// PERFORMANCE_GLOBAL — that pseudo-section's params (CCs 140..146) are
+// rendered directly in the editor header, not inside a collapsible panel.
+// We still reserve an array slot for it so integer casts from Section →
+// int stay valid elsewhere; the slot's SectionComponent is created but
+// never made visible and no params are added to it.
 // =============================================================================
 void JT8000ControllerEditor::buildSections()
 {
@@ -235,12 +317,25 @@ void JT8000ControllerEditor::buildSections()
         auto* sec = _sections.add(
             new SectionComponent(sectionNames[s], juce::Colour(0xfff08020u), _lnf));
         sec->onLayoutChanged = [this] { layoutSections(); };
+
+        // PERFORMANCE_GLOBAL is header-only — don't show its panel.
+        if (s == static_cast<int>(Section::PERFORMANCE_GLOBAL))
+            continue;
+
         _contentPanel.addAndMakeVisible(sec);
     }
 
     for (int i = 0; i < kNumParams; ++i)
     {
         const auto& p = kAllParams[i];
+
+        // Perf-global params are bound directly to header controls in the
+        // editor constructor (see _editTargetCombo, _chACombo, etc.).
+        // Skip them here so they are NOT added to a SectionComponent —
+        // that would bind them twice and cause feedback / duplicate UI.
+        if (p.section == Section::PERFORMANCE_GLOBAL)
+            continue;
+
         auto* sec = _sections[static_cast<int>(p.section)];
         switch (p.style)
         {
@@ -260,6 +355,14 @@ void JT8000ControllerEditor::buildSections()
 
 // =============================================================================
 // Layout sections
+//
+// Walks _sections in order, placing them into the content panel according
+// to sectionRow[]. Groups sharing a row number get equal-width side-by-side
+// placement.
+//
+// PERFORMANCE_GLOBAL is skipped: its SectionComponent slot exists but is
+// never made visible (see buildSections), so it must not occupy vertical
+// space in the scrolling panel.
 // =============================================================================
 void JT8000ControllerEditor::layoutSections()
 {
@@ -270,9 +373,13 @@ void JT8000ControllerEditor::layoutSections()
 
     int y = gap, idx = 0;
     const int n = _sections.size();
+    const int globalIdx = static_cast<int>(Section::PERFORMANCE_GLOBAL);
 
     while (idx < n)
     {
+        // Skip the pseudo-section that lives in the header, not on the panel.
+        if (idx == globalIdx) { ++idx; continue; }
+
         const int row = sectionRow[idx];
         if (row < 0)
         {
@@ -285,7 +392,7 @@ void JT8000ControllerEditor::layoutSections()
         else
         {
             int gs = idx;
-            while (idx < n && sectionRow[idx] == row) ++idx;
+            while (idx < n && sectionRow[idx] == row && idx != globalIdx) ++idx;
             int gc = idx - gs;
             int sw = (totalW - (gc - 1) * gap) / gc;
             int maxH = 0;
@@ -313,29 +420,41 @@ void JT8000ControllerEditor::paint(juce::Graphics& g)
     g.fillRect(0, 0, getWidth(), kHeaderHeight);
     g.setColour(kBorder);
     g.drawHorizontalLine(kHeaderHeight - 1, 0.0f, static_cast<float>(getWidth()));
-    const int rowDivY = kHeaderHeight / 2;
+
+    // Three-row header: two internal dividers at 1/3 and 2/3 of header height.
+    // Faded border colour matches the pre-Phase-2 look where the single
+    // divider sat at kHeaderHeight / 2.
     g.setColour(kBorder.withAlpha(0.4f));
-    g.drawHorizontalLine(rowDivY, 6.0f, static_cast<float>(getWidth() - 6));
+    const int row1Div = kHeaderHeight / 3;
+    const int row2Div = (kHeaderHeight * 2) / 3;
+    g.drawHorizontalLine(row1Div, 6.0f, static_cast<float>(getWidth() - 6));
+    g.drawHorizontalLine(row2Div, 6.0f, static_cast<float>(getWidth() - 6));
 }
 
 // =============================================================================
-// Resized
+// Resized — three-row header layout
+//
+//   Row 1: Title | PatchName | (MIDI In | MIDI Out)*
+//                                               * standalone only
+//   Row 2: SendAll | LoadSYX | Save | Load | Init | … | Expand | Collapse
+//   Row 3: [Layers:] EditTarget | ChA | ChB    [Perf:] Mode | VoiceSpl | Split | Bal
+//
+// Row 3 is the Phase-2 addition. The single MIDI-channel combo that used
+// to live in row 1 is gone — per-layer channels live in row 3 instead.
 // =============================================================================
 void JT8000ControllerEditor::resized()
 {
     auto area = getLocalBounds();
     auto hdrFull = area.removeFromTop(kHeaderHeight);
 
-    const int rowH = kHeaderHeight / 2;
-    const int pad = 4;
+    const int rowH = kHeaderHeight / 3;   // was /2 before Phase 2
+    const int pad  = 4;
 
+    // ---- Row 1 — title + patch name + MIDI IO --------------------------------
     auto row1 = hdrFull.removeFromTop(rowH).reduced(pad, 2);
 
     _titleLabel.setBounds(row1.removeFromLeft(72));
     row1.removeFromLeft(pad);
-
-    _midiChSelector.setBounds(row1.removeFromRight(58));
-    row1.removeFromRight(pad);
 
     if (_isStandalone)
     {
@@ -348,7 +467,8 @@ void JT8000ControllerEditor::resized()
 
     _patchNameLabel.setBounds(row1);
 
-    auto row2 = hdrFull.reduced(pad, 2);
+    // ---- Row 2 — action buttons ---------------------------------------------
+    auto row2 = hdrFull.removeFromTop(rowH).reduced(pad, 2);
     _sendAllBtn.setBounds(row2.removeFromLeft(66));
     row2.removeFromLeft(pad);
     _loadSyxBtn.setBounds(row2.removeFromLeft(72));
@@ -362,6 +482,37 @@ void JT8000ControllerEditor::resized()
     _collapseBtn.setBounds(row2.removeFromRight(66));
     row2.removeFromRight(pad);
     _expandBtn.setBounds(row2.removeFromRight(60));
+
+    // ---- Row 3 — Layers + Perf Global (Phase 2) -----------------------------
+    // Left block: "Layers:" | EditTarget | ChA | ChB
+    // Right block: "Perf:" | Mode | Voice | Split | Balance
+    // Middle space is flexible — collapses first when window is narrow.
+    auto row3 = hdrFull.reduced(pad, 2);
+
+    // Label widths — make them just wide enough for the text
+    constexpr int labelW  = 52;
+    constexpr int comboW  = 70;   // Edit Target, Ch A/B, Perf Mode
+    constexpr int knobW   = 48;   // small header knobs
+
+    // Left block
+    _perfLabel.setBounds(row3.removeFromLeft(labelW));
+    row3.removeFromLeft(pad);
+    _editTargetCombo.setBounds(row3.removeFromLeft(comboW));
+    row3.removeFromLeft(pad);
+    _chACombo.setBounds(row3.removeFromLeft(comboW));
+    row3.removeFromLeft(pad);
+    _chBCombo.setBounds(row3.removeFromLeft(comboW));
+
+    // Right block — lay out from the right so labels/knobs anchor cleanly
+    _balanceKnob.setBounds(row3.removeFromRight(knobW));
+    row3.removeFromRight(pad);
+    _splitNoteKnob.setBounds(row3.removeFromRight(knobW));
+    row3.removeFromRight(pad);
+    _voiceSplitKnob.setBounds(row3.removeFromRight(knobW));
+    row3.removeFromRight(pad);
+    _perfModeCombo.setBounds(row3.removeFromRight(comboW));
+    row3.removeFromRight(pad);
+    _perfSetLabel.setBounds(row3.removeFromRight(labelW));
 
     _viewport.setBounds(area);
     layoutSections();
@@ -388,6 +539,13 @@ void JT8000ControllerEditor::valueTreePropertyChanged(
 
 // =============================================================================
 // Init Patch
+//
+// Resets every patch parameter to its default value. Specifically PRESERVES
+// the seven perf-global params (CCs 140..146 — channels, edit target, perf
+// mode, balance, split) because those describe the current performance
+// setup, not the patch being initialised. A user who set up Layer A on
+// channel 3 and Layer B on channel 7 should not have that reset by hitting
+// Init Patch.
 // =============================================================================
 void JT8000ControllerEditor::initPatch()
 {
@@ -395,6 +553,7 @@ void JT8000ControllerEditor::initPatch()
     {
         const auto& p = kAllParams[i];
         if (p.style == ControlStyle::StepGrid) continue;
+        if (p.isLocalOnly) continue;   // keep perf-global state intact
         if (auto* param = _proc.apvts.getParameter(p.id))
             param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(p.defVal)));
     }

@@ -15,6 +15,24 @@
  *   Only notes, pitch bend, aftertouch, and channel pressure pass through.
  *   Incoming CCs update the APVTS/UI via applyIncomingCC() only.
  *
+ * LAYER / EDIT-TARGET ROUTING (Phase 2):
+ *   The plugin maintains three pieces of per-performance state, exposed as
+ *   APVTS params and mirrored to atomics for the audio thread:
+ *     - channelA (1..16) — which MIDI channel Layer A of the firmware lives on
+ *     - channelB (1..16) — which MIDI channel Layer B of the firmware lives on
+ *     - editTarget      — which layer(s) the plugin's UI sends CCs to:
+ *                           A     → send on channelA
+ *                           B     → send on channelB
+ *                           Both  → send on BOTH channels (one msg per)
+ *   Notes / pitch bend follow the same rule, except Both uses channelA only
+ *   (sending two noteOns would cause the firmware to play each note twice).
+ *
+ *   The seven perf CCs 140..146 (Perf Mode, Voice Split, Split Note,
+ *   Balance, Edit Target, Ch A, Ch B) are LOCAL ONLY — they never go out
+ *   as MIDI. CC numbers above 127 can't travel on class-compliant USB MIDI.
+ *   These params exist only so state save/restore preserves them and so
+ *   the user can view the setup in the plugin UI.
+ *
  * FEATURES:
  *   - sendAllCCsPaced(): timer-based drip feed at ~1ms per CC
  *   - Incoming CC reflection: hardware CCs update the APVTS/UI
@@ -63,7 +81,24 @@ public:
 
     // --- Public API ---------------------------------------------------------
     juce::AudioProcessorValueTreeState apvts;
-    std::atomic<int> midiChannel { 1 };
+
+    // =========================================================================
+    // LAYER ROUTING STATE — atomic mirrors of the APVTS perf params
+    //
+    // Kept in atomics because the MIDI path reads them from the audio thread
+    // (processBlock) and from the MIDI-device thread (handleIncomingMidiMessage).
+    // APVTS lookups aren't lock-free. parameterChanged() keeps these mirrors
+    // up to date whenever the matching APVTS param changes.
+    //
+    // Ranges:
+    //   channelA/B  — 1..16, defaults to 1.
+    //   editTarget  — enum below, defaults to LayerA.
+    // =========================================================================
+    enum class EditTarget : int { LayerA = 0, LayerB = 1, Both = 2 };
+
+    std::atomic<int>         channelA   { 1 };
+    std::atomic<int>         channelB   { 1 };
+    std::atomic<EditTarget>  editTarget { EditTarget::LayerA };
 
     void setMidiOutput(std::unique_ptr<juce::MidiOutput> output);
     void sendCC(int cc, int value);

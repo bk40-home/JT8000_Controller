@@ -232,24 +232,54 @@ void JT8000ControllerProcessor::applyIncomingCC(int cc, int value)
 // =============================================================================
 // parameterChanged — convert to CC and send (UI/automation changes only)
 //
-// Skips sending when the change originated from an incoming CC
-// (_suppressEcho == true). This is Guard 2 of the echo suppression:
+// Three-way dispatch:
 //
-//   incoming CC → applyIncomingCC → _suppressEcho = true
-//              → setValueNotifyingHost → parameterChanged
-//              → [guard active, skip sendCC] → done.
+//   1. The special routing params (perf_midi_ch_a, perf_midi_ch_b,
+//      perf_edit_target) update the atomic mirrors so the audio thread can
+//      read the current routing state without touching APVTS.
 //
-// UI-initiated changes (slider drag, combo selection) arrive here with
-// _suppressEcho == false, so sendCC proceeds normally.
+//   2. All isLocalOnly params (the seven perf CCs 140..146) bail before the
+//      CC emit — CCs above 127 cannot travel on USB MIDI and the firmware
+//      wouldn't accept them anyway.
+//
+//   3. Remaining params (the regular patch CCs) go through sendCC() which
+//      routes based on editTarget / channelA / channelB.
+//
+// Echo-suppression guard stays exactly as before: if the change came from
+// an incoming CC we don't re-send. See applyIncomingCC() for Guard 1/2.
 // =============================================================================
 void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float newValue)
 {
-    // Do not send a CC back out if this change came from an incoming CC
-    if (_suppressEcho.load())
-        return;
-
     const CCParam* p = findParamByID(id);
     if (!p) return;
+
+    // ---- Routing-param mirrors: update atomics regardless of echo guard ----
+    // These changes must be visible on the audio thread even when the change
+    // came from an incoming CC — the _suppressEcho guard only prevents
+    // re-sending, not state update.
+    if (id == "perf_midi_ch_a")
+    {
+        // newValue is a choice index 0..15; +1 gives MIDI channel 1..16.
+        channelA.store(juce::jlimit(1, 16, juce::roundToInt(newValue) + 1));
+    }
+    else if (id == "perf_midi_ch_b")
+    {
+        channelB.store(juce::jlimit(1, 16, juce::roundToInt(newValue) + 1));
+    }
+    else if (id == "perf_edit_target")
+    {
+        const int idx = juce::jlimit(0, 2, juce::roundToInt(newValue));
+        editTarget.store(static_cast<EditTarget>(idx));
+    }
+
+    // ---- Local-only params never go out as MIDI ----------------------------
+    // Includes every entry in CCDefinitions.h with isLocalOnly = true.
+    // These are the seven perf CCs (140..146). They live in APVTS purely
+    // so state save/restore and UI binding work.
+    if (p->isLocalOnly) return;
+
+    // ---- Echo guard: don't re-emit a CC that CAME from the hardware --------
+    if (_suppressEcho.load()) return;
 
     int ccVal;
     if (isChoiceParam(*p))
@@ -261,13 +291,47 @@ void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float n
 }
 
 // =============================================================================
-// sendCC
+// sendCC — emit a CC to one or both layer channels based on edit target
+//
+// Routing:
+//   LayerA → one message on channelA
+//   LayerB → one message on channelB
+//   Both   → two messages, one on each channel
+//
+// channelA and channelB are atomics updated by parameterChanged() when the
+// user changes the perf_midi_ch_a / perf_midi_ch_b combos. Both default
+// to 1 on a fresh plugin instance.
+//
+// The "Both" case deliberately sends two messages rather than broadcasting
+// on channel 0 (MIDI's omni-transmit channel): the firmware filters by
+// exact channel match (no omni support), so we honour its expectation.
 // =============================================================================
 void JT8000ControllerProcessor::sendCC(int cc, int value)
 {
-    const int ch = juce::jlimit(1, 16, midiChannel.load());
-    queueMidiMessage(
-        juce::MidiMessage::controllerEvent(ch, cc & 0x7F, value & 0x7F));
+    const int chA = juce::jlimit(1, 16, channelA.load());
+    const int chB = juce::jlimit(1, 16, channelB.load());
+    const int ccMasked = cc & 0x7F;
+    const int valMasked = value & 0x7F;
+
+    switch (editTarget.load())
+    {
+        case EditTarget::LayerA:
+            queueMidiMessage(juce::MidiMessage::controllerEvent(chA, ccMasked, valMasked));
+            break;
+
+        case EditTarget::LayerB:
+            queueMidiMessage(juce::MidiMessage::controllerEvent(chB, ccMasked, valMasked));
+            break;
+
+        case EditTarget::Both:
+            queueMidiMessage(juce::MidiMessage::controllerEvent(chA, ccMasked, valMasked));
+            // Only emit the second message if channels differ — avoids a
+            // duplicate that the firmware would apply twice in "Dual"
+            // configurations where both layers share a channel.
+            if (chA != chB)
+                queueMidiMessage(juce::MidiMessage::controllerEvent(chB, ccMasked, valMasked));
+            break;
+    }
 }
 
 // =============================================================================
@@ -306,7 +370,13 @@ void JT8000ControllerProcessor::buildPacedQueue()
     for (int i = 0; i < kNumParams; ++i)
     {
         const auto& p = kAllParams[i];
+
+        // Step grids are serialised via a dedicated path (sendCC 17/18 per step).
         if (p.style == ControlStyle::StepGrid) continue;
+
+        // Perf CCs 140..146 can't travel on USB MIDI (>127 hits the 7-bit wall).
+        // They're state-only — stored in APVTS for save/restore, never emitted.
+        if (p.isLocalOnly) continue;
 
         if (auto* val = apvts.getRawParameterValue(p.id))
         {

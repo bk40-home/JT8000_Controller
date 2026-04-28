@@ -152,7 +152,25 @@ private:
     juce::Label     _patchNameLabel;
     juce::ComboBox  _midiOutSelector;
     juce::ComboBox  _midiInSelector;
-    juce::ComboBox  _midiChSelector;
+
+    // ---- Perf-Global header controls (Phase 2) ----------------------------
+    // Rendered on the third header row. Bound to APVTS params (CCs 140..146)
+    // via attachments so state save/restore Just Works.
+    juce::Label     _perfLabel;            // "Layers:" static label
+    juce::ComboBox  _editTargetCombo;      // perf_edit_target (A/B/Both)
+    juce::ComboBox  _chACombo;             // perf_midi_ch_a (Ch 1..16)
+    juce::ComboBox  _chBCombo;             // perf_midi_ch_b (Ch 1..16)
+
+    juce::Label     _perfSetLabel;         // "Perf:" static label
+    juce::ComboBox  _perfModeCombo;        // perf_mode (Single/Layer/Split)
+    juce::Slider    _voiceSplitKnob;       // perf_voice_split
+    juce::Slider    _splitNoteKnob;        // perf_split_note
+    juce::Slider    _balanceKnob;          // perf_balance
+
+    // APVTS attachments for the perf-global header controls. OwnedArray so
+    // we can construct them all at once after createEditor() / APVTS exists.
+    juce::OwnedArray<juce::AudioProcessorValueTreeState::ComboBoxAttachment> _headerComboAtts;
+    juce::OwnedArray<juce::AudioProcessorValueTreeState::SliderAttachment>   _headerSliderAtts;
 
     juce::TextButton _sendAllBtn   { "Send All" };
     juce::TextButton _loadSyxBtn   { "Load SYX" };
@@ -186,7 +204,13 @@ private:
                                   const juce::Identifier& property) override;
     void timerCallback() override;
 
-    static constexpr int kHeaderHeight = 72;
+    // Header layout constants
+    //   Row 1: Title, patch name, MIDI IO selectors        — 36px
+    //   Row 2: Send All / Load SYX / Save / Load / Init
+    //          / Expand / Collapse                         — 36px
+    //   Row 3: Layers + Perf Global controls               — 36px
+    // Total = 108px. Was 72 before Phase 2 (two rows).
+    static constexpr int kHeaderHeight = 108;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JT8000ControllerEditor)
 };
