@@ -104,6 +104,7 @@ public:
     void sendCC(int cc, int value);
     void sendAllCCsPaced();
     void appendPacedCC(int cc, int value);
+    void appendPacedCC(int cc, int value, int channel);
     bool isSendingAll() const { return _pacedSendActive.load(); }
 
     juce::String getPatchName() const;
@@ -171,7 +172,11 @@ private:
                                    const juce::MidiMessage& msg) override;
 
     // --- Paced send ---------------------------------------------------------
-    struct PacedCC { uint8_t cc; uint8_t value; };
+    // Each queued CC carries its own target channel (1-16) so performance
+    // loads can interleave A-channel and B-channel CCs in a single queue
+    // without racing against editTarget changes.
+    // channel=0 means "use editTarget at send time" (legacy behaviour).
+    struct PacedCC { uint8_t cc; uint8_t value; uint8_t channel; };
     std::vector<PacedCC> _pacedQueue;
     int _pacedIndex = 0;
     std::atomic<bool> _pacedSendActive { false };

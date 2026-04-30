@@ -577,6 +577,13 @@ void JT8000ControllerEditor::initPatch()
 
 // =============================================================================
 // SYX import — non-modal overlay (safe in all VST3 hosts)
+//
+// Two-phase flow:
+//   1. loadSyxFile() — opens a file chooser, parses the file into a
+//      ParsedBank containing performances (with upper/lower patches) and
+//      orphan patches (those without a performance header).
+//   2. showBankPicker() — displays the SyxPickerOverlay with performance-
+//      aware load options (Perf→A+B, Upper→A, Lower→B, etc.)
 // =============================================================================
 void JT8000ControllerEditor::loadSyxFile()
 {
@@ -597,12 +604,12 @@ void JT8000ControllerEditor::loadSyxFile()
             if (!file.loadFileAsData(mb) || mb.getSize() == 0) return;
 
             _syxBuffer = std::move(mb);
-            _syxPatches = JP8000SyxImporter::parseFile(
+            _syxBank = JP8000SyxImporter::parseFile(
                 static_cast<const uint8_t*>(_syxBuffer.getData()),
                 _syxBuffer.getSize(),
                 file.getFileExtension().toLowerCase() == ".mid");
 
-            if (_syxPatches.empty())
+            if (_syxBank.performances.empty() && _syxBank.orphanPatches.empty())
             {
                 juce::AlertWindow::showMessageBoxAsync(
                     juce::MessageBoxIconType::WarningIcon,
@@ -610,37 +617,124 @@ void JT8000ControllerEditor::loadSyxFile()
                     "No JP-8000 patches found in " + file.getFileName());
                 return;
             }
-            showPatchPicker(file.getFileName());
+            showBankPicker(file.getFileName());
         });
 }
 
-void JT8000ControllerEditor::showPatchPicker(const juce::String& fileName)
+void JT8000ControllerEditor::showBankPicker(const juce::String& fileName)
 {
-    juce::StringArray items;
-    for (int i = 0; i < static_cast<int>(_syxPatches.size()); ++i)
-        items.add(juce::String(i).paddedLeft('0', 2) + "  "
-                  + _syxPatches[static_cast<size_t>(i)].name);
+    const int nPerfs   = static_cast<int>(_syxBank.performances.size());
+    const int nOrphans = static_cast<int>(_syxBank.orphanPatches.size());
 
-    const juce::String title =
-        "Load SysEx \xe2\x80\x94 " +
-        juce::String(static_cast<int>(_syxPatches.size())) +
-        " patches \xe2\x80\x94 " + fileName;
+    juce::String title = "Load SysEx \xe2\x80\x94 " + fileName + " \xe2\x80\x94 ";
+    if (nPerfs > 0)
+        title += juce::String(nPerfs) + " perf" + (nPerfs > 1 ? "s" : "");
+    if (nPerfs > 0 && nOrphans > 0)
+        title += ", ";
+    if (nOrphans > 0)
+        title += juce::String(nOrphans) + " patch" + (nOrphans > 1 ? "es" : "");
 
-    _syxOverlay = std::make_unique<SyxPickerOverlay>(title, items);
+    _syxOverlay = std::make_unique<SyxPickerOverlay>(title, _syxBank);
     _syxOverlay->setBounds(getLocalBounds());
 
-    _syxOverlay->onResult = [this](int result, int patchIndex)
+    _syxOverlay->onResult = [this](PickAction action, int perfIdx, int patchIdx)
     {
-        if (result != 0 && !_syxPatches.empty()
-            && patchIndex >= 0
-            && patchIndex < static_cast<int>(_syxPatches.size()))
+        using namespace JP8000SyxImporter;
+
+        switch (action)
         {
-            JP8000SyxImporter::loadPatch(
-                _proc.apvts, _syxPatches[static_cast<size_t>(patchIndex)]);
-            _proc.setPatchName(_syxPatches[static_cast<size_t>(patchIndex)].name);
-            if (result == 1)
-                _proc.sendAllCCsPaced();
+            // ---- Performance actions ----
+            case PickAction::PerfToAB:
+            {
+                if (perfIdx >= 0 && perfIdx < static_cast<int>(_syxBank.performances.size()))
+                {
+                    const auto& perf = _syxBank.performances[static_cast<size_t>(perfIdx)];
+                    loadPerformance(_proc, perf);
+                }
+                break;
+            }
+            case PickAction::UpperToA:
+            {
+                if (perfIdx >= 0 && perfIdx < static_cast<int>(_syxBank.performances.size()))
+                {
+                    const auto& perf = _syxBank.performances[static_cast<size_t>(perfIdx)];
+                    loadPatchToLayer(_proc, perf.upper, LoadTarget::LayerA);
+                }
+                break;
+            }
+            case PickAction::UpperToB:
+            {
+                if (perfIdx >= 0 && perfIdx < static_cast<int>(_syxBank.performances.size()))
+                {
+                    const auto& perf = _syxBank.performances[static_cast<size_t>(perfIdx)];
+                    loadPatchToLayer(_proc, perf.upper, LoadTarget::LayerB);
+                }
+                break;
+            }
+            case PickAction::LowerToA:
+            {
+                if (perfIdx >= 0 && perfIdx < static_cast<int>(_syxBank.performances.size()))
+                {
+                    const auto& perf = _syxBank.performances[static_cast<size_t>(perfIdx)];
+                    loadPatchToLayer(_proc, perf.lower, LoadTarget::LayerA);
+                }
+                break;
+            }
+            case PickAction::LowerToB:
+            {
+                if (perfIdx >= 0 && perfIdx < static_cast<int>(_syxBank.performances.size()))
+                {
+                    const auto& perf = _syxBank.performances[static_cast<size_t>(perfIdx)];
+                    loadPatchToLayer(_proc, perf.lower, LoadTarget::LayerB);
+                }
+                break;
+            }
+
+            // ---- Orphan patch actions ----
+            case PickAction::PatchToA:
+            {
+                if (patchIdx >= 0 && patchIdx < static_cast<int>(_syxBank.orphanPatches.size()))
+                {
+                    const auto& patch = _syxBank.orphanPatches[static_cast<size_t>(patchIdx)];
+                    loadPatchToLayer(_proc, patch, LoadTarget::LayerA);
+                }
+                break;
+            }
+            case PickAction::PatchToB:
+            {
+                if (patchIdx >= 0 && patchIdx < static_cast<int>(_syxBank.orphanPatches.size()))
+                {
+                    const auto& patch = _syxBank.orphanPatches[static_cast<size_t>(patchIdx)];
+                    loadPatchToLayer(_proc, patch, LoadTarget::LayerB);
+                }
+                break;
+            }
+            case PickAction::PatchSend:
+            {
+                if (patchIdx >= 0 && patchIdx < static_cast<int>(_syxBank.orphanPatches.size()))
+                {
+                    const auto& patch = _syxBank.orphanPatches[static_cast<size_t>(patchIdx)];
+                    loadPatchToLayer(_proc, patch, LoadTarget::Current);
+                }
+                break;
+            }
+            case PickAction::PatchOnly:
+            {
+                if (patchIdx >= 0 && patchIdx < static_cast<int>(_syxBank.orphanPatches.size()))
+                {
+                    const auto& patch = _syxBank.orphanPatches[static_cast<size_t>(patchIdx)];
+                    loadPatch(_proc.apvts, patch);
+                    _proc.setPatchName(patch.name);
+                    // No send — user explicitly chose "Load Only"
+                }
+                break;
+            }
+
+            case PickAction::Cancel:
+            default:
+                break;
         }
+
         _syxOverlay.reset();
     };
 

@@ -69,6 +69,7 @@ target_sources(JT8000_Controller PRIVATE
     Source/StepSequencerGrid.h
     Source/StepSequencerGrid.cpp
     Source/JP8000SyxImporter.h
+    Source/JP8000SyxImporter.cpp
 )
 
 # Compile definitions — PRIVATE prevents leaking into moduleinfo.json

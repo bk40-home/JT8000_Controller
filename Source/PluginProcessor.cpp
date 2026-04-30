@@ -387,7 +387,8 @@ void JT8000ControllerProcessor::buildPacedQueue()
             else
                 ccVal = static_cast<uint8_t>(juce::roundToInt(val->load()));
 
-            _pacedQueue.push_back({ static_cast<uint8_t>(p.cc), ccVal });
+            // channel=0 → route via editTarget at send time
+            _pacedQueue.push_back({ static_cast<uint8_t>(p.cc), ccVal, 0 });
         }
     }
 }
@@ -403,9 +404,21 @@ void JT8000ControllerProcessor::sendAllCCsPaced()
 
 void JT8000ControllerProcessor::appendPacedCC(int cc, int value)
 {
+    // channel=0 → route via editTarget at send time
     _pacedQueue.push_back({
         static_cast<uint8_t>(juce::jlimit(0, 127, cc)),
-        static_cast<uint8_t>(juce::jlimit(0, 127, value))
+        static_cast<uint8_t>(juce::jlimit(0, 127, value)),
+        0
+    });
+}
+
+void JT8000ControllerProcessor::appendPacedCC(int cc, int value, int channel)
+{
+    // channel=1..16 → send directly on that channel, bypassing editTarget
+    _pacedQueue.push_back({
+        static_cast<uint8_t>(juce::jlimit(0, 127, cc)),
+        static_cast<uint8_t>(juce::jlimit(0, 127, value)),
+        static_cast<uint8_t>(juce::jlimit(0, 16, channel))
     });
 }
 
@@ -419,7 +432,22 @@ void JT8000ControllerProcessor::timerCallback()
     }
 
     const auto& item = _pacedQueue[static_cast<size_t>(_pacedIndex)];
-    sendCC(item.cc, item.value);
+
+    if (item.channel > 0 && item.channel <= 16)
+    {
+        // Channel-pinned CC — bypass editTarget routing, send directly
+        // on the specified channel. Used by loadPerformance() to ensure
+        // A-layer CCs go to channel A and B-layer CCs go to channel B
+        // regardless of what editTarget is set to at send time.
+        queueMidiMessage(juce::MidiMessage::controllerEvent(
+            item.channel, item.cc, item.value));
+    }
+    else
+    {
+        // channel=0 → route through sendCC() which uses editTarget
+        sendCC(item.cc, item.value);
+    }
+
     ++_pacedIndex;
 }
 
