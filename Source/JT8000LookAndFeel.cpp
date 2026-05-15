@@ -94,6 +94,16 @@ void JT8000LookAndFeel::drawRotarySlider(juce::Graphics& g,
 }
 
 // -----------------------------------------------------------------------
+// Thumb radius — keep minimal so the slider's pixel range matches the
+// visual track.  LookAndFeel_V4 default is ~18px for a 36px-wide fader,
+// which prevents the fill from reaching the top of the track.
+// -----------------------------------------------------------------------
+int JT8000LookAndFeel::getSliderThumbRadius(juce::Slider&)
+{
+    return 2;
+}
+
+// -----------------------------------------------------------------------
 // Vertical fader — track background, orange fill, scale ticks, thumb bar
 //
 // sliderPos is the pixel Y position of the thumb (provided by JUCE).

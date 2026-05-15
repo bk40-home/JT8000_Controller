@@ -5,13 +5,10 @@
  * Click the header to toggle open/closed.
  *
  * Controls are plain JUCE widgets (Slider, ComboBox, ToggleButton) styled
- * via JT8000LookAndFeel.  No custom widget subclasses needed.
- *
- * Changes from previous version:
- *   - Removed dependency on JT8000Knob and JT8000Slider classes
- *   - Knobs are juce::Slider with RotaryHorizontalVerticalDrag + setRotaryParameters
- *   - Faders are juce::Slider with LinearVertical
- *   - Labels managed as paired components (below knobs, above combos)
+ * via JT8000LookAndFeel.  No custom widget subclasses needed:
+ *   - Knobs:   juce::Slider with RotaryHorizontalVerticalDrag + setRotaryParameters
+ *   - Faders:  juce::Slider with LinearVertical
+ *   - Labels:  managed as paired components (below knobs, above combos)
  */
 
 #pragma once

@@ -257,14 +257,19 @@ static juce::String extractName(const uint8_t* buf, int offset, int maxLen, int 
 }
 
 // =========================================================================
-// .syx parser — performance-aware
+// .syx parser — performance-aware, sequence-based grouping
 //
-// Groups DT1 messages by their slot index (addr byte a1).
-// Within each slot, identifies headers (a2=0x00), upper (a2=0x40),
-// and lower (a2=0x42) patches.
+// Some editors (e.g., JE-8086) dump all performances to the same slot
+// address (a1=0x00) sequentially.  Grouping by a1 alone would collapse
+// an entire bank into one entry.
+//
+// Strategy: walk messages in file order.  Each performance header
+// (a2=0x00) starts a new group; subsequent tone common (a2=0x10/0x11),
+// upper (a2=0x40), and lower (a2=0x42) messages join the current group.
+// If patches appear before any header they become orphans.
 // =========================================================================
 
-/** Intermediate structure for grouping messages by slot. */
+/** Intermediate structure for grouping messages into performances. */
 struct SlotGroup
 {
     // Performance header fields (from 48-byte message, a2=0x00)
@@ -283,8 +288,14 @@ struct SlotGroup
 
 static ParsedBank parseSyxBuffer(const uint8_t* buf, size_t len)
 {
-    // Map: slot index → grouped messages
-    std::map<int, SlotGroup> slotMap;
+    // Sequential list of groups — one per performance header encountered.
+    // Patches arriving before any header go into orphans directly.
+    std::vector<SlotGroup> groups;
+    ParsedBank bank;
+
+    // Pointer to the group currently being assembled. nullptr until the
+    // first performance header is encountered.
+    SlotGroup* current = nullptr;
 
     size_t i = 0;
     while (i < len)
@@ -311,67 +322,81 @@ static ParsedBank parseSyxBuffer(const uint8_t* buf, size_t len)
             && buf[msgStart + 3] == 0x06
             && buf[msgStart + 4] == 0x12)
         {
-            // Address bytes: a0=[5], a1=[6], a2=[7], a3=[8]
-            // (relative to msgStart)
-            const int a1      = buf[msgStart + 6];   // slot index
             const int a2      = buf[msgStart + 7];   // message type
             const int dataOff = static_cast<int>(msgStart + 9);
             const int dataLen = static_cast<int>(msgLen) - 10;
 
-            auto& slot = slotMap[a1];
-
             if (a2 == 0x00 && dataLen >= 20)
             {
-                // ---- Performance header (48-byte message) ----
-                slot.hasHeader  = true;
-                slot.perfName   = extractName(buf, dataOff, 16, static_cast<int>(len));
-                // data[0x10] = mode, data[0x11] = split point, data[0x13] = balance
+                // ---- Performance header — start a new group ----
+                groups.emplace_back();
+                current = &groups.back();
+
+                current->hasHeader = true;
+                current->perfName  = extractName(buf, dataOff, 16, static_cast<int>(len));
+
                 if (dataOff + 0x14 <= static_cast<int>(len))
                 {
-                    slot.mode       = buf[dataOff + 0x10];
-                    slot.splitPoint = buf[dataOff + 0x11];
-                    slot.balance    = buf[dataOff + 0x13];
+                    current->mode       = buf[dataOff + 0x10];
+                    current->splitPoint = buf[dataOff + 0x11];
+                    current->balance    = buf[dataOff + 0x13];
                 }
             }
             else if (a2 == 0x40 && dataLen >= 74)
             {
-                // ---- Upper patch (252-byte message) ----
-                slot.hasUpper = true;
-                slot.upper = {
+                // ---- Upper patch ----
+                Patch p {
                     extractName(buf, dataOff, 16, static_cast<int>(len)),
                     dataOff, dataLen, buf
                 };
+                if (current != nullptr)
+                {
+                    current->hasUpper = true;
+                    current->upper    = p;
+                }
+                else
+                {
+                    // No header yet — orphan patch
+                    bank.orphanPatches.push_back(p);
+                }
             }
             else if (a2 == 0x42 && dataLen >= 74)
             {
-                // ---- Lower patch (252-byte message) ----
-                slot.hasLower = true;
-                slot.lower = {
+                // ---- Lower patch ----
+                Patch p {
                     extractName(buf, dataOff, 16, static_cast<int>(len)),
                     dataOff, dataLen, buf
                 };
+                if (current != nullptr)
+                {
+                    current->hasLower = true;
+                    current->lower    = p;
+                }
+                else
+                {
+                    bank.orphanPatches.push_back(p);
+                }
             }
             else if (dataLen >= 74)
             {
-                // ---- Unrecognised message type with patch-sized data ----
-                // Treat as an orphan patch (e.g., from a patch-only bank
-                // dumped from address space 0x02 where a2 might be 0x00).
-                auto& orphanSlot = slotMap[-1 - static_cast<int>(f0)];
-                orphanSlot.hasUpper = true;
-                orphanSlot.upper = {
+                // ---- Unrecognised type with patch-sized data ----
+                // Treat as orphan (e.g., patch-only bank from address
+                // space 0x02 where a2 might be 0x00).
+                Patch p {
                     extractName(buf, dataOff, 16, static_cast<int>(len)),
                     dataOff, dataLen, buf
                 };
+                bank.orphanPatches.push_back(p);
             }
+            // Tone common messages (a2=0x10, 0x11) are small metadata
+            // blocks — we don't extract any params from them, so skip.
         }
 
         ++i;  // skip past F7
     }
 
-    // ---- Build the ParsedBank from grouped slots ----
-    ParsedBank bank;
-
-    for (auto& [slotIdx, slot] : slotMap)
+    // ---- Build performances from completed groups ----
+    for (auto& slot : groups)
     {
         if (slot.hasHeader && slot.hasUpper)
         {
@@ -615,171 +640,105 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
 }
 
 // =========================================================================
-// Public: loadPatchToLayer
+// Public: loadPatchToLayer  (Phase 6: BANK_DUMP path)
 //
-// Temporarily overrides editTarget so the paced send goes to the right
-// MIDI channel, loads the patch, sends, then restores.
+// Writes the patch into APVTS with _suppressEcho set so individual
+// parameterChanged callbacks don't fire SET_PARAM messages, then sends
+// ONE BANK_DUMP containing all params at the end. The firmware applies
+// the dump under AudioNoInterrupts — atomic, no audible knob-sweep.
+//
+// editTarget is set BEFORE the bank dump build so the patch-scope entries
+// in the dump go to the chosen layer. We deliberately don't restore
+// editTarget after — matches the user's mental model "I loaded into
+// Layer A, so I'm now editing Layer A."
 // =========================================================================
-
 void loadPatchToLayer(JT8000ControllerProcessor& proc,
                       const Patch& patch,
                       LoadTarget target)
 {
-    // Load the patch data into APVTS
-    loadPatch(proc.apvts, patch);
-
-    // Set the patch name
-    proc.setPatchName(patch.name);
-
-    if (target == LoadTarget::Current)
-    {
-        // Use normal routing (editTarget determines channel)
-        proc.sendAllCCsPaced();
-        return;
-    }
-
-    // For explicit layer targeting, set editTarget so the queue built
-    // by sendAllCCsPaced() (channel=0) routes correctly.
-    // We're on the message thread, so the timer won't fire until we return.
-    auto savedTarget = proc.editTarget.load();
-
+    // Set editTarget first so the BANK_DUMP entries route correctly.
+    // Order matters: the appendEntry calls inside sendBankDump() read
+    // editTarget for patch-scope params.
     if (target == LoadTarget::LayerA)
         proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerA);
-    else
+    else if (target == LoadTarget::LayerB)
         proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerB);
+    // target == Current: keep existing editTarget
 
-    proc.sendAllCCsPaced();
+    // Suppress per-param SET_PARAM emission while we mass-update APVTS.
+    // The 90+ parameterChanged callbacks that fire from loadPatch() will
+    // skip their SysEx send because of this flag.
+    proc._suppressEcho.store(true);
+    loadPatch(proc.apvts, patch);
+    proc.setPatchName(patch.name);
+    proc._suppressEcho.store(false);
 
-    // Restore after the queue is built. The channel=0 entries will route
-    // via editTarget at send time — but since we're on the message thread
-    // and the timer fires on the message thread, the first CC won't send
-    // until we return. By that time, editTarget has been restored.
-    //
-    // Wait — that's a problem. If we restore now, the CCs will route
-    // via the restored editTarget, not the one we just set.
-    //
-    // Solution: DON'T restore. The user chose to target a specific layer;
-    // leave editTarget on that layer so subsequent manual edits also go
-    // to the correct place. This matches the mental model: "I loaded a
-    // patch into Layer A, so now I'm editing Layer A."
-    (void)savedTarget;  // intentionally not restored
+    // Now flush the entire current state to the firmware in one go.
+    proc.sendBankDump();
 }
 
 // =========================================================================
-// Public: loadPerformance
+// Public: loadPerformance  (Phase 6: BANK_DUMP path)
 //
-// Loads a full performance: sets the perf-global params (mode, split,
-// balance), then queues upper→channel A and lower→channel B as a single
-// paced send with channel-pinned CCs.
+// Loads upper patch into APVTS as the displayed layer, sets perf-global
+// params (mode, split, balance), and sends one BANK_DUMP containing all
+// patch + perf + global FX state. The firmware applies under
+// AudioNoInterrupts.
 //
-// Each CC in the queue carries its target channel directly (1-16), so
-// the timer sends A-layer CCs to channel A and B-layer CCs to channel B
-// without any race against editTarget changes.
+// Note on dual layers: the plugin's APVTS holds ONE layer's worth of patch
+// values. BANK_DUMP emits patch-scope entries for BOTH SyxProto::kLayerA
+// and kLayerB with the same values — so loading a JP-8000 performance
+// (which has distinct upper + lower patches) currently can't represent
+// the lower patch's distinct values via BANK_DUMP alone.
 //
-// Sequence:
-//   1. Set perf_mode, split point, balance in APVTS
-//   2. Load upper patch into APVTS → build CCs pinned to channel A
-//   3. Load lower patch into APVTS → append CCs pinned to channel B
-//   4. Start the timer (drains both sets in order)
-//   5. Leave editTarget on A for subsequent user edits
+// Two-pass approach: build BANK_DUMP for the upper, send it; then load
+// lower into APVTS (which mutates the displayed state), build a second
+// BANK_DUMP for the lower targeting kLayerB, send it. The firmware sees
+// two BANK_DUMPs — one for A, one for B — and applies them in order.
 // =========================================================================
-
 void loadPerformance(JT8000ControllerProcessor& proc,
                      const Performance& perf)
 {
     // ---- Set performance-global params via APVTS ----
-    // These are local-only (never sent as MIDI), but setting them updates
-    // the header UI and persists in saved state.
+    // These are perf-scope CCs (140-146). With _suppressEcho they don't
+    // fire SET_PARAMs individually; they're picked up in the BANK_DUMP.
 
-    // perf_mode: 0=Single, 1=Layer, 2=Split → choice index
+    proc._suppressEcho.store(true);
+
     if (auto* param = proc.apvts.getParameter("perf_mode"))
         param->setValueNotifyingHost(param->convertTo0to1(
             static_cast<float>(static_cast<int>(perf.mode))));
 
-    // perf_split_note: raw MIDI note number (0-127)
     if (auto* param = proc.apvts.getParameter("perf_split_note"))
         param->setValueNotifyingHost(param->convertTo0to1(
             static_cast<float>(perf.splitPoint)));
 
-    // perf_balance: 0-127 (64=centre)
     if (auto* param = proc.apvts.getParameter("perf_balance"))
         param->setValueNotifyingHost(param->convertTo0to1(
             static_cast<float>(perf.balance)));
 
-    // Read the MIDI channels for A and B (set by user in the header combos)
-    const int chA = juce::jlimit(1, 16, proc.channelA.load());
-    const int chB = juce::jlimit(1, 16, proc.channelB.load());
-
-    // ---- Helper: build channel-pinned CC list from current APVTS state ----
-    auto appendCurrentState = [&](int channel)
-    {
-        for (int i = 0; i < kNumParams; ++i)
-        {
-            const auto& p = kAllParams[i];
-            if (p.style == ControlStyle::StepGrid) continue;
-            if (p.isLocalOnly) continue;
-
-            if (auto* val = proc.apvts.getRawParameterValue(p.id))
-            {
-                uint8_t ccVal;
-                if (isChoiceParam(p))
-                    ccVal = static_cast<uint8_t>(choiceIndexToCC(
-                        juce::roundToInt(val->load()), p.enumCount, p.ccLUT));
-                else
-                    ccVal = static_cast<uint8_t>(juce::roundToInt(val->load()));
-
-                proc.appendPacedCC(p.cc, ccVal, channel);
-            }
-        }
-    };
-
-    // Stop any in-progress paced send before building the new queue
-    proc.sendAllCCsPaced();   // clears queue, stops timer
-    // sendAllCCsPaced just built a queue using editTarget routing (channel=0).
-    // We don't want that — we need channel-pinned CCs. Clear and rebuild.
-
-    // ---- Phase 1: Upper patch → channel A ----
+    // ---- Pass 1: upper patch -> Layer A bank dump ----
+    proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerA);
     loadPatch(proc.apvts, perf.upper);
 
-    // Clear the auto-built queue from sendAllCCsPaced() — we're replacing it
-    // with channel-pinned entries. We reuse the infrastructure (timer, index)
-    // but control the channel per-CC.
-    // Note: _pacedQueue is private, so we use the appendPacedCC(cc, val, ch)
-    // overload to build our own. We need to stop the timer, clear, rebuild.
+    proc._suppressEcho.store(false);
+    proc.sendBankDump();    // flush current APVTS as kLayerA entries only
 
-    // Actually — sendAllCCsPaced() already stopped the timer and set
-    // _pacedSendActive. Let's just clear and rebuild manually via the
-    // public paced API. First, trigger a fresh send to reset state:
-    // We need access to _pacedQueue.clear() — but it's private.
-    // The cleanest approach: call sendAllCCsPaced() which builds a queue
-    // with channel=0, then the timer hasn't started draining yet (1ms delay).
-    // Before the first timer tick, we replace the queue contents.
-    //
-    // HOWEVER: sendAllCCsPaced resets _pacedIndex=0 and starts the timer.
-    // The timer fires on the message thread, and we're ON the message thread
-    // right now (UI callback), so the timer won't fire until we return.
-    // This means we're safe to mutate the queue between sendAllCCsPaced()
-    // and returning from this function.
-
-    // OK so the approach is:
-    // 1. Load upper, call sendAllCCsPaced() → builds channel=0 queue, timer pending
-    // 2. We're still on the message thread, so timer hasn't fired yet
-    // 3. We can't clear _pacedQueue (private), but we CAN append to it
-    // 4. The channel=0 entries will route via editTarget, which we set to A
-
-    // Set editTarget to A so the channel=0 queue entries route correctly
-    proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerA);
-
-    // sendAllCCsPaced() already built the A-layer queue (channel=0).
-    // Now load the B-layer patch and append its CCs with explicit channel B.
+    // ---- Pass 2: lower patch -> Layer B bank dump ----
+    // Re-suppress, swap APVTS to lower, send a Layer-B-targeted dump.
+    proc._suppressEcho.store(true);
+    proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerB);
     loadPatch(proc.apvts, perf.lower);
-    appendCurrentState(chB);
+    proc._suppressEcho.store(false);
+    proc.sendBankDump();
 
-    // Set the performance name
+    // After the second dump the firmware has correct A + B state. The
+    // plugin's APVTS now reflects the lower patch — switching editTarget
+    // back to A would mismatch the visible UI. Leave editTarget on B so
+    // user edits land where the UI is showing.
+    proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerB);
+
     proc.setPatchName(perf.name);
-
-    // Leave editTarget on A — user most likely wants to tweak the upper layer
-    proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerA);
 }
 
 } // namespace JP8000SyxImporter

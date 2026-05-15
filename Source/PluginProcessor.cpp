@@ -1,35 +1,26 @@
 /*
- * PluginProcessor.cpp — JT-8000 Controller Processor
+ * PluginProcessor.cpp — JT-8000 Controller Processor (Phase 6)
  *
- * Ableton-compatible MIDI CC mapper with dummy stereo audio buses.
+ * SysEx-only output. CC output path removed. The plugin emits SET_PARAM and
+ * BANK_DUMP messages in the JT-8000 editor protocol (see SyxProtocol.h).
  *
  * processBlock():
- *   1. Silence the audio buffer (dummy buses, no audio processing)
+ *   1. Silence the audio buffer (Ableton dummy buses, no audio processing)
  *   2. Reflect incoming CCs into APVTS so the UI tracks hardware state
- *   3. Drain the outgoing CC FIFO into the host MIDI buffer
- *
- * Paced send:
- *   juce::Timer drip-feeds CCs at 1ms intervals to avoid overflowing
- *   the Teensy's USB MIDI receive buffer (~120ms for a full patch).
+ *   3. Reflect incoming SysEx PARAM_VALUE messages into APVTS
+ *   4. Drain the outgoing per-param SysEx FIFO into the host MIDI buffer
+ *   5. If a BANK_DUMP is queued, append it as one large MidiMessage
  */
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "ParamMapJuce.h"
+#include "SyxProtocol.h"
 
 static const juce::Identifier kPatchNameProp("patchName");
 
 // =============================================================================
-// Bus layout — Ableton workaround
-//
-// Ableton Live refuses to instantiate VST3 plugins with zero audio buses
-// (Ableton bug ABLDEV-00057, open since 2019, still present in 2025).
-// JUCE's own MidiLoggerPluginDemo uses PluginHostType().isAbletonLive()
-// to conditionally add a stereo output.
-//
-// We always add stereo I/O to keep the moduleinfo.json deterministic —
-// the audio buses are silenced in processBlock(). This avoids needing
-// two different .vst3 bundles and ensures the Ableton plugin cache
-// always sees the same bus layout.
+// Bus layout — Ableton workaround (unchanged from previous phases)
 // =============================================================================
 juce::AudioProcessor::BusesProperties
 JT8000ControllerProcessor::makeBusLayout()
@@ -55,8 +46,6 @@ JT8000ControllerProcessor::JT8000ControllerProcessor()
 
 JT8000ControllerProcessor::~JT8000ControllerProcessor()
 {
-    stopTimer();
-
     for (int i = 0; i < kNumParams; ++i)
         apvts.removeParameterListener(kAllParams[i].id, this);
 
@@ -64,7 +53,8 @@ JT8000ControllerProcessor::~JT8000ControllerProcessor()
 }
 
 // =============================================================================
-// Parameter Layout
+// Parameter Layout — unchanged. APVTS still stores values in 0..127 / choice
+// index form. Conversion to native float happens at SysEx send time.
 // =============================================================================
 juce::AudioProcessorValueTreeState::ParameterLayout
 JT8000ControllerProcessor::createParameterLayout()
@@ -102,35 +92,25 @@ juce::AudioProcessorEditor* JT8000ControllerProcessor::createEditor()
     return new JT8000ControllerEditor(*this);
 }
 
-// =============================================================================
-// isStandaloneMode
-// =============================================================================
 bool JT8000ControllerProcessor::isStandaloneMode() const
 {
     return wrapperType == wrapperType_Standalone;
 }
 
 // =============================================================================
-// processBlock — silence audio, filter MIDI, inject CCs
+// processBlock — silence audio, filter MIDI, drain SysEx FIFO
 //
-// Audio buses exist only as an Ableton compatibility shim.
-//
-// MIDI strategy:
-//   - Incoming CCs are consumed (reflected into APVTS for UI update)
-//     but NOT passed through. This plugin is a one-way CC injector.
-//     If incoming CCs were passed through, any CC we send would echo
-//     back from Ableton and create an infinite feedback loop.
-//   - Notes, pitch bend, aftertouch, channel pressure pass through.
-//   - Our own CCs from the FIFO are appended (these are the only CCs
-//     that should reach the output).
+// Same MIDI strategy as previous phases: incoming CCs reflect into APVTS via
+// applyIncomingCC and are NOT passed through; notes/pitch bend/aftertouch
+// pass through unchanged. New in Phase 6: incoming SysEx is parsed for
+// PARAM_VALUE messages from the firmware (also NOT passed through), and the
+// outbound SysEx FIFO is drained instead of the old CC FIFO.
 // =============================================================================
 void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midiMessages)
 {
-    // Silence dummy audio buses
     buffer.clear();
 
-    // --- Build a filtered copy: keep non-CC messages, consume CCs -----------
     juce::MidiBuffer filtered;
 
     for (const auto metadata : midiMessages)
@@ -139,24 +119,37 @@ void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 
         if (msg.isController())
         {
-            // Reflect into APVTS for UI update — do NOT pass through
+            // Hardware CC -> APVTS. Don't pass through.
             applyIncomingCC(msg.getControllerNumber(), msg.getControllerValue());
+        }
+        else if (msg.isSysEx())
+        {
+            // Firmware SysEx (PARAM_VALUE) -> APVTS. Don't pass through.
+            // SysEx data excludes F0/F7; rebuild the full F0..F7 buffer that
+            // handleIncomingSysEx expects.
+            const int sxLen = msg.getSysExDataSize();
+            const auto* sxData = msg.getSysExData();
+            // Reassemble F0 .. F7 envelope.
+            juce::Array<uint8_t> full;
+            full.resize(sxLen + 2);
+            full.set(0, 0xF0);
+            for (int i = 0; i < sxLen; ++i) full.set(i + 1, sxData[i]);
+            full.set(sxLen + 1, 0xF7);
+            handleIncomingSysEx(full.getRawDataPointer(), full.size());
         }
         else
         {
-            // Notes, pitch bend, aftertouch etc. — pass through
             filtered.addEvent(msg, metadata.samplePosition);
         }
     }
 
-    // --- Drain outgoing CC FIFO (our CCs only) ------------------------------
+    // --- Drain per-param SysEx FIFO ----------------------------------------
     const int ready = fifo.getNumReady();
     if (ready > 0)
     {
         int s1, sz1, s2, sz2;
         fifo.prepareToRead(ready, s1, sz1, s2, sz2);
 
-        // Place our CCs at the end of the buffer
         const int samplePos = filtered.isEmpty()
                             ? 0
                             : filtered.getLastEventTime();
@@ -166,8 +159,24 @@ void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
             for (int i = start; i < start + count; ++i)
             {
                 const auto& slot = messageBuffer[i];
-                filtered.addEvent(
-                    juce::MidiMessage(slot.data, slot.numBytes), samplePos);
+
+                // SysEx messages need explicit construction. JUCE's
+                // createSysExMessage takes the BODY (between F0 and F7) and
+                // adds the envelope itself. Short messages (notes/PB) use
+                // the raw-data constructor.
+                if (slot.numBytes >= 2 && slot.data[0] == 0xF0
+                                       && slot.data[slot.numBytes - 1] == 0xF7)
+                {
+                    auto msg = juce::MidiMessage::createSysExMessage(
+                        slot.data + 1, (int)slot.numBytes - 2);
+                    filtered.addEvent(msg, samplePos);
+                }
+                else
+                {
+                    filtered.addEvent(
+                        juce::MidiMessage(slot.data, (int)slot.numBytes),
+                        samplePos);
+                }
             }
         };
 
@@ -176,41 +185,49 @@ void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         fifo.finishedRead(ready);
     }
 
-    // Replace the host buffer with our filtered version
+    // --- Drain BANK_DUMP buffer if ready ------------------------------------
+    if (bigOutReady.load())
+    {
+        // Move under the lock so the message thread can immediately re-fill.
+        juce::Array<uint8_t> snapshot;
+        {
+            const juce::ScopedLock sl(bigOutLock);
+            snapshot.swapWith(bigOutBuf);
+            bigOutReady.store(false);
+        }
+
+        if (snapshot.size() >= 2)
+        {
+            const auto* d = snapshot.getRawDataPointer();
+            const int   n = snapshot.size();
+            if (d[0] == 0xF0 && d[n - 1] == 0xF7)
+            {
+                const int samplePos = filtered.isEmpty() ? 0
+                                                         : filtered.getLastEventTime();
+                auto msg = juce::MidiMessage::createSysExMessage(d + 1, n - 2);
+                filtered.addEvent(msg, samplePos);
+            }
+        }
+    }
+
     midiMessages.swapWith(filtered);
 }
 
 // =============================================================================
-// applyIncomingCC — update APVTS/UI from an incoming CC, without sending
-//
-// Called when a CC arrives from the hardware (via host MidiBuffer or
-// standalone MIDI input). Updates the APVTS parameter so the UI reflects
-// the hardware state, but must NOT send a CC back out to the Teensy.
-//
-// Guard 1: The caller (handleIncomingMidiMessage / processBlock) never
-//          queues the CC back out — only this function is called.
-//
-// Guard 2: _suppressEcho is set true around setValueNotifyingHost().
-//          parameterChanged() checks this flag and skips sendCC().
-//          setValueNotifyingHost fires the listener synchronously on the
-//          same call stack, so the flag is guaranteed to be true when
-//          parameterChanged runs.
+// applyIncomingCC — same as previous phases. Hardware CC reflects into APVTS;
+// _suppressEcho prevents the parameterChanged handler from firing a SysEx.
 // =============================================================================
 void JT8000ControllerProcessor::applyIncomingCC(int cc, int value)
 {
-    if (cc < 0 || cc > 127)
-        return;
+    if (cc < 0 || cc > 127) return;
 
     const CCParam* p = findParamByCC(cc);
-    if (p == nullptr)
-        return;
+    if (p == nullptr) return;
 
-    if (p->style == ControlStyle::StepGrid)
-        return;
+    if (p->style == ControlStyle::StepGrid) return;
 
     auto* param = apvts.getParameter(p->id);
-    if (param == nullptr)
-        return;
+    if (param == nullptr) return;
 
     float normVal;
     if (isChoiceParam(*p))
@@ -223,43 +240,86 @@ void JT8000ControllerProcessor::applyIncomingCC(int cc, int value)
         normVal = param->convertTo0to1(static_cast<float>(juce::jlimit(0, 127, value)));
     }
 
-    // Guard: tell parameterChanged() not to send a CC for this update
     _suppressEcho.store(true);
     param->setValueNotifyingHost(normVal);
     _suppressEcho.store(false);
 }
 
 // =============================================================================
-// parameterChanged — convert to CC and send (UI/automation changes only)
+// handleIncomingSysEx — parse firmware SysEx and reflect into APVTS
 //
-// Three-way dispatch:
+// We accept PARAM_VALUE (firmware -> editor) messages here. Other JT-8000
+// message types (SET_PARAM, GET_PARAM, BANK_DUMP_REQUEST) are firmware-bound
+// commands; the plugin should never receive them. BANK_DUMP from the
+// firmware is reserved for a future GET-style request and is currently not
+// expected to arrive unsolicited.
+// =============================================================================
+void JT8000ControllerProcessor::handleIncomingSysEx(const uint8_t* data, int length)
+{
+    if (length < (int)SyxProto::kMsgGetParamLen) return;
+
+    // Validate envelope.
+    if (data[0]                                 != 0xF0)              return;
+    if (data[SyxProto::kOffsetMfrId]            != SyxProto::kMfrId)  return;
+    if (data[SyxProto::kOffsetSubIdJ]           != SyxProto::kSubIdJ) return;
+    if (data[SyxProto::kOffsetSubIdT]           != SyxProto::kSubIdT) return;
+
+    const uint8_t msg = data[SyxProto::kOffsetMsgType];
+
+    if (msg != SyxProto::kMsgParamValue) return;            // ignore others
+    if (length != (int)SyxProto::kMsgParamValueLen) return;
+    if (data[length - 1] != 0xF7) return;
+
+    const uint16_t pid = SyxProto::paramIdFromBytes(
+        data[SyxProto::kOffsetPidHi], data[SyxProto::kOffsetPidLo]);
+    const float value = SyxProto::decodeFloat(&data[SyxProto::kOffsetFloat]);
+
+    // Translate ParamID -> CC -> APVTS row. Brute-force scan; cheap because
+    // it runs once per inbound PARAM_VALUE which is rare (editor-driven sync).
+    for (int i = 0; i < kNumParams; ++i)
+    {
+        const auto& p = kAllParams[i];
+        if (ParamMapJuce::paramId14ForCC(p.cc) != pid) continue;
+
+        // Convert native float -> CC byte for APVTS (lossy for hi-res; OK
+        // because Phase 3 doc'd that as expected behaviour).
+        const uint8_t cc = ParamMapJuce::nativeFloatToCCByte(pid, value);
+        applyIncomingCC(p.cc, (int)cc);
+        return;
+    }
+}
+
+// =============================================================================
+// parameterChanged — APVTS change -> SysEx SET_PARAM
 //
-//   1. The special routing params (perf_midi_ch_a, perf_midi_ch_b,
-//      perf_edit_target) update the atomic mirrors so the audio thread can
-//      read the current routing state without touching APVTS.
+// Phase 6 dispatch:
 //
-//   2. All isLocalOnly params (the seven perf CCs 140..146) bail before the
-//      CC emit — CCs above 127 cannot travel on USB MIDI and the firmware
-//      wouldn't accept them anyway.
+//   1. The routing-mirror params (perf_midi_ch_a/b, perf_edit_target) update
+//      atomics regardless of source. NO SysEx emitted for these — they're
+//      plugin-local UI state, and the firmware learns the layer assignment
+//      via the perf CCs (140-146) which travel as regular SET_PARAMs to
+//      kLayerPerf.
 //
-//   3. Remaining params (the regular patch CCs) go through sendCC() which
-//      routes based on editTarget / channelA / channelB.
+//   2. Echo guard: if the change came from an incoming CC, don't round-trip.
 //
-// Echo-suppression guard stays exactly as before: if the change came from
-// an incoming CC we don't re-send. See applyIncomingCC() for Guard 1/2.
+//   3. Look up 14-bit ParamID from the CC number.
+//      - kLayerPerf for perf CCs (140-146)
+//      - kLayerGlobalFx for reverb CCs (70/71/75/93..98)
+//      - editTarget-mapped layer for everything else
+//
+//   4. Convert APVTS value (CC byte form) to native float for hi-res params,
+//      or pass the CC byte as a float for non-hi-res (firmware quantises).
+//
+//   5. Send the 15-byte SET_PARAM SysEx.
 // =============================================================================
 void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float newValue)
 {
     const CCParam* p = findParamByID(id);
-    if (!p) return;
+    if (!p) { DBG("[ParamChg] " << id << " — no CCParam row, dropped"); return; }
 
-    // ---- Routing-param mirrors: update atomics regardless of echo guard ----
-    // These changes must be visible on the audio thread even when the change
-    // came from an incoming CC — the _suppressEcho guard only prevents
-    // re-sending, not state update.
+    // ---- Routing-mirror updates (atomics) ----------------------------------
     if (id == "perf_midi_ch_a")
     {
-        // newValue is a choice index 0..15; +1 gives MIDI channel 1..16.
         channelA.store(juce::jlimit(1, 16, juce::roundToInt(newValue) + 1));
     }
     else if (id == "perf_midi_ch_b")
@@ -272,205 +332,311 @@ void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float n
         editTarget.store(static_cast<EditTarget>(idx));
     }
 
-    // ---- Local-only params never go out as MIDI ----------------------------
-    // Includes every entry in CCDefinitions.h with isLocalOnly = true.
-    // These are the seven perf CCs (140..146). They live in APVTS purely
-    // so state save/restore and UI binding work.
-    if (p->isLocalOnly) return;
+    // ---- Echo guard --------------------------------------------------------
+    if (_suppressEcho.load())
+    {
+        DBG("[ParamChg] " << id << " — echo-suppressed");
+        return;
+    }
 
-    // ---- Echo guard: don't re-emit a CC that CAME from the hardware --------
-    if (_suppressEcho.load()) return;
+    // ---- Resolve 14-bit ParamID and scope ----------------------------------
+    const uint16_t pid = ParamMapJuce::paramId14ForCC(p->cc);
+    if (pid == 0)
+    {
+        DBG("[ParamChg] " << id << " (CC " << p->cc << ") — no ParamID mapping, dropped");
+        return;
+    }
 
     int ccVal;
     if (isChoiceParam(*p))
         ccVal = choiceIndexToCC(juce::roundToInt(newValue), p->enumCount, p->ccLUT);
     else
         ccVal = juce::roundToInt(newValue);
+    ccVal = juce::jlimit(0, 127, ccVal);
 
-    sendCC(p->cc, ccVal);
+    // ---- Layer routing -----------------------------------------------------
+    uint8_t layer;
+    const int scope = ParamMapJuce::scopeForCC(p->cc);
+    if (scope == 1)         layer = SyxProto::kLayerPerf;
+    else if (scope == 2)    layer = SyxProto::kLayerGlobalFx;
+    else
+    {
+        // Patch scope: route per editTarget.
+        switch (editTarget.load())
+        {
+            case EditTarget::LayerA: layer = SyxProto::kLayerA;    break;
+            case EditTarget::LayerB: layer = SyxProto::kLayerB;    break;
+            case EditTarget::Both:   layer = SyxProto::kLayerBoth; break;
+            default:                 layer = SyxProto::kLayerA;    break;
+        }
+    }
+
+    // ---- Native float conversion + send ------------------------------------
+    const float nativeValue = ParamMapJuce::ccByteToNativeFloat(pid, (uint8_t)ccVal);
+
+    DBG("[ParamChg] " << id << " CC=" << p->cc << " pid=0x"
+        << juce::String::toHexString((int)pid) << " layer=0x"
+        << juce::String::toHexString((int)layer) << " ccVal=" << ccVal
+        << " native=" << nativeValue);
+
+    sendSysExSetParam(layer, pid, nativeValue);
 }
 
 // =============================================================================
-// sendCC — emit a CC to one or both layer channels based on edit target
-//
-// Routing:
-//   LayerA → one message on channelA
-//   LayerB → one message on channelB
-//   Both   → two messages, one on each channel
-//
-// channelA and channelB are atomics updated by parameterChanged() when the
-// user changes the perf_midi_ch_a / perf_midi_ch_b combos. Both default
-// to 1 on a fresh plugin instance.
-//
-// The "Both" case deliberately sends two messages rather than broadcasting
-// on channel 0 (MIDI's omni-transmit channel): the firmware filters by
-// exact channel match (no omni support), so we honour its expectation.
+// sendSysExSetParam — build a 15-byte SET_PARAM and queue it
 // =============================================================================
-void JT8000ControllerProcessor::sendCC(int cc, int value)
+void JT8000ControllerProcessor::sendSysExSetParam(uint8_t layer,
+                                                   uint16_t paramId14,
+                                                   float nativeValue)
 {
-    const int chA = juce::jlimit(1, 16, channelA.load());
-    const int chB = juce::jlimit(1, 16, channelB.load());
-    const int ccMasked = cc & 0x7F;
-    const int valMasked = value & 0x7F;
+    uint8_t buf[SyxProto::kMsgSetParamLen];
+    buf[0]                          = 0xF0;
+    buf[SyxProto::kOffsetMfrId]     = SyxProto::kMfrId;
+    buf[SyxProto::kOffsetSubIdJ]    = SyxProto::kSubIdJ;
+    buf[SyxProto::kOffsetSubIdT]    = SyxProto::kSubIdT;
+    buf[SyxProto::kOffsetDeviceId]  = SyxProto::kDeviceDefault;
+    buf[SyxProto::kOffsetMsgType]   = SyxProto::kMsgSetParam;
+    buf[SyxProto::kOffsetLayer]     = layer;
+    buf[SyxProto::kOffsetPidHi]     = SyxProto::paramIdHi(paramId14);
+    buf[SyxProto::kOffsetPidLo]     = SyxProto::paramIdLo(paramId14);
+    SyxProto::encodeFloat(nativeValue, &buf[SyxProto::kOffsetFloat]);
+    buf[SyxProto::kMsgSetParamLen - 1] = 0xF7;
 
+    queueSysEx(buf, (int)SyxProto::kMsgSetParamLen);
+}
+
+// =============================================================================
+// sendStepSeqEdit — atomic step sequencer write (two SET_PARAMs back-to-back)
+//
+// The firmware applies them in arrival order. Step Select first, then Step
+// Value — same semantics the legacy CC pair (CC 17 then CC 18) had.
+// =============================================================================
+void JT8000ControllerProcessor::sendStepSeqEdit(int step, int value)
+{
+    // Both messages go to the patch-scope edit target since the step sequencer
+    // is per-engine.
+    uint8_t layer;
     switch (editTarget.load())
     {
-        case EditTarget::LayerA:
-            queueMidiMessage(juce::MidiMessage::controllerEvent(chA, ccMasked, valMasked));
-            break;
-
-        case EditTarget::LayerB:
-            queueMidiMessage(juce::MidiMessage::controllerEvent(chB, ccMasked, valMasked));
-            break;
-
-        case EditTarget::Both:
-            queueMidiMessage(juce::MidiMessage::controllerEvent(chA, ccMasked, valMasked));
-            // Only emit the second message if channels differ — avoids a
-            // duplicate that the firmware would apply twice in "Dual"
-            // configurations where both layers share a channel.
-            if (chA != chB)
-                queueMidiMessage(juce::MidiMessage::controllerEvent(chB, ccMasked, valMasked));
-            break;
+        case EditTarget::LayerA: layer = SyxProto::kLayerA;    break;
+        case EditTarget::LayerB: layer = SyxProto::kLayerB;    break;
+        case EditTarget::Both:   layer = SyxProto::kLayerBoth; break;
+        default:                 layer = SyxProto::kLayerA;    break;
     }
+
+    // Step Select (0x0E10) — value is the step index (0..15) as a float.
+    sendSysExSetParam(layer, 0x0E10, (float)juce::jlimit(0, 15, step));
+
+    // Step Value (0x0E11) — value is 0..127 (the actual step value).
+    sendSysExSetParam(layer, 0x0E11, (float)juce::jlimit(0, 127, value));
 }
 
 // =============================================================================
-// queueMidiMessage — push to FIFO + direct output (standalone)
+// queueSysEx — push a fully-formed SysEx message (F0..F7) onto the FIFO and
+// (in standalone) emit it directly to the MIDI output device.
 // =============================================================================
-void JT8000ControllerProcessor::queueMidiMessage(const juce::MidiMessage& msg)
+void JT8000ControllerProcessor::queueSysEx(const uint8_t* data, int len)
 {
+    if (len <= 0 || len > kSysExSlotBytes)
+    {
+        DBG("[queueSysEx] bad len " << len);
+        return;
+    }
+
+    // Standalone direct-out path: build a juce::MidiMessage. SysEx
+    // constructor expects the bytes BETWEEN F0/F7 (it adds them itself).
     {
         const juce::ScopedLock sl(midiOutLock);
         if (directMidiOut != nullptr)
-            directMidiOut->sendMessageNow(msg);
+        {
+            if (len >= 2 && data[0] == 0xF0 && data[len - 1] == 0xF7)
+            {
+                auto msg = juce::MidiMessage::createSysExMessage(data + 1, len - 2);
+                directMidiOut->sendMessageNow(msg);
+                DBG("[queueSysEx] sent direct " << len << " bytes");
+            }
+        }
+        else
+        {
+            DBG("[queueSysEx] no directMidiOut — relying on FIFO drain");
+        }
     }
-
-    const int rawSize = juce::jmin(msg.getRawDataSize(), 3);
-    if (rawSize <= 0) return;
 
     int s1, sz1, s2, sz2;
     fifo.prepareToWrite(1, s1, sz1, s2, sz2);
     if (sz1 > 0)
     {
         auto& slot = messageBuffer[s1];
-        std::memcpy(slot.data, msg.getRawData(), static_cast<size_t>(rawSize));
-        slot.numBytes = rawSize;
+        std::memcpy(slot.data, data, (size_t)len);
+        slot.numBytes = (uint8_t)len;
+        DBG("[queueSysEx] queued slot=" << s1 << " len=" << len);
+    }
+    else
+    {
+        DBG("[queueSysEx] FIFO full!");
     }
     fifo.finishedWrite(sz1 + sz2);
 }
 
 // =============================================================================
-// Paced send
+// sendBankDump — build and queue one BANK_DUMP containing every APVTS-bound
+// param's current value. Replaces the 90-CC paced spray for preset loads.
+//
+// The body format mirrors firmware _handleBankDumpRequest: one entry per
+// (layer, paramID, native float). Patch-scope params are routed based on
+// the current editTarget:
+//   LayerA → kLayerA entries only
+//   LayerB → kLayerB entries only
+//   Both   → kLayerBoth entries (firmware applies to both engines)
+//
+// Callers (loadPatchToLayer, loadPerformance) set editTarget BEFORE calling
+// this so each pass targets the correct engine without overwriting the other.
+//
+// For perf and global-fx scope, one entry each with the appropriate layer byte.
+//
+// The whole message goes into bigOutBuf and is flushed by the next
+// processBlock. We don't put it in the per-slot FIFO because BANK_DUMP can
+// run ~1000 bytes — far beyond kSysExSlotBytes.
 // =============================================================================
-void JT8000ControllerProcessor::buildPacedQueue()
+void JT8000ControllerProcessor::sendBankDump()
 {
-    _pacedQueue.clear();
-    _pacedQueue.reserve(kNumParams);
+    juce::Array<uint8_t> buf;
+    buf.ensureStorageAllocated((int)SyxProto::kBankDumpMaxLen);
 
+    auto put = [&](uint8_t b) { buf.add(b); };
+
+    // Header
+    put(0xF0);
+    put(SyxProto::kMfrId);
+    put(SyxProto::kSubIdJ);
+    put(SyxProto::kSubIdT);
+    put(SyxProto::kDeviceDefault);
+    put(SyxProto::kMsgBankDump);
+    // Reserve count placeholder — patched at the end.
+    const int countOffset = buf.size();
+    put(0); put(0);
+
+    // Helper: append one entry (layer + pid + float).
+    uint16_t entryCount = 0;
+    auto appendEntry = [&](uint8_t layer, uint16_t pid, float value)
+    {
+        put(layer);
+        put(SyxProto::paramIdHi(pid));
+        put(SyxProto::paramIdLo(pid));
+        uint8_t f5[SyxProto::kFloatBytes];
+        SyxProto::encodeFloat(value, f5);
+        for (int i = 0; i < (int)SyxProto::kFloatBytes; ++i) put(f5[i]);
+        ++entryCount;
+    };
+
+    // Walk every APVTS-bound param. For each:
+    //   - Look up 14-bit ParamID
+    //   - Read APVTS value (CC byte / choice index form)
+    //   - Convert to native float
+    //   - Emit entry(ies) based on scope
     for (int i = 0; i < kNumParams; ++i)
     {
         const auto& p = kAllParams[i];
+        const uint16_t pid = ParamMapJuce::paramId14ForCC(p.cc);
+        if (pid == 0) continue;
 
-        // Step grids are serialised via a dedicated path (sendCC 17/18 per step).
-        if (p.style == ControlStyle::StepGrid) continue;
+        // Read APVTS value -> CC byte form.
+        auto* param = apvts.getParameter(p.id);
+        if (!param) continue;
+        const float zeroToOne = param->getValue();
+        const float realValue = param->convertFrom0to1(zeroToOne);
 
-        // Perf CCs 140..146 can't travel on USB MIDI (>127 hits the 7-bit wall).
-        // They're state-only — stored in APVTS for save/restore, never emitted.
-        if (p.isLocalOnly) continue;
+        int ccVal;
+        if (isChoiceParam(p))
+            ccVal = choiceIndexToCC(juce::roundToInt(realValue), p.enumCount, p.ccLUT);
+        else
+            ccVal = juce::roundToInt(realValue);
+        ccVal = juce::jlimit(0, 127, ccVal);
 
-        if (auto* val = apvts.getRawParameterValue(p.id))
+        const float nativeValue = ParamMapJuce::ccByteToNativeFloat(pid, (uint8_t)ccVal);
+
+        const int scope = ParamMapJuce::scopeForCC(p.cc);
+        if (scope == 1)         appendEntry(SyxProto::kLayerPerf,     pid, nativeValue);
+        else if (scope == 2)    appendEntry(SyxProto::kLayerGlobalFx, pid, nativeValue);
+        else
         {
-            uint8_t ccVal;
-            if (isChoiceParam(p))
-                ccVal = static_cast<uint8_t>(choiceIndexToCC(
-                    juce::roundToInt(val->load()), p.enumCount, p.ccLUT));
-            else
-                ccVal = static_cast<uint8_t>(juce::roundToInt(val->load()));
-
-            // channel=0 → route via editTarget at send time
-            _pacedQueue.push_back({ static_cast<uint8_t>(p.cc), ccVal, 0 });
+            // Patch scope — route based on current editTarget.
+            //
+            // The APVTS holds ONE layer's worth of patch values. The caller
+            // sets editTarget before calling sendBankDump() to control which
+            // firmware engine receives these values:
+            //   LayerA → emit kLayerA only
+            //   LayerB → emit kLayerB only
+            //   Both   → emit kLayerBoth (firmware applies to both engines)
+            switch (editTarget.load())
+            {
+                case EditTarget::LayerA:
+                    appendEntry(SyxProto::kLayerA, pid, nativeValue);
+                    break;
+                case EditTarget::LayerB:
+                    appendEntry(SyxProto::kLayerB, pid, nativeValue);
+                    break;
+                case EditTarget::Both:
+                default:
+                    appendEntry(SyxProto::kLayerBoth, pid, nativeValue);
+                    break;
+            }
         }
     }
-}
 
-void JT8000ControllerProcessor::sendAllCCsPaced()
-{
-    stopTimer();
-    buildPacedQueue();
-    _pacedIndex = 0;
-    _pacedSendActive.store(true);
-    startTimer(1);
-}
+    // Patch the count.
+    buf.set(countOffset,     (uint8_t)((entryCount >> 7) & 0x7F));
+    buf.set(countOffset + 1, (uint8_t)( entryCount       & 0x7F));
 
-void JT8000ControllerProcessor::appendPacedCC(int cc, int value)
-{
-    // channel=0 → route via editTarget at send time
-    _pacedQueue.push_back({
-        static_cast<uint8_t>(juce::jlimit(0, 127, cc)),
-        static_cast<uint8_t>(juce::jlimit(0, 127, value)),
-        0
-    });
-}
+    // Trailer.
+    put(0xF7);
 
-void JT8000ControllerProcessor::appendPacedCC(int cc, int value, int channel)
-{
-    // channel=1..16 → send directly on that channel, bypassing editTarget
-    _pacedQueue.push_back({
-        static_cast<uint8_t>(juce::jlimit(0, 127, cc)),
-        static_cast<uint8_t>(juce::jlimit(0, 127, value)),
-        static_cast<uint8_t>(juce::jlimit(0, 16, channel))
-    });
-}
-
-void JT8000ControllerProcessor::timerCallback()
-{
-    if (_pacedIndex >= static_cast<int>(_pacedQueue.size()))
+    // Standalone direct-out path
     {
-        stopTimer();
-        _pacedSendActive.store(false);
-        return;
+        const juce::ScopedLock sl(midiOutLock);
+        if (directMidiOut != nullptr)
+        {
+            // SysEx constructor expects body without F0/F7.
+            auto msg = juce::MidiMessage::createSysExMessage(
+                buf.getRawDataPointer() + 1, buf.size() - 2);
+            directMidiOut->sendMessageNow(msg);
+        }
     }
 
-    const auto& item = _pacedQueue[static_cast<size_t>(_pacedIndex)];
-
-    if (item.channel > 0 && item.channel <= 16)
+    // VST host path: hand off via bigOutBuf for the audio thread to flush.
     {
-        // Channel-pinned CC — bypass editTarget routing, send directly
-        // on the specified channel. Used by loadPerformance() to ensure
-        // A-layer CCs go to channel A and B-layer CCs go to channel B
-        // regardless of what editTarget is set to at send time.
-        queueMidiMessage(juce::MidiMessage::controllerEvent(
-            item.channel, item.cc, item.value));
+        const juce::ScopedLock sl(bigOutLock);
+        bigOutBuf = buf;
+        bigOutReady.store(true);
     }
-    else
-    {
-        // channel=0 → route through sendCC() which uses editTarget
-        sendCC(item.cc, item.value);
-    }
-
-    ++_pacedIndex;
 }
 
 // =============================================================================
-// Note / Pitch helpers
+// Note / Pitch helpers — unchanged. These ride on the per-slot FIFO too, but
+// MidiMessage's raw-bytes constructor handles 3-byte messages fine in slots
+// sized for 16-byte SysEx. The unused trailing bytes in the slot don't matter
+// because slot.numBytes records the actual length.
 // =============================================================================
 void JT8000ControllerProcessor::sendNoteOn(int channel, int note, float velocity)
 {
-    queueMidiMessage(juce::MidiMessage::noteOn(channel, note, velocity));
+    auto m = juce::MidiMessage::noteOn(channel, note, velocity);
+    queueSysEx(m.getRawData(), juce::jmin(m.getRawDataSize(), (int)kSysExSlotBytes));
 }
 
 void JT8000ControllerProcessor::sendNoteOff(int channel, int note)
 {
-    queueMidiMessage(juce::MidiMessage::noteOff(channel, note, (uint8_t)0));
+    auto m = juce::MidiMessage::noteOff(channel, note, (uint8_t)0);
+    queueSysEx(m.getRawData(), juce::jmin(m.getRawDataSize(), (int)kSysExSlotBytes));
 }
 
 void JT8000ControllerProcessor::sendPitchWheel(int channel, int value)
 {
-    queueMidiMessage(juce::MidiMessage::pitchWheel(channel, value));
+    auto m = juce::MidiMessage::pitchWheel(channel, value);
+    queueSysEx(m.getRawData(), juce::jmin(m.getRawDataSize(), (int)kSysExSlotBytes));
 }
 
 // =============================================================================
-// MIDI output device (standalone)
+// MIDI output device (standalone) — unchanged
 // =============================================================================
 void JT8000ControllerProcessor::setMidiOutput(std::unique_ptr<juce::MidiOutput> output)
 {
@@ -479,7 +645,7 @@ void JT8000ControllerProcessor::setMidiOutput(std::unique_ptr<juce::MidiOutput> 
 }
 
 // =============================================================================
-// Patch name
+// Patch name — unchanged
 // =============================================================================
 juce::String JT8000ControllerProcessor::getPatchName() const
 {
@@ -492,7 +658,7 @@ void JT8000ControllerProcessor::setPatchName(const juce::String& name)
 }
 
 // =============================================================================
-// MIDI input device (standalone)
+// MIDI input device (standalone) — unchanged
 // =============================================================================
 void JT8000ControllerProcessor::openMidiInput(const juce::String& deviceIdentifier)
 {
@@ -529,56 +695,48 @@ juce::String JT8000ControllerProcessor::getActiveMidiInputId() const
 // =============================================================================
 // handleIncomingMidiMessage — standalone MIDI input callback
 //
-// Runs on the MIDI device thread, NOT the message thread.
-//
-// ECHO SUPPRESSION: Incoming CCs are consumed here — they update the
-// APVTS/UI via applyIncomingCC() but are NEVER forwarded back out.
-// Only performance messages (notes, pitch bend, aftertouch) pass through.
-//
-// This mirrors processBlock() which applies the same CC-filtering rule
-// for the VST/DAW path.
+// Same semantics as previous phases: incoming CCs reflect into APVTS;
+// SysEx PARAM_VALUE replies reflect via handleIncomingSysEx. Notes/pitch
+// bend etc. don't apply to the controller plugin's standalone-input path
+// (we only track CCs for state sync).
 // =============================================================================
-void JT8000ControllerProcessor::handleIncomingMidiMessage(
-    juce::MidiInput*, const juce::MidiMessage& msg)
+void JT8000ControllerProcessor::handleIncomingMidiMessage(juce::MidiInput*,
+                                                          const juce::MidiMessage& msg)
 {
     if (msg.isController())
     {
-        // CC from hardware → update UI only, do NOT send back
         applyIncomingCC(msg.getControllerNumber(), msg.getControllerValue());
-        return;
     }
-
-    // Performance messages pass through (notes, pitch bend, aftertouch)
-    if (msg.isNoteOnOrOff() || msg.isPitchWheel()
-        || msg.isAftertouch() || msg.isChannelPressure())
+    else if (msg.isSysEx())
     {
-        queueMidiMessage(msg);
+        const int sxLen = msg.getSysExDataSize();
+        const auto* sxData = msg.getSysExData();
+        juce::Array<uint8_t> full;
+        full.resize(sxLen + 2);
+        full.set(0, 0xF0);
+        for (int i = 0; i < sxLen; ++i) full.set(i + 1, sxData[i]);
+        full.set(sxLen + 1, 0xF7);
+        handleIncomingSysEx(full.getRawDataPointer(), full.size());
     }
 }
 
 // =============================================================================
-// State save / recall
+// State save / restore — APVTS handles it; just preserve the patch-name prop.
 // =============================================================================
 void JT8000ControllerProcessor::getStateInformation(juce::MemoryBlock& dest)
 {
-    if (auto xml = apvts.copyState().createXml())
+    if (auto xml = apvts.state.createXml())
         copyXmlToBinary(*xml, dest);
 }
 
-void JT8000ControllerProcessor::setStateInformation(const void* data, int size)
+void JT8000ControllerProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
-    if (auto xml = getXmlFromBinary(data, size))
-    {
-        if (xml->hasTagName(apvts.state.getType()))
-        {
-            apvts.replaceState(juce::ValueTree::fromXml(*xml));
-            sendAllCCsPaced();
-        }
-    }
+    if (auto xml = getXmlFromBinary(data, sizeInBytes))
+        apvts.replaceState(juce::ValueTree::fromXml(*xml));
 }
 
 // =============================================================================
-// Plugin instantiation
+// Required factory function — JUCE entry point
 // =============================================================================
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {

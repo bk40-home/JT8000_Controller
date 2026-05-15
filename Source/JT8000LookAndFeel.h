@@ -2,16 +2,16 @@
  * JT8000LookAndFeel.h — Custom LookAndFeel for JT-8000 Controller
  *
  * Overrides:
- *   drawRotarySlider()  — dark arc knob with orange fill and pointer dot
- *   drawLinearSlider()  — dark vertical fader with orange fill and thumb bar
+ *   drawRotarySlider()       — dark arc knob with orange fill and pointer dot
+ *   drawLinearSlider()       — dark vertical fader with orange fill and thumb bar
+ *   getSliderThumbRadius()   — minimal radius so the slider's pixel travel
+ *                              matches the visual track (LookAndFeel_V4's
+ *                              default is far too large for custom-drawn thumbs)
  *
  * All angle maths for the rotary knob are handled by JUCE internally.
  * The drawRotarySlider() callback receives rotaryStartAngle and rotaryEndAngle
  * which match the values passed to Slider::setRotaryParameters(). The
  * sliderPosProportional parameter is a normalised 0-1 value.
- *
- * This eliminates all hand-rolled sin/cos, angle conventions, and mouse
- * event forwarding that caused bugs in the previous KnobComponent.
  */
 
 #pragma once
@@ -37,6 +37,16 @@ public:
                           float minSliderPos, float maxSliderPos,
                           juce::Slider::SliderStyle style,
                           juce::Slider& slider) override;
+
+    // --- Thumb radius override ------------------------------------------------
+    // LookAndFeel_V4 defaults to jmin(20, jmin(w,h)/2) which returns ~18px
+    // for a 36px-wide vertical fader.  JUCE uses this to compute
+    // minSliderPos / maxSliderPos, effectively shrinking the pixel range the
+    // thumb can travel.  Because drawLinearSlider() draws its own 3px thumb
+    // bar (and drawRotarySlider() ignores the thumb entirely), the default
+    // radius just eats travel — the bar can't fill to the top of the track.
+    // Returning 2 gives a 4px margin which matches the custom track inset.
+    int getSliderThumbRadius(juce::Slider&) override;
 
     // --- Rotary parameters (standard 270° sweep, 7 o'clock to 5 o'clock) ---
     // These are the values passed to Slider::setRotaryParameters().

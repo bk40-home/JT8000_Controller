@@ -3,6 +3,7 @@ C:\Users\pcsadmin\Documents\JT8000_Controller\Source\PluginEditor.cpp;C:\Users\p
 C:\Users\pcsadmin\Documents\JT8000_Controller\Source\JT8000LookAndFeel.cpp;C:\Users\pcsadmin\Documents\JT8000_Controller\build\JT8000_Controller.dir\Release\JT8000LookAndFeel.obj
 C:\Users\pcsadmin\Documents\JT8000_Controller\Source\SectionComponent.cpp;C:\Users\pcsadmin\Documents\JT8000_Controller\build\JT8000_Controller.dir\Release\SectionComponent.obj
 C:\Users\pcsadmin\Documents\JT8000_Controller\Source\StepSequencerGrid.cpp;C:\Users\pcsadmin\Documents\JT8000_Controller\build\JT8000_Controller.dir\Release\StepSequencerGrid.obj
+C:\Users\pcsadmin\Documents\JT8000_Controller\Source\JP8000SyxImporter.cpp;C:\Users\pcsadmin\Documents\JT8000_Controller\build\JT8000_Controller.dir\Release\JP8000SyxImporter.obj
 C:\Users\pcsadmin\Documents\JUCE\modules\juce_audio_processors\juce_audio_processors.cpp;C:\Users\pcsadmin\Documents\JT8000_Controller\build\JT8000_Controller.dir\Release\juce_audio_processors.obj
 C:\Users\pcsadmin\Documents\JUCE\modules\juce_gui_extra\juce_gui_extra.cpp;C:\Users\pcsadmin\Documents\JT8000_Controller\build\JT8000_Controller.dir\Release\juce_gui_extra.obj
 C:\Users\pcsadmin\Documents\JUCE\modules\juce_gui_basics\juce_gui_basics.cpp;C:\Users\pcsadmin\Documents\JT8000_Controller\build\JT8000_Controller.dir\Release\juce_gui_basics.obj

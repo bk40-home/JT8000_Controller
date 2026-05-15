@@ -179,18 +179,20 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     };
 
     // --- Send All -----------------------------------------------------------
+    // Phase 6: replaces the 90-CC paced spray with one BANK_DUMP. Step
+    // sequencer values aren't part of the BANK_DUMP (they're transient
+    // CC 17/18 pair edits), so we still send those via the new step-seq API.
     styleBtn(_sendAllBtn, kOrange);
     _sendAllBtn.onClick = [this]
     {
-        _proc.sendAllCCsPaced();
+        _proc.sendBankDump();
         for (auto* sec : _sections)
         {
             for (auto* grid : sec->getStepGrids())
             {
                 for (int s = 0; s < StepSequencerGrid::kNumSteps; ++s)
                 {
-                    _proc.appendPacedCC(17, s);
-                    _proc.appendPacedCC(18, grid->getStepValue(s));
+                    _proc.sendStepSeqEdit(s, grid->getStepValue(s));
                 }
             }
         }
@@ -249,7 +251,7 @@ JT8000ControllerEditor::~JT8000ControllerEditor()
 void JT8000ControllerEditor::refreshMidiOutputList()
 {
     _midiOutSelector.clear(juce::dontSendNotification);
-    _midiOutSelector.addItem(juce::String::fromUTF8("\xe2\x80\x94 No MIDI Output \xe2\x80\x94"), -1);
+    _midiOutSelector.addItem("-- No MIDI Output --", -1);
     auto devices = juce::MidiOutput::getAvailableDevices();
     for (int i = 0; i < devices.size(); ++i)
         _midiOutSelector.addItem(devices[i].name, i + 1);
@@ -260,7 +262,7 @@ void JT8000ControllerEditor::refreshMidiInputList()
 {
     const auto currentId = _proc.getActiveMidiInputId();
     _midiInSelector.clear(juce::dontSendNotification);
-    _midiInSelector.addItem(juce::String::fromUTF8("\xe2\x80\x94 No MIDI Input \xe2\x80\x94"), -1);
+    _midiInSelector.addItem("-- No MIDI Input --", -1);
     auto devices = juce::MidiInput::getAvailableDevices();
     int selectedId = -1;
     for (int i = 0; i < devices.size(); ++i)
@@ -345,8 +347,9 @@ void JT8000ControllerEditor::buildSections()
             case ControlStyle::Toggle: sec->addToggle(_proc.apvts, p);   break;
             case ControlStyle::StepGrid:
                 sec->addStepGrid([this](int step, int value) {
-                    _proc.sendCC(17, step);
-                    _proc.sendCC(18, value);
+                    // Phase 6: atomic step edit via SysEx — two SET_PARAMs
+                    // back-to-back (Step Select 0x0E10, Step Value 0x0E11).
+                    _proc.sendStepSeqEdit(step, value);
                 });
                 break;
         }
@@ -538,17 +541,22 @@ void JT8000ControllerEditor::valueTreePropertyChanged(
 }
 
 // =============================================================================
-// Init Patch
+// Init Patch  (Phase 6: BANK_DUMP path)
 //
 // Resets every patch parameter to its default value. Specifically PRESERVES
 // the seven perf-global params (CCs 140..146 — channels, edit target, perf
 // mode, balance, split) because those describe the current performance
-// setup, not the patch being initialised. A user who set up Layer A on
-// channel 3 and Layer B on channel 7 should not have that reset by hitting
-// Init Patch.
+// setup, not the patch being initialised.
+//
+// Phase 6: each setValueNotifyingHost() call would normally fire its own
+// SET_PARAM SysEx via parameterChanged. We suppress that with _suppressEcho
+// during the bulk reset, then send one BANK_DUMP at the end — atomic,
+// no audible knob-sweep.
 // =============================================================================
 void JT8000ControllerEditor::initPatch()
 {
+    _proc._suppressEcho.store(true);
+
     for (int i = 0; i < kNumParams; ++i)
     {
         const auto& p = kAllParams[i];
@@ -559,8 +567,12 @@ void JT8000ControllerEditor::initPatch()
     }
 
     _proc.setPatchName("INIT PATCH");
-    _proc.sendAllCCsPaced();
+    _proc._suppressEcho.store(false);
 
+    // Flush the new state in one BANK_DUMP.
+    _proc.sendBankDump();
+
+    // Reset step sequencer values + push them to the firmware.
     for (auto* sec : _sections)
     {
         for (auto* grid : sec->getStepGrids())
@@ -568,8 +580,7 @@ void JT8000ControllerEditor::initPatch()
             for (int s = 0; s < StepSequencerGrid::kNumSteps; ++s)
             {
                 grid->setStepValue(s, 0, false);
-                _proc.appendPacedCC(17, s);
-                _proc.appendPacedCC(18, 0);
+                _proc.sendStepSeqEdit(s, 0);
             }
         }
     }
@@ -626,7 +637,7 @@ void JT8000ControllerEditor::showBankPicker(const juce::String& fileName)
     const int nPerfs   = static_cast<int>(_syxBank.performances.size());
     const int nOrphans = static_cast<int>(_syxBank.orphanPatches.size());
 
-    juce::String title = "Load SysEx \xe2\x80\x94 " + fileName + " \xe2\x80\x94 ";
+    juce::String title = "Load SysEx -- " + fileName + " -- ";
     if (nPerfs > 0)
         title += juce::String(nPerfs) + " perf" + (nPerfs > 1 ? "s" : "");
     if (nPerfs > 0 && nOrphans > 0)
@@ -810,6 +821,9 @@ void JT8000ControllerEditor::loadPatchFile()
             if (_proc.getPatchName().isEmpty())
                 _proc.setPatchName(file.getFileNameWithoutExtension());
 
-            _proc.sendAllCCsPaced();
+            // Phase 6: replaceState updated APVTS but didn't trigger
+            // parameterChanged callbacks. Send the new state to the
+            // firmware as one BANK_DUMP.
+            _proc.sendBankDump();
         });
 }

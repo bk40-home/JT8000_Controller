@@ -109,10 +109,28 @@ public:
                     case JP8000SyxImporter::PerfMode::Split: modeTag = "[S] "; break;
                     default:                                  modeTag = "[1] "; break;
                 }
+
+                // Build combo label: "00  [L] PerfName  (Upper / Lower)"
+                // Always show patch names so the user can identify the
+                // contents without selecting each entry first.
                 juce::String label = juce::String(i).paddedLeft('0', 2) + "  "
                     + modeTag + perf.name;
+
                 if (perf.hasDistinctLower)
-                    label += "  (" + perf.upper.name + " / " + perf.lower.name + ")";
+                {
+                    // Show both patch names, truncated to keep combo readable
+                    juce::String upper = perf.upper.name.substring(0, 14);
+                    juce::String lower = perf.lower.name.substring(0, 14);
+                    label += "  (" + upper + " / " + lower + ")";
+                }
+                else if (perf.upper.name.isNotEmpty()
+                         && perf.upper.name != perf.name)
+                {
+                    // Single patch — show its name if different from the
+                    // performance name (avoids redundant display)
+                    label += "  (" + perf.upper.name.substring(0, 18) + ")";
+                }
+
                 _perfCombo.addItem(label, i + 1);
             }
             _perfCombo.setSelectedItemIndex(0, juce::dontSendNotification);
@@ -289,11 +307,15 @@ private:
         if (idx >= 0 && idx < static_cast<int>(_bank.performances.size()))
         {
             const auto& perf = _bank.performances[static_cast<size_t>(idx)];
-            juce::String detail = "Upper: " + perf.upper.name;
+
+            // Always show the upper patch name. When layers differ, show
+            // both on the same line separated by a divider.
+            juce::String detail;
             if (perf.hasDistinctLower)
-                detail += "   Lower: " + perf.lower.name;
+                detail = "Upper: " + perf.upper.name + "   |   Lower: " + perf.lower.name;
             else
-                detail += "   (same patch on both layers)";
+                detail = "Patch: " + perf.upper.name;
+
             _perfDetailLabel.setText(detail, juce::dontSendNotification);
         }
     }
@@ -316,17 +338,17 @@ private:
     juce::Label      _perfLabel;
     juce::ComboBox   _perfCombo;
     juce::Label      _perfDetailLabel;
-    juce::TextButton _perfToABBtn  { "Perf \xe2\x86\x92 A+B" };
-    juce::TextButton _upperToABtn  { "Upper \xe2\x86\x92 A" };
-    juce::TextButton _upperToBBtn  { "Upper \xe2\x86\x92 B" };
-    juce::TextButton _lowerToABtn  { "Lower \xe2\x86\x92 A" };
-    juce::TextButton _lowerToBBtn  { "Lower \xe2\x86\x92 B" };
+    juce::TextButton _perfToABBtn  { "Perf > A+B" };
+    juce::TextButton _upperToABtn  { "Upper > A" };
+    juce::TextButton _upperToBBtn  { "Upper > B" };
+    juce::TextButton _lowerToABtn  { "Lower > A" };
+    juce::TextButton _lowerToBBtn  { "Lower > B" };
 
     // Orphan patch section
     juce::Label      _patchLabel;
     juce::ComboBox   _patchCombo;
-    juce::TextButton _patchToABtn  { "\xe2\x86\x92 A" };
-    juce::TextButton _patchToBBtn  { "\xe2\x86\x92 B" };
+    juce::TextButton _patchToABtn  { "> A" };
+    juce::TextButton _patchToBBtn  { "> B" };
     juce::TextButton _patchSendBtn { "Load + Send" };
     juce::TextButton _patchOnlyBtn { "Load Only" };
 

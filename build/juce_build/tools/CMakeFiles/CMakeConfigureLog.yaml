@@ -106,7 +106,7 @@ events:
       The output was:
       0
       MSBuild version 18.4.0+6e61e96ac for .NET Framework
-      Build started 05/04/2026 18:55:48.
+      Build started 15/05/2026 17:49:21.
       
       Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\4.3.0-rc3\\CompilerIdC\\CompilerIdC.vcxproj" on node 1 (default targets).
       PrepareForBuild:
@@ -135,7 +135,7 @@ events:
           0 Warning(s)
           0 Error(s)
       
-      Time Elapsed 00:00:00.59
+      Time Elapsed 00:00:02.14
       
       
       Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CompilerIdC.exe"
@@ -980,7 +980,7 @@ events:
       The output was:
       0
       MSBuild version 18.4.0+6e61e96ac for .NET Framework
-      Build started 05/04/2026 18:55:48.
+      Build started 15/05/2026 17:49:24.
       
       Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\4.3.0-rc3\\CompilerIdCXX\\CompilerIdCXX.vcxproj" on node 1 (default targets).
       PrepareForBuild:
@@ -1009,7 +1009,7 @@ events:
           0 Warning(s)
           0 Error(s)
       
-      Time Elapsed 00:00:00.59
+      Time Elapsed 00:00:02.20
       
       
       Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CompilerIdCXX.exe"
@@ -1434,8 +1434,8 @@ events:
     checks:
       - "Detecting C compiler ABI info"
     directories:
-      source: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-fvozt2"
-      binary: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-fvozt2"
+      source: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-ikcoxu"
+      binary: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-ikcoxu"
     cmakeVariables:
       CMAKE_CXX_STDLIB_MODULES_JSON: ""
       CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
@@ -1445,39 +1445,39 @@ events:
       variable: "CMAKE_C_ABI_COMPILED"
       cached: true
       stdout: |
-        Change Dir: 'C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-fvozt2'
+        Change Dir: 'C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-ikcoxu'
         
-        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_44a65.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_4a3e3.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
         MSBuild version 18.4.0+6e61e96ac for .NET Framework
-        Build started 05/04/2026 18:55:49.
+        Build started 15/05/2026 17:49:27.
         
-        Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-fvozt2\\cmTC_44a65.vcxproj" on node 1 (default targets).
+        Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-ikcoxu\\cmTC_4a3e3.vcxproj" on node 1 (default targets).
         PrepareForBuild:
           Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
-          Creating directory "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-fvozt2\\Debug\\".
-          Creating directory "cmTC_44a65.dir\\Debug\\cmTC_44a65.tlog\\".
+          Creating directory "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-ikcoxu\\Debug\\".
+          Creating directory "cmTC_4a3e3.dir\\Debug\\cmTC_4a3e3.tlog\\".
         InitializeBuildStatus:
-          Creating "cmTC_44a65.dir\\Debug\\cmTC_44a65.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
-          Touching "cmTC_44a65.dir\\Debug\\cmTC_44a65.tlog\\unsuccessfulbuild".
+          Creating "cmTC_4a3e3.dir\\Debug\\cmTC_4a3e3.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_4a3e3.dir\\Debug\\cmTC_4a3e3.tlog\\unsuccessfulbuild".
         ClCompile:
-          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /RTC1 /MDd /Fo"cmTC_44a65.dir\\Debug\\\\" /Fd"cmTC_44a65.dir\\Debug\\vc145.pdb" /external:W1 /TC /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCCompilerABI.c"
+          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /RTC1 /MDd /Fo"cmTC_4a3e3.dir\\Debug\\\\" /Fd"cmTC_4a3e3.dir\\Debug\\vc145.pdb" /external:W1 /TC /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCCompilerABI.c"
           Microsoft (R) C/C++ Optimizing Compiler Version 19.50.35727 for x64
           Copyright (C) Microsoft Corporation.  All rights reserved.
-          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /RTC1 /MDd /Fo"cmTC_44a65.dir\\Debug\\\\" /Fd"cmTC_44a65.dir\\Debug\\vc145.pdb" /external:W1 /TC /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCCompilerABI.c"
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /RTC1 /MDd /Fo"cmTC_4a3e3.dir\\Debug\\\\" /Fd"cmTC_4a3e3.dir\\Debug\\vc145.pdb" /external:W1 /TC /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCCompilerABI.c"
           CMakeCCompilerABI.c
         Link:
-          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-fvozt2\\Debug\\cmTC_44a65.exe" /INCREMENTAL /ILK:"cmTC_44a65.dir\\Debug\\cmTC_44a65.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-fvozt2/Debug/cmTC_44a65.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-fvozt2/Debug/cmTC_44a65.lib" /MACHINE:X64  /machine:x64 cmTC_44a65.dir\\Debug\\CMakeCCompilerABI.obj
-          cmTC_44a65.vcxproj -> C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-fvozt2\\Debug\\cmTC_44a65.exe
+          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-ikcoxu\\Debug\\cmTC_4a3e3.exe" /INCREMENTAL /ILK:"cmTC_4a3e3.dir\\Debug\\cmTC_4a3e3.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-ikcoxu/Debug/cmTC_4a3e3.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-ikcoxu/Debug/cmTC_4a3e3.lib" /MACHINE:X64  /machine:x64 cmTC_4a3e3.dir\\Debug\\CMakeCCompilerABI.obj
+          cmTC_4a3e3.vcxproj -> C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-ikcoxu\\Debug\\cmTC_4a3e3.exe
         FinalizeBuildStatus:
-          Deleting file "cmTC_44a65.dir\\Debug\\cmTC_44a65.tlog\\unsuccessfulbuild".
-          Touching "cmTC_44a65.dir\\Debug\\cmTC_44a65.tlog\\cmTC_44a65.lastbuildstate".
-        Done Building Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-fvozt2\\cmTC_44a65.vcxproj" (default targets).
+          Deleting file "cmTC_4a3e3.dir\\Debug\\cmTC_4a3e3.tlog\\unsuccessfulbuild".
+          Touching "cmTC_4a3e3.dir\\Debug\\cmTC_4a3e3.tlog\\cmTC_4a3e3.lastbuildstate".
+        Done Building Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-ikcoxu\\cmTC_4a3e3.vcxproj" (default targets).
         
         Build succeeded.
             0 Warning(s)
             0 Error(s)
         
-        Time Elapsed 00:00:00.57
+        Time Elapsed 00:00:02.14
         
       exitCode: 0
   -
@@ -1517,8 +1517,8 @@ events:
     checks:
       - "Detecting CXX compiler ABI info"
     directories:
-      source: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-0bvxoe"
-      binary: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-0bvxoe"
+      source: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-ttvvg9"
+      binary: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-ttvvg9"
     cmakeVariables:
       CMAKE_CXX_FLAGS: "/DWIN32 /D_WINDOWS /EHsc"
       CMAKE_CXX_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
@@ -1529,39 +1529,39 @@ events:
       variable: "CMAKE_CXX_ABI_COMPILED"
       cached: true
       stdout: |
-        Change Dir: 'C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-0bvxoe'
+        Change Dir: 'C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-ttvvg9'
         
-        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_8213a.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_1f1a9.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
         MSBuild version 18.4.0+6e61e96ac for .NET Framework
-        Build started 05/04/2026 18:55:50.
+        Build started 15/05/2026 17:49:30.
         
-        Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-0bvxoe\\cmTC_8213a.vcxproj" on node 1 (default targets).
+        Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-ttvvg9\\cmTC_1f1a9.vcxproj" on node 1 (default targets).
         PrepareForBuild:
           Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
-          Creating directory "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-0bvxoe\\Debug\\".
-          Creating directory "cmTC_8213a.dir\\Debug\\cmTC_8213a.tlog\\".
+          Creating directory "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-ttvvg9\\Debug\\".
+          Creating directory "cmTC_1f1a9.dir\\Debug\\cmTC_1f1a9.tlog\\".
         InitializeBuildStatus:
-          Creating "cmTC_8213a.dir\\Debug\\cmTC_8213a.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
-          Touching "cmTC_8213a.dir\\Debug\\cmTC_8213a.tlog\\unsuccessfulbuild".
+          Creating "cmTC_1f1a9.dir\\Debug\\cmTC_1f1a9.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_1f1a9.dir\\Debug\\cmTC_1f1a9.tlog\\unsuccessfulbuild".
         ClCompile:
-          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_8213a.dir\\Debug\\\\" /Fd"cmTC_8213a.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCXXCompilerABI.cpp"
+          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_1f1a9.dir\\Debug\\\\" /Fd"cmTC_1f1a9.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCXXCompilerABI.cpp"
           Microsoft (R) C/C++ Optimizing Compiler Version 19.50.35727 for x64
           Copyright (C) Microsoft Corporation.  All rights reserved.
-          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_8213a.dir\\Debug\\\\" /Fd"cmTC_8213a.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCXXCompilerABI.cpp"
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_1f1a9.dir\\Debug\\\\" /Fd"cmTC_1f1a9.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCXXCompilerABI.cpp"
           CMakeCXXCompilerABI.cpp
         Link:
-          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-0bvxoe\\Debug\\cmTC_8213a.exe" /INCREMENTAL /ILK:"cmTC_8213a.dir\\Debug\\cmTC_8213a.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-0bvxoe/Debug/cmTC_8213a.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-0bvxoe/Debug/cmTC_8213a.lib" /MACHINE:X64  /machine:x64 cmTC_8213a.dir\\Debug\\CMakeCXXCompilerABI.obj
-          cmTC_8213a.vcxproj -> C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-0bvxoe\\Debug\\cmTC_8213a.exe
+          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-ttvvg9\\Debug\\cmTC_1f1a9.exe" /INCREMENTAL /ILK:"cmTC_1f1a9.dir\\Debug\\cmTC_1f1a9.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-ttvvg9/Debug/cmTC_1f1a9.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-ttvvg9/Debug/cmTC_1f1a9.lib" /MACHINE:X64  /machine:x64 cmTC_1f1a9.dir\\Debug\\CMakeCXXCompilerABI.obj
+          cmTC_1f1a9.vcxproj -> C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-ttvvg9\\Debug\\cmTC_1f1a9.exe
         FinalizeBuildStatus:
-          Deleting file "cmTC_8213a.dir\\Debug\\cmTC_8213a.tlog\\unsuccessfulbuild".
-          Touching "cmTC_8213a.dir\\Debug\\cmTC_8213a.tlog\\cmTC_8213a.lastbuildstate".
-        Done Building Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-0bvxoe\\cmTC_8213a.vcxproj" (default targets).
+          Deleting file "cmTC_1f1a9.dir\\Debug\\cmTC_1f1a9.tlog\\unsuccessfulbuild".
+          Touching "cmTC_1f1a9.dir\\Debug\\cmTC_1f1a9.tlog\\cmTC_1f1a9.lastbuildstate".
+        Done Building Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-ttvvg9\\cmTC_1f1a9.vcxproj" (default targets).
         
         Build succeeded.
             0 Warning(s)
             0 Error(s)
         
-        Time Elapsed 00:00:00.57
+        Time Elapsed 00:00:02.17
         
       exitCode: 0
   -
@@ -1612,37 +1612,37 @@ events:
       stdout: |
         Change Dir: 'C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeTmp'
         
-        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_dd35c.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_2f509.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
         MSBuild version 18.4.0+6e61e96ac for .NET Framework
-        Build started 05/04/2026 18:55:51.
+        Build started 15/05/2026 17:49:33.
         
-        Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_dd35c.vcxproj" on node 1 (default targets).
+        Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2f509.vcxproj" on node 1 (default targets).
         PrepareForBuild:
           Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
           Creating directory "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\Debug\\".
-          Creating directory "cmTC_dd35c.dir\\Debug\\cmTC_dd35c.tlog\\".
+          Creating directory "cmTC_2f509.dir\\Debug\\cmTC_2f509.tlog\\".
         InitializeBuildStatus:
-          Creating "cmTC_dd35c.dir\\Debug\\cmTC_dd35c.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
-          Touching "cmTC_dd35c.dir\\Debug\\cmTC_dd35c.tlog\\unsuccessfulbuild".
+          Creating "cmTC_2f509.dir\\Debug\\cmTC_2f509.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_2f509.dir\\Debug\\cmTC_2f509.tlog\\unsuccessfulbuild".
         ClCompile:
-          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_dd35c.dir\\Debug\\\\" /Fd"cmTC_dd35c.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp
+          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_2f509.dir\\Debug\\\\" /Fd"cmTC_2f509.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp
           Microsoft (R) C/C++ Optimizing Compiler Version 19.50.35727 for x64
           Copyright (C) Microsoft Corporation.  All rights reserved.
-          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_dd35c.dir\\Debug\\\\" /Fd"cmTC_dd35c.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_2f509.dir\\Debug\\\\" /Fd"cmTC_2f509.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp
           juce_runtime_arch_detection.cpp
-        C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp(56,1): error C1189: #error:  JUCE_ARCH x86_64 [C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_dd35c.vcxproj]
-        Done Building Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_dd35c.vcxproj" (default targets) -- FAILED.
+        C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp(56,1): error C1189: #error:  JUCE_ARCH x86_64 [C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2f509.vcxproj]
+        Done Building Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2f509.vcxproj" (default targets) -- FAILED.
         
         Build FAILED.
         
-        "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_dd35c.vcxproj" (default target) (1) ->
+        "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2f509.vcxproj" (default target) (1) ->
         (ClCompile target) -> 
-          C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp(56,1): error C1189: #error:  JUCE_ARCH x86_64 [C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_dd35c.vcxproj]
+          C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp(56,1): error C1189: #error:  JUCE_ARCH x86_64 [C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2f509.vcxproj]
         
             0 Warning(s)
             1 Error(s)
         
-        Time Elapsed 00:00:00.36
+        Time Elapsed 00:00:01.40
         
       exitCode: 1
 ...

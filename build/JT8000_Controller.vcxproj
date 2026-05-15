@@ -324,6 +324,9 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\StepSequencerGrid.h" />
     <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\StepSequencerGrid.cpp" />
     <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\JP8000SyxImporter.h" />
+    <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\JP8000SyxImporter.cpp" />
+    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\SyxProtocol.h" />
+    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\ParamMapJuce.h" />
     <ClCompile Include="C:\Users\pcsadmin\Documents\JUCE\modules\juce_audio_processors\juce_audio_processors.cpp" />
     <ClCompile Include="C:\Users\pcsadmin\Documents\JUCE\modules\juce_gui_extra\juce_gui_extra.cpp" />
     <ClCompile Include="C:\Users\pcsadmin\Documents\JUCE\modules\juce_gui_basics\juce_gui_basics.cpp" />

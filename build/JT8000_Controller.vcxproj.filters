@@ -16,6 +16,9 @@
     <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\StepSequencerGrid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\JP8000SyxImporter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="C:\Users\pcsadmin\Documents\JUCE\modules\juce_audio_processors\juce_audio_processors.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -88,6 +91,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\JP8000SyxImporter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\SyxProtocol.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\pcsadmin\Documents\JT8000_Controller\Source\ParamMapJuce.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
