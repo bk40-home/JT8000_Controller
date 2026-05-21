@@ -5,8 +5,12 @@
  * Header bar with MIDI routing, SYX import, patch save/load, expand/collapse.
  *
  * VST3 NOTES:
- *   - MIDI In/Out selectors are only shown in standalone mode.
- *     In VST3, the host routes MIDI — manual device selection is unnecessary.
+ *   - MIDI Out selector is shown in BOTH standalone and VST3 modes.
+ *     Most VST3 hosts (including Ableton) silently drop SysEx messages
+ *     from plugin MIDI output. The direct MIDI output device bypasses
+ *     the host's MIDI routing so SysEx reaches the Teensy reliably.
+ *   - MIDI In selector is standalone-only. Incoming channel messages
+ *     (notes, CCs, pitch bend) are routed by the host in VST3 mode.
  *   - SYX patch picker uses a non-modal overlay (SyxPickerOverlay) instead
  *     of enterModalState(), which is illegal in VST3 hosts.
  *   - Incoming CCs from hardware are reflected into the APVTS by the

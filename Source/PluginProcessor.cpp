@@ -16,6 +16,7 @@
 #include "PluginEditor.h"
 #include "ParamMapJuce.h"
 #include "SyxProtocol.h"
+#include "JT8000Log.h"
 
 static const juce::Identifier kPatchNameProp("patchName");
 
@@ -256,7 +257,7 @@ void JT8000ControllerProcessor::applyIncomingCC(int cc, int value)
 // =============================================================================
 void JT8000ControllerProcessor::handleIncomingSysEx(const uint8_t* data, int length)
 {
-    if (length < (int)SyxProto::kMsgGetParamLen) return;
+    if (length < (int)SyxProto::kMsgBankDumpReqLen) return;
 
     // Validate envelope.
     if (data[0]                                 != 0xF0)              return;
@@ -266,25 +267,79 @@ void JT8000ControllerProcessor::handleIncomingSysEx(const uint8_t* data, int len
 
     const uint8_t msg = data[SyxProto::kOffsetMsgType];
 
-    if (msg != SyxProto::kMsgParamValue) return;            // ignore others
-    if (length != (int)SyxProto::kMsgParamValueLen) return;
-    if (data[length - 1] != 0xF7) return;
-
-    const uint16_t pid = SyxProto::paramIdFromBytes(
-        data[SyxProto::kOffsetPidHi], data[SyxProto::kOffsetPidLo]);
-    const float value = SyxProto::decodeFloat(&data[SyxProto::kOffsetFloat]);
-
-    // Translate ParamID -> CC -> APVTS row. Brute-force scan; cheap because
-    // it runs once per inbound PARAM_VALUE which is rare (editor-driven sync).
-    for (int i = 0; i < kNumParams; ++i)
+    // ---- PARAM_VALUE (single param echo from firmware) ----------------------
+    if (msg == SyxProto::kMsgParamValue)
     {
-        const auto& p = kAllParams[i];
-        if (ParamMapJuce::paramId14ForCC(p.cc) != pid) continue;
+        if (length != (int)SyxProto::kMsgParamValueLen) return;
+        if (data[length - 1] != 0xF7) return;
 
-        // Convert native float -> CC byte for APVTS (lossy for hi-res; OK
-        // because Phase 3 doc'd that as expected behaviour).
-        const uint8_t cc = ParamMapJuce::nativeFloatToCCByte(pid, value);
-        applyIncomingCC(p.cc, (int)cc);
+        const uint16_t pid = SyxProto::paramIdFromBytes(
+            data[SyxProto::kOffsetPidHi], data[SyxProto::kOffsetPidLo]);
+        const float value = SyxProto::decodeFloat(&data[SyxProto::kOffsetFloat]);
+
+        for (int i = 0; i < kNumParams; ++i)
+        {
+            const auto& p = kAllParams[i];
+            if (ParamMapJuce::paramId14ForCC(p.cc) != pid) continue;
+
+            const uint8_t cc = ParamMapJuce::nativeFloatToCCByte(pid, value);
+            applyIncomingCC(p.cc, (int)cc);
+            return;
+        }
+        return;
+    }
+
+    // ---- BANK_DUMP (firmware reply to our BANK_DUMP_REQUEST) ----------------
+    if (msg == SyxProto::kMsgBankDump)
+    {
+        if (length < (int)(SyxProto::kBankDumpHeaderSize + 1)) return;
+        if (data[length - 1] != 0xF7) return;
+
+        // Decode 14-bit entry count
+        const uint16_t countHi = data[SyxProto::kOffsetMsgType + 1] & 0x7F;
+        const uint16_t countLo = data[SyxProto::kOffsetMsgType + 2] & 0x7F;
+        const uint16_t entryCount = (uint16_t)((countHi << 7) | countLo);
+
+        // Validate length matches declared count
+        const int expectedLen = (int)(SyxProto::kBankDumpHeaderSize
+                              + (size_t)entryCount * SyxProto::kBankDumpEntrySize
+                              + 1);
+        if (length != expectedLen) return;
+
+        // Which layer are we syncing to? If no sync is pending, ignore the dump.
+        const uint8_t wantLayer = pendingSyncLayer.load();
+        if (wantLayer == 0xFF) return;
+
+        // Suppress echo while applying — we don't want to re-send these back
+        _suppressEcho.store(true);
+
+        const uint8_t* p = data + SyxProto::kBankDumpHeaderSize;
+        for (uint16_t i = 0; i < entryCount; ++i)
+        {
+            const uint8_t  layer = p[0];
+            const uint16_t pid   = SyxProto::paramIdFromBytes(p[1], p[2]);
+            const float    value = SyxProto::decodeFloat(&p[3]);
+            p += SyxProto::kBankDumpEntrySize;
+
+            // Only apply entries for the layer we want to display.
+            // Perf and GlobalFX scope entries are always applied (they're global).
+            const bool isPatchLayer = (layer == SyxProto::kLayerA || layer == SyxProto::kLayerB);
+            if (isPatchLayer && layer != wantLayer) continue;
+
+            // Find the CC for this ParamID and apply to APVTS
+            for (int j = 0; j < kNumParams; ++j)
+            {
+                const auto& param = kAllParams[j];
+                if (ParamMapJuce::paramId14ForCC(param.cc) != pid) continue;
+
+                const uint8_t cc = ParamMapJuce::nativeFloatToCCByte(pid, value);
+                applyIncomingCC(param.cc, (int)cc);
+                break;
+            }
+        }
+
+        _suppressEcho.store(false);
+        pendingSyncLayer.store(0xFF);   // sync complete
         return;
     }
 }
@@ -330,6 +385,11 @@ void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float n
     {
         const int idx = juce::jlimit(0, 2, juce::roundToInt(newValue));
         editTarget.store(static_cast<EditTarget>(idx));
+
+        // When switching layers, ask the firmware for the new layer's
+        // cached state so the UI reflects the correct values.
+        if (!_suppressEcho.load())
+            requestLayerSync();
     }
 
     // ---- Echo guard --------------------------------------------------------
@@ -373,6 +433,21 @@ void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float n
 
     // ---- Native float conversion + send ------------------------------------
     const float nativeValue = ParamMapJuce::ccByteToNativeFloat(pid, (uint8_t)ccVal);
+
+    // File log — first 5 param changes only to avoid flooding the log file.
+    // Enough to confirm the callback fires and reaches the send call.
+    static int logCount = 0;
+    if (logCount < 5)
+    {
+        JT8000Log::write("[ParamChg] " + id + " CC=" + juce::String(p->cc)
+            + " pid=0x" + juce::String::toHexString((int)pid)
+            + " layer=0x" + juce::String::toHexString((int)layer)
+            + " ccVal=" + juce::String(ccVal)
+            + " native=" + juce::String(nativeValue));
+        ++logCount;
+        if (logCount == 5)
+            JT8000Log::write("[ParamChg] (further entries suppressed)");
+    }
 
     DBG("[ParamChg] " << id << " CC=" << p->cc << " pid=0x"
         << juce::String::toHexString((int)pid) << " layer=0x"
@@ -433,7 +508,7 @@ void JT8000ControllerProcessor::sendStepSeqEdit(int step, int value)
 
 // =============================================================================
 // queueSysEx — push a fully-formed SysEx message (F0..F7) onto the FIFO and
-// (in standalone) emit it directly to the MIDI output device.
+// emit it directly to the MIDI output device (if one is open).
 // =============================================================================
 void JT8000ControllerProcessor::queueSysEx(const uint8_t* data, int len)
 {
@@ -443,10 +518,22 @@ void JT8000ControllerProcessor::queueSysEx(const uint8_t* data, int len)
         return;
     }
 
-    // Standalone direct-out path: build a juce::MidiMessage. SysEx
-    // constructor expects the bytes BETWEEN F0/F7 (it adds them itself).
+    // Direct-out path: bypasses host MIDI bus. Essential in VST3 where
+    // hosts silently drop SysEx from processBlock output.
     {
         const juce::ScopedLock sl(midiOutLock);
+
+        // File log — first 5 calls only to avoid flooding.
+        static int logCount = 0;
+        if (logCount < 5)
+        {
+            JT8000Log::write("[queueSysEx] len=" + juce::String(len)
+                + " directMidiOut=" + juce::String(directMidiOut != nullptr ? "YES" : "NO"));
+            ++logCount;
+            if (logCount == 5)
+                JT8000Log::write("[queueSysEx] (further entries suppressed)");
+        }
+
         if (directMidiOut != nullptr)
         {
             if (len >= 2 && data[0] == 0xF0 && data[len - 1] == 0xF7)
@@ -612,6 +699,47 @@ void JT8000ControllerProcessor::sendBankDump()
 }
 
 // =============================================================================
+// sendBankDumpRequest — ask the firmware for its current per-layer state
+//
+// Sends a 7-byte BANK_DUMP_REQUEST. The firmware replies with a BANK_DUMP
+// containing one entry per cached param, with explicit layer bytes (kLayerA,
+// kLayerB, kLayerPerf, kLayerGlobalFx). The incoming BANK_DUMP handler
+// filters entries for the pendingSyncLayer and updates APVTS accordingly.
+// =============================================================================
+void JT8000ControllerProcessor::sendBankDumpRequest()
+{
+    uint8_t buf[SyxProto::kMsgBankDumpReqLen];
+    buf[0]                          = 0xF0;
+    buf[SyxProto::kOffsetMfrId]     = SyxProto::kMfrId;
+    buf[SyxProto::kOffsetSubIdJ]    = SyxProto::kSubIdJ;
+    buf[SyxProto::kOffsetSubIdT]    = SyxProto::kSubIdT;
+    buf[SyxProto::kOffsetDeviceId]  = SyxProto::kDeviceDefault;
+    buf[SyxProto::kOffsetMsgType]   = SyxProto::kMsgBankDumpRequest;
+    buf[SyxProto::kMsgBankDumpReqLen - 1] = 0xF7;
+
+    queueSysEx(buf, (int)SyxProto::kMsgBankDumpReqLen);
+}
+
+// =============================================================================
+// requestLayerSync — trigger a state refresh from the firmware for the
+// currently selected edit target layer.
+//
+// Called when the user switches editTarget (A/B/Both). Records which layer
+// to filter for in the incoming BANK_DUMP, then sends the request. The
+// reply arrives asynchronously via handleIncomingSysEx.
+// =============================================================================
+void JT8000ControllerProcessor::requestLayerSync()
+{
+    switch (editTarget.load())
+    {
+        case EditTarget::LayerA: pendingSyncLayer.store(SyxProto::kLayerA); break;
+        case EditTarget::LayerB: pendingSyncLayer.store(SyxProto::kLayerB); break;
+        default:                 pendingSyncLayer.store(SyxProto::kLayerA); break;
+    }
+    sendBankDumpRequest();
+}
+
+// =============================================================================
 // Note / Pitch helpers — unchanged. These ride on the per-slot FIFO too, but
 // MidiMessage's raw-bytes constructor handles 3-byte messages fine in slots
 // sized for 16-byte SysEx. The unused trailing bytes in the slot don't matter
@@ -636,11 +764,16 @@ void JT8000ControllerProcessor::sendPitchWheel(int channel, int value)
 }
 
 // =============================================================================
-// MIDI output device (standalone) — unchanged
+// MIDI output device — used in both standalone and VST3 modes.
+// In VST3, direct output bypasses the host's MIDI bus (which drops SysEx).
 // =============================================================================
 void JT8000ControllerProcessor::setMidiOutput(std::unique_ptr<juce::MidiOutput> output)
 {
     const juce::ScopedLock sl(midiOutLock);
+    if (output != nullptr)
+        JT8000Log::write("[Processor] directMidiOut set: " + output->getName());
+    else
+        JT8000Log::write("[Processor] directMidiOut cleared");
     directMidiOut = std::move(output);
 }
 

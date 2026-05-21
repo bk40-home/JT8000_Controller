@@ -152,6 +152,19 @@ void SectionComponent::addStepGrid(std::function<void(int,int)> sendCCPair)
 }
 
 // -----------------------------------------------------------------------
+// addEnvelope — visual ADSR editor with draggable dots
+// -----------------------------------------------------------------------
+void SectionComponent::addEnvelope(juce::AudioProcessorValueTreeState& apvts,
+                                   JuceEnvFlavour flavour)
+{
+    auto* env = _envelopes.add(new EnvelopeDisplay(apvts, flavour));
+    addAndMakeVisible(env);
+
+    // Full width, 140px tall (room for value labels + shape + param labels)
+    _controls.push_back({ env, 580, 140, nullptr, false });
+}
+
+// -----------------------------------------------------------------------
 // setOpen
 // -----------------------------------------------------------------------
 void SectionComponent::setOpen(bool open)

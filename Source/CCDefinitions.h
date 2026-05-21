@@ -82,13 +82,13 @@ static const char* sectionNames[] = {
 // Sections sharing the same non-negative row number are placed side by side.
 static const int sectionRow[] = {
     -1, -1, -1, -1,        // OSC1, OSC2, MIXER, FILTER
-     0,  0,  0,            // AMP_ENV, FILTER_ENV, PITCH_ENV
+    -1, -1, -1,            // AMP_ENV, FILTER_ENV, PITCH_ENV (full width for envelope display)
     -1, -1,                // LFO1, LFO2
-     1,  1,                // FX_EQ, FX_MOD
-     2,  2,                // FX_DELAY, FX_REVERB
-     3,  3,  3,            // FX_OUTPUT, VELOCITY, PERFORMANCE
+     0,  0,                // FX_EQ, FX_MOD
+     1,  1,                // FX_DELAY, FX_REVERB
+     2,  2,  2,            // FX_OUTPUT, VELOCITY, PERFORMANCE
     -1, -1,                // BPM, STEP_SEQ
-    4,                     // VOICE_MODE
+    3,                     // VOICE_MODE
     -1,                    // PERFORMANCE_GLOBAL (ignored by section builder)
 };
 
@@ -333,7 +333,6 @@ static const CCParam kAllParams[] =
     // === FILTER ===
     { 23,  "flt_cut",        "Cutoff",          Section::FILTER,   127, KNOB },
     { 24,  "flt_res",        "Resonance",       Section::FILTER,   0,   KNOB },
-    { 48,  "flt_env",        "Flt Env Amt",     Section::FILTER,   64,  KNOB },
     { 50,  "flt_key",        "Key Track",       Section::FILTER,   64,  KNOB },
     { 84,  "flt_oct",        "Oct Ctrl",        Section::FILTER,   0,   KNOB },
     { 113, "flt_engine",     "Engine",          Section::FILTER,   1,   COMBO_LUT(kFltEngNames, 2, kMidpointLUT) },
@@ -344,23 +343,33 @@ static const CCParam kAllParams[] =
     { 114, "flt_xp",         "Xpander Mode",    Section::FILTER,   0,   COMBO(kXpModeNames, 15) },
 
     // === AMP ENV ===
-    { 25,  "amp_a",  "Atk",   Section::AMP_ENV,    0,   VSLIDER },
-    { 26,  "amp_d",  "Dec",   Section::AMP_ENV,    0,   VSLIDER },
-    { 27,  "amp_s",  "Sus",   Section::AMP_ENV,    127, VSLIDER },
-    { 28,  "amp_r",  "Rel",   Section::AMP_ENV,    0,   VSLIDER },
+    { 25,  "amp_a",       "Atk",       Section::AMP_ENV,    0,   VSLIDER },
+    { 147, "amp_atk_crv", "Atk Curve", Section::AMP_ENV,    64,  VSLIDER },
+    { 26,  "amp_d",       "Dec",       Section::AMP_ENV,    0,   VSLIDER },
+    { 148, "amp_dec_crv", "Dec Curve", Section::AMP_ENV,    64,  VSLIDER },
+    { 27,  "amp_s",       "Sus",       Section::AMP_ENV,    127, VSLIDER },
+    { 28,  "amp_r",       "Rel",       Section::AMP_ENV,    0,   VSLIDER },
+    { 149, "amp_rel_crv", "Rel Curve", Section::AMP_ENV,    64,  VSLIDER },
 
     // === FILTER ENV ===
-    { 29,  "fe_a",   "Atk",   Section::FILTER_ENV, 0,   VSLIDER },
-    { 30,  "fe_d",   "Dec",   Section::FILTER_ENV, 0,   VSLIDER },
-    { 31,  "fe_s",   "Sus",   Section::FILTER_ENV, 127, VSLIDER },
-    { 32,  "fe_r",   "Rel",   Section::FILTER_ENV, 0,   VSLIDER },
+    { 29,  "fe_a",        "Atk",       Section::FILTER_ENV, 0,   VSLIDER },
+    { 150, "fe_atk_crv",  "Atk Curve", Section::FILTER_ENV, 64,  VSLIDER },
+    { 30,  "fe_d",        "Dec",       Section::FILTER_ENV, 0,   VSLIDER },
+    { 151, "fe_dec_crv",  "Dec Curve", Section::FILTER_ENV, 64,  VSLIDER },
+    { 31,  "fe_s",        "Sus",       Section::FILTER_ENV, 127, VSLIDER },
+    { 48,  "flt_env",     "Env Amt",   Section::FILTER_ENV, 64,  VSLIDER },
+    { 32,  "fe_r",        "Rel",       Section::FILTER_ENV, 0,   VSLIDER },
+    { 152, "fe_rel_crv",  "Rel Curve", Section::FILTER_ENV, 64,  VSLIDER },
 
     // === PITCH ENV ===
-    { 65,  "pe_a",     "Atk",       Section::PITCH_ENV, 0,   VSLIDER },
-    { 66,  "pe_d",     "Dec",       Section::PITCH_ENV, 0,   VSLIDER },
-    { 67,  "pe_s",     "Sus",       Section::PITCH_ENV, 0,   VSLIDER },
-    { 68,  "pe_r",     "Rel",       Section::PITCH_ENV, 0,   VSLIDER },
-    { 69,  "pe_depth", "Depth",     Section::PITCH_ENV, 64,  KNOB },
+    { 65,  "pe_a",        "Atk",       Section::PITCH_ENV, 0,   VSLIDER },
+    { 153, "pe_atk_crv",  "Atk Curve", Section::PITCH_ENV, 64,  VSLIDER },
+    { 66,  "pe_d",        "Dec",       Section::PITCH_ENV, 0,   VSLIDER },
+    { 154, "pe_dec_crv",  "Dec Curve", Section::PITCH_ENV, 64,  VSLIDER },
+    { 67,  "pe_s",        "Sus",       Section::PITCH_ENV, 0,   VSLIDER },
+    { 69,  "pe_depth",    "Depth",     Section::PITCH_ENV, 64,  VSLIDER },
+    { 68,  "pe_r",        "Rel",       Section::PITCH_ENV, 0,   VSLIDER },
+    { 155, "pe_rel_crv",  "Rel Curve", Section::PITCH_ENV, 64,  VSLIDER },
 
     // === LFO 1 ===
     { 62,  "l1_wave",  "LFO1 Wave",    Section::LFO1, 0,  COMBO(kLfoWaveNames, 13) },

@@ -12,6 +12,7 @@ JT8000_Controller/
     SectionComponent.h/.cpp   ← Collapsible section panel (knobs, sliders, combos)
     KnobComponent.h/.cpp      ← Custom rotary knob drawing (arc + dot)
     SliderComponent.h/.cpp    ← Custom vertical fader drawing (track + scale + thumb)
+    Envelopedisplay.h/.cpp    ← Custom vertical fader drawing (track + scale + thumb)
 ```
 
 ## How it all connects

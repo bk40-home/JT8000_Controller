@@ -46,7 +46,7 @@ namespace HiResIds {
 }
 
 // -----------------------------------------------------------------------------
-// paramId14ForCC — map a CC number (0..146) to its 14-bit ParamID.
+// paramId14ForCC — map a CC number (0..155) to its 14-bit ParamID.
 //
 // Source of truth: firmware ParamMap.cpp. Kept in lock-step. Returns 0
 // (sentinel) for any CC that doesn't map (CC 0 is reserved as "no param" so
@@ -95,14 +95,17 @@ inline uint16_t paramId14ForCC(int cc)
         // 0x05XX — Amp envelope
         case 25:  return 0x0500;  case 26:  return 0x0501;
         case 27:  return 0x0502;  case 28:  return 0x0503;
+        case 147: return 0x0504;  case 148: return 0x0505;  case 149: return 0x0506;
 
         // 0x06XX — Filter envelope
         case 29:  return 0x0600;  case 30:  return 0x0601;
         case 31:  return 0x0602;  case 32:  return 0x0603;
+        case 150: return 0x0604;  case 151: return 0x0605;  case 152: return 0x0606;
 
         // 0x07XX — Pitch envelope
         case 65:  return 0x0700;  case 66:  return 0x0701;
         case 67:  return 0x0702;  case 68:  return 0x0703;  case 69: return 0x0704;
+        case 153: return 0x0705;  case 154: return 0x0706;  case 155: return 0x0707;
 
         // 0x08XX — LFO 1
         case 54:  return 0x0800;  case 55:  return 0x0801;

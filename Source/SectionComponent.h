@@ -17,6 +17,7 @@
 #include "CCDefinitions.h"
 #include "JT8000LookAndFeel.h"
 #include "StepSequencerGrid.h"
+#include "EnvelopeDisplay.h"
 
 class SectionComponent : public juce::Component
 {
@@ -30,6 +31,8 @@ public:
     void addComboBox(juce::AudioProcessorValueTreeState& apvts, const CCParam& param);
     void addToggle(juce::AudioProcessorValueTreeState& apvts, const CCParam& param);
     void addStepGrid(std::function<void(int,int)> sendCCPair);
+    void addEnvelope(juce::AudioProcessorValueTreeState& apvts,
+                     JuceEnvFlavour flavour);
 
     /* Access step grids for Send All */
     const juce::OwnedArray<StepSequencerGrid>& getStepGrids() const { return _stepGrids; }
@@ -61,6 +64,7 @@ private:
     juce::OwnedArray<juce::ToggleButton>  _toggles;
     juce::OwnedArray<juce::Label>         _labels;
     juce::OwnedArray<StepSequencerGrid>   _stepGrids;
+    juce::OwnedArray<EnvelopeDisplay>      _envelopes;
 
     // Attachments — must outlive the widgets they bind
     juce::OwnedArray<juce::AudioProcessorValueTreeState::SliderAttachment>   _sliderAtts;

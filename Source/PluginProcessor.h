@@ -88,6 +88,12 @@ public:
     std::atomic<int>         channelB   { 1 };
     std::atomic<EditTarget>  editTarget { EditTarget::LayerA };
 
+    // When a BANK_DUMP_REQUEST is in flight, this records which layer's
+    // values should be applied to APVTS when the reply arrives.
+    // 0xFF = no sync pending. Set by requestLayerSync(), cleared by the
+    // incoming BANK_DUMP handler.
+    std::atomic<uint8_t>     pendingSyncLayer { 0xFF };
+
     void setMidiOutput(std::unique_ptr<juce::MidiOutput> output);
 
     // =========================================================================
@@ -102,6 +108,16 @@ public:
     // Used by JP8000SyxImporter::loadPatch for atomic preset loading. The
     // firmware applies the whole dump under AudioNoInterrupts.
     void sendBankDump();
+
+    // Request a BANK_DUMP from the firmware (7-byte BANK_DUMP_REQUEST).
+    // The firmware replies with a full per-layer state dump that the plugin
+    // parses in handleIncomingSysEx to update APVTS with the requested
+    // layer's values.
+    void sendBankDumpRequest();
+
+    // Called when editTarget changes. Sends a BANK_DUMP_REQUEST to the
+    // firmware so the UI can show the newly-selected layer's actual values.
+    void requestLayerSync();
 
     // Step sequencer atomic edit — two SET_PARAMs back-to-back (Step Select
     // 0x0E10, then Step Value 0x0E11). Called by PluginEditor's grid handler

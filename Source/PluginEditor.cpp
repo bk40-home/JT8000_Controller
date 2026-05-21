@@ -327,6 +327,15 @@ void JT8000ControllerEditor::buildSections()
         _contentPanel.addAndMakeVisible(sec);
     }
 
+    // Add visual envelope displays to their sections FIRST so they appear
+    // at the top, with the knobs flowing below for fine control.
+    _sections[static_cast<int>(Section::AMP_ENV)]
+        ->addEnvelope(_proc.apvts, JuceEnvFlavour::AMP);
+    _sections[static_cast<int>(Section::FILTER_ENV)]
+        ->addEnvelope(_proc.apvts, JuceEnvFlavour::FILTER);
+    _sections[static_cast<int>(Section::PITCH_ENV)]
+        ->addEnvelope(_proc.apvts, JuceEnvFlavour::PITCH);
+
     for (int i = 0; i < kNumParams; ++i)
     {
         const auto& p = kAllParams[i];
@@ -347,8 +356,6 @@ void JT8000ControllerEditor::buildSections()
             case ControlStyle::Toggle: sec->addToggle(_proc.apvts, p);   break;
             case ControlStyle::StepGrid:
                 sec->addStepGrid([this](int step, int value) {
-                    // Phase 6: atomic step edit via SysEx — two SET_PARAMs
-                    // back-to-back (Step Select 0x0E10, Step Value 0x0E11).
                     _proc.sendStepSeqEdit(step, value);
                 });
                 break;

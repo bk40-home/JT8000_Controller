@@ -96,8 +96,8 @@ static constexpr size_t kMsgGetParamLen     = 10;
 static constexpr size_t kMsgParamValueLen   = 15;
 static constexpr size_t kMsgBankDumpReqLen  = 7;
 static constexpr size_t kBankDumpEntrySize  = 8; // layer + pid(2) + float(5)
-static constexpr size_t kBankDumpHeaderSize = 6  // F0 + envelope(5) + msg
-                                            + 2; // 2-byte count
+static constexpr size_t kBankDumpHeaderSize = 6  // F0(1) + MfrId(1) + SubIdJ(1) + SubIdT(1) + DeviceId(1) + MsgType(1)
+                                            + 2; // count_hi + count_lo
 // Reserve space for the largest possible bank dump. With ~138 ParamIDs ×
 // at most 2 layers (engine-scope) we cap at 256 entries safely.
 static constexpr size_t kBankDumpMaxEntries = 256;

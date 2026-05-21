@@ -738,7 +738,17 @@ void loadPerformance(JT8000ControllerProcessor& proc,
     // user edits land where the UI is showing.
     proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerB);
 
-    proc.setPatchName(perf.name);
+    // Show the performance name with sub-patch names in the LCD.
+    // For dual-layer: "PerfName (Upper / Lower)"
+    // For single: just "PerfName (PatchName)" if the patch name differs
+    juce::String displayName = perf.name;
+    if (perf.hasDistinctLower)
+        displayName += " (" + perf.upper.name.substring(0, 12)
+                     + " / " + perf.lower.name.substring(0, 12) + ")";
+    else if (perf.upper.name.isNotEmpty() && perf.upper.name != perf.name)
+        displayName += " (" + perf.upper.name + ")";
+
+    proc.setPatchName(displayName);
 }
 
 } // namespace JP8000SyxImporter
