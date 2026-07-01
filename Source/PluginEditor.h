@@ -50,7 +50,10 @@ private:
     juce::Label     _titleLabel;
     juce::Label     _patchNameLabel;
     juce::ComboBox  _midiOutSelector;
-    juce::ComboBox  _midiInSelector;
+    juce::TextButton _midiInButton { "MIDI In" };   // opens a tickable device
+                                                    // menu (multi-select). Was a
+                                                    // ComboBox; multi-input needs
+                                                    // checkable items.
 
     // ---- Perf-Global header controls (Phase 2) ----------------------------
     // Rendered on the third header row. Bound to APVTS params (CCs 140..146)
@@ -86,7 +89,7 @@ private:
     void buildSections();
     void layoutSections();
     void refreshMidiOutputList();
-    void refreshMidiInputList();
+    void showMidiInputMenu();      // pops the tickable multi-select device menu
 
     void loadSyxFile();
     void showBankPicker(const juce::String& fileName);

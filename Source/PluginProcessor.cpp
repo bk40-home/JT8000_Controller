@@ -144,6 +144,41 @@ void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         }
     }
 
+    // =========================================================================
+    // Host MIDI-bus drain (FALLBACK transport only).
+    //
+    // When a direct MIDI output device is open, queueSysEx/sendBankDump send
+    // immediately and never populate the FIFO or bigOutBuf, so both drains
+    // below are no-ops. They carry SysEx only when no direct device is
+    // selected (and for hosts that DO accept SysEx on the bus).
+    //
+    // Per-message timestamp: every emitted message gets a distinct, increasing
+    // sample position (clamped to the block) rather than one shared value.
+    // Some hosts coalesce or drop multiple SysEx sharing a timestamp; a BANK
+    // burst of SET_PARAMs is exactly that case. numSamples-1 is the last valid
+    // slot; we never exceed it.
+    // =========================================================================
+    const int lastSample = juce::jmax(0, buffer.getNumSamples() - 1);
+    int       nextPos     = filtered.isEmpty() ? 0
+                                               : juce::jmin(lastSample,
+                                                            filtered.getLastEventTime());
+
+    auto emitSysEx = [&](const uint8_t* d, int n)
+    {
+        if (n >= 2 && d[0] == 0xF0 && d[n - 1] == 0xF7)
+        {
+            // createSysExMessage takes the BODY (between F0 and F7).
+            filtered.addEvent(juce::MidiMessage::createSysExMessage(d + 1, n - 2),
+                              nextPos);
+        }
+        else
+        {
+            // Short raw message (e.g. note / pitch-bend forwarded via FIFO).
+            filtered.addEvent(juce::MidiMessage(d, n), nextPos);
+        }
+        if (nextPos < lastSample) ++nextPos;   // advance, but stay in-block
+    };
+
     // --- Drain per-param SysEx FIFO ----------------------------------------
     const int ready = fifo.getNumReady();
     if (ready > 0)
@@ -151,38 +186,11 @@ void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         int s1, sz1, s2, sz2;
         fifo.prepareToRead(ready, s1, sz1, s2, sz2);
 
-        const int samplePos = filtered.isEmpty()
-                            ? 0
-                            : filtered.getLastEventTime();
+        for (int i = s1; i < s1 + sz1; ++i)
+            emitSysEx(messageBuffer[i].data, (int)messageBuffer[i].numBytes);
+        for (int i = s2; i < s2 + sz2; ++i)
+            emitSysEx(messageBuffer[i].data, (int)messageBuffer[i].numBytes);
 
-        auto emitRange = [&](int start, int count)
-        {
-            for (int i = start; i < start + count; ++i)
-            {
-                const auto& slot = messageBuffer[i];
-
-                // SysEx messages need explicit construction. JUCE's
-                // createSysExMessage takes the BODY (between F0 and F7) and
-                // adds the envelope itself. Short messages (notes/PB) use
-                // the raw-data constructor.
-                if (slot.numBytes >= 2 && slot.data[0] == 0xF0
-                                       && slot.data[slot.numBytes - 1] == 0xF7)
-                {
-                    auto msg = juce::MidiMessage::createSysExMessage(
-                        slot.data + 1, (int)slot.numBytes - 2);
-                    filtered.addEvent(msg, samplePos);
-                }
-                else
-                {
-                    filtered.addEvent(
-                        juce::MidiMessage(slot.data, (int)slot.numBytes),
-                        samplePos);
-                }
-            }
-        };
-
-        emitRange(s1, sz1);
-        emitRange(s2, sz2);
         fifo.finishedRead(ready);
     }
 
@@ -198,17 +206,7 @@ void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         }
 
         if (snapshot.size() >= 2)
-        {
-            const auto* d = snapshot.getRawDataPointer();
-            const int   n = snapshot.size();
-            if (d[0] == 0xF0 && d[n - 1] == 0xF7)
-            {
-                const int samplePos = filtered.isEmpty() ? 0
-                                                         : filtered.getLastEventTime();
-                auto msg = juce::MidiMessage::createSysExMessage(d + 1, n - 2);
-                filtered.addEvent(msg, samplePos);
-            }
-        }
+            emitSysEx(snapshot.getRawDataPointer(), snapshot.size());
     }
 
     midiMessages.swapWith(filtered);
@@ -507,8 +505,18 @@ void JT8000ControllerProcessor::sendStepSeqEdit(int step, int value)
 }
 
 // =============================================================================
-// queueSysEx — push a fully-formed SysEx message (F0..F7) onto the FIFO and
-// emit it directly to the MIDI output device (if one is open).
+// queueSysEx — emit one fully-formed SysEx message (F0..F7).
+//
+// TRANSPORT SELECTION (mutually exclusive):
+//   - If a direct MIDI output device is open (any wrapper type), send it
+//     immediately and RETURN. The per-param FIFO is left untouched, so
+//     processBlock does no SysEx work — the host MIDI bus carries nothing.
+//   - If no direct device is open, fall back to the host MIDI bus: push the
+//     message onto the FIFO for processBlock to drain into midiMessages.
+//
+// This prevents the double-send that would otherwise occur in a VST3 where
+// both a direct device AND host-bus routing are active. directMidiOut is the
+// primary transport because stock JUCE drops outgoing SysEx on the VST3 bus.
 // =============================================================================
 void JT8000ControllerProcessor::queueSysEx(const uint8_t* data, int len)
 {
@@ -518,8 +526,6 @@ void JT8000ControllerProcessor::queueSysEx(const uint8_t* data, int len)
         return;
     }
 
-    // Direct-out path: bypasses host MIDI bus. Essential in VST3 where
-    // hosts silently drop SysEx from processBlock output.
     {
         const juce::ScopedLock sl(midiOutLock);
 
@@ -542,13 +548,11 @@ void JT8000ControllerProcessor::queueSysEx(const uint8_t* data, int len)
                 directMidiOut->sendMessageNow(msg);
                 DBG("[queueSysEx] sent direct " << len << " bytes");
             }
-        }
-        else
-        {
-            DBG("[queueSysEx] no directMidiOut — relying on FIFO drain");
+            return;   // direct device is exclusive — do NOT also queue to the bus
         }
     }
 
+    // Fallback: no direct device — hand to the host MIDI bus via the FIFO.
     int s1, sz1, s2, sz2;
     fifo.prepareToWrite(1, s1, sz1, s2, sz2);
     if (sz1 > 0)
@@ -678,7 +682,9 @@ void JT8000ControllerProcessor::sendBankDump()
     // Trailer.
     put(0xF7);
 
-    // Standalone direct-out path
+    // TRANSPORT SELECTION — same mutual exclusion as queueSysEx:
+    //   direct device open  -> send now, skip the bus handoff
+    //   no direct device     -> hand to bigOutBuf for processBlock to flush
     {
         const juce::ScopedLock sl(midiOutLock);
         if (directMidiOut != nullptr)
@@ -687,10 +693,12 @@ void JT8000ControllerProcessor::sendBankDump()
             auto msg = juce::MidiMessage::createSysExMessage(
                 buf.getRawDataPointer() + 1, buf.size() - 2);
             directMidiOut->sendMessageNow(msg);
+            return;   // direct device is exclusive — do NOT also queue to the bus
         }
     }
 
-    // VST host path: hand off via bigOutBuf for the audio thread to flush.
+    // Fallback: no direct device — hand off via bigOutBuf for the audio
+    // thread (processBlock) to flush onto the host MIDI bus.
     {
         const juce::ScopedLock sl(bigOutLock);
         bigOutBuf = buf;
@@ -771,9 +779,18 @@ void JT8000ControllerProcessor::setMidiOutput(std::unique_ptr<juce::MidiOutput> 
 {
     const juce::ScopedLock sl(midiOutLock);
     if (output != nullptr)
+    {
+        directMidiOutId = output->getIdentifier();   // remember which device is
+                                                      // the Teensy, so the input
+                                                      // router can mark it
+                                                      // listen-only (Auto rule).
         JT8000Log::write("[Processor] directMidiOut set: " + output->getName());
+    }
     else
+    {
+        directMidiOutId.clear();
         JT8000Log::write("[Processor] directMidiOut cleared");
+    }
     directMidiOut = std::move(output);
 }
 
@@ -791,66 +808,164 @@ void JT8000ControllerProcessor::setPatchName(const juce::String& name)
 }
 
 // =============================================================================
-// MIDI input device (standalone) — unchanged
+// MIDI input devices (standalone, multi-input)
+//
+// openMidiInputs() opens exactly the requested set and closes everything not
+// in it (idempotent — safe to call on every checklist change). The legacy
+// single-device methods are thin wrappers so older callers still compile.
 // =============================================================================
+void JT8000ControllerProcessor::openMidiInputs(const juce::StringArray& ids)
+{
+    const juce::ScopedLock sl(midiInLock);
+
+    // Close devices that are no longer requested.
+    for (int i = midiInputDevices.size(); --i >= 0;)
+    {
+        if (! ids.contains(midiInputDevices[i]->getIdentifier()))
+        {
+            midiInputDevices[i]->stop();
+            midiInputDevices.remove(i);   // OwnedArray deletes the device
+        }
+    }
+
+    // Open devices that are newly requested (skip any already open).
+    for (const auto& id : ids)
+    {
+        if (id.isEmpty()) continue;
+
+        bool alreadyOpen = false;
+        for (auto* d : midiInputDevices)
+            if (d->getIdentifier() == id) { alreadyOpen = true; break; }
+        if (alreadyOpen) continue;
+
+        if (auto device = juce::MidiInput::openDevice(id, this))
+        {
+            device->start();
+            midiInputDevices.add(device.release());
+        }
+    }
+}
+
+bool JT8000ControllerProcessor::isMidiInputOpen(const juce::String& id) const
+{
+    const juce::ScopedLock sl(const_cast<juce::CriticalSection&>(midiInLock));
+    for (auto* d : midiInputDevices)
+        if (d->getIdentifier() == id) return true;
+    return false;
+}
+
+// --- Legacy single-device wrappers ------------------------------------------
 void JT8000ControllerProcessor::openMidiInput(const juce::String& deviceIdentifier)
 {
-    closeMidiInput();
-    if (deviceIdentifier.isEmpty()) return;
-
-    auto device = juce::MidiInput::openDevice(deviceIdentifier, this);
-    if (device != nullptr)
-    {
-        device->start();
-        const juce::ScopedLock sl(midiInLock);
-        midiInputDevice = std::move(device);
-        midiInputId = deviceIdentifier;
-    }
+    openMidiInputs(deviceIdentifier.isEmpty() ? juce::StringArray()
+                                              : juce::StringArray(deviceIdentifier));
 }
 
 void JT8000ControllerProcessor::closeMidiInput()
 {
-    const juce::ScopedLock sl(midiInLock);
-    if (midiInputDevice != nullptr)
-    {
-        midiInputDevice->stop();
-        midiInputDevice.reset();
-    }
-    midiInputId.clear();
+    openMidiInputs({});   // open the empty set => close everything
 }
 
 juce::String JT8000ControllerProcessor::getActiveMidiInputId() const
 {
     const juce::ScopedLock sl(const_cast<juce::CriticalSection&>(midiInLock));
-    return midiInputId;
+    return midiInputDevices.isEmpty() ? juce::String()
+                                      : midiInputDevices.getFirst()->getIdentifier();
 }
 
 // =============================================================================
-// handleIncomingMidiMessage — standalone MIDI input callback
-//
-// Same semantics as previous phases: incoming CCs reflect into APVTS;
-// SysEx PARAM_VALUE replies reflect via handleIncomingSysEx. Notes/pitch
-// bend etc. don't apply to the controller plugin's standalone-input path
-// (we only track CCs for state sync).
+// forwardToTeensy — send a short performance message out the direct port.
+// No-op if no direct device is open. Locks midiOutLock (same as queueSysEx).
 // =============================================================================
-void JT8000ControllerProcessor::handleIncomingMidiMessage(juce::MidiInput*,
+void JT8000ControllerProcessor::forwardToTeensy(const juce::MidiMessage& msg)
+{
+    const juce::ScopedLock sl(midiOutLock);
+    if (directMidiOut != nullptr)
+        directMidiOut->sendMessageNow(msg);
+}
+
+// =============================================================================
+// handleIncomingMidiMessage — standalone MIDI input router
+//
+// Dispatch by source identity (the Auto no-feedback rule):
+//   - source == the open MIDI-OUT device (the Teensy)  -> LISTEN-ONLY.
+//         Its CC/SysEx replies sync the UI; nothing is forwarded, so the
+//         Teensy can never echo its own messages back to itself.
+//   - any other source (a controller)                  -> FORWARD.
+//         Performance MIDI (notes, PB, aftertouch, PC, non-param CCs) is
+//         forwarded raw to the Teensy. A CC that maps to a plugin param is
+//         instead reflected into the APVTS (UI tracks the knob); the normal
+//         SET_PARAM SysEx path then carries the value to the Teensy, and the
+//         redundant raw CC is suppressed so the param isn't sent twice.
+//
+// Reading directMidiOutId here takes midiOutLock briefly; MIDI callbacks are
+// not the audio thread, so this is safe.
+// =============================================================================
+void JT8000ControllerProcessor::handleIncomingMidiMessage(juce::MidiInput* source,
                                                           const juce::MidiMessage& msg)
 {
+    // Determine role: is this message from the Teensy (listen-only) device?
+    bool fromTeensy = false;
+    {
+        const juce::ScopedLock sl(midiOutLock);
+        fromTeensy = (source != nullptr)
+                  && directMidiOutId.isNotEmpty()
+                  && (source->getIdentifier() == directMidiOutId);
+    }
+
     if (msg.isController())
     {
-        applyIncomingCC(msg.getControllerNumber(), msg.getControllerValue());
+        const int cc = msg.getControllerNumber();
+
+        // Does this CC map to a plugin parameter?
+        const bool isParamCC = (findParamByCC(cc) != nullptr);
+
+        if (isParamCC)
+        {
+            // Reflect into APVTS (UI + SysEx round-trip). This covers both the
+            // Teensy listen-only case and the controller case. For a controller
+            // we deliberately do NOT also forward the raw CC: the SET_PARAM
+            // SysEx fired by the APVTS change is the canonical path, keeping
+            // parameter edits on the SysEx wire (not the CC wire we moved off).
+            applyIncomingCC(cc, msg.getControllerValue());
+        }
+        else if (! fromTeensy)
+        {
+            // Non-param CC (mod=1, sustain=64, expression=11, ...) from a
+            // controller: forward raw — these are performance controls the
+            // firmware handles natively and have no SysEx equivalent.
+            forwardToTeensy(msg);
+        }
+        // Non-param CC from the Teensy: ignore (listen-only, not a param).
     }
     else if (msg.isSysEx())
     {
-        const int sxLen = msg.getSysExDataSize();
-        const auto* sxData = msg.getSysExData();
-        juce::Array<uint8_t> full;
-        full.resize(sxLen + 2);
-        full.set(0, 0xF0);
-        for (int i = 0; i < sxLen; ++i) full.set(i + 1, sxData[i]);
-        full.set(sxLen + 1, 0xF7);
-        handleIncomingSysEx(full.getRawDataPointer(), full.size());
+        // SysEx from the Teensy = a PARAM_VALUE/state reply -> sync the UI.
+        // SysEx from a controller (rare) -> forward raw.
+        if (fromTeensy)
+        {
+            const int sxLen = msg.getSysExDataSize();
+            const auto* sxData = msg.getSysExData();
+            juce::Array<uint8_t> full;
+            full.resize(sxLen + 2);
+            full.set(0, 0xF0);
+            for (int i = 0; i < sxLen; ++i) full.set(i + 1, sxData[i]);
+            full.set(sxLen + 1, 0xF7);
+            handleIncomingSysEx(full.getRawDataPointer(), full.size());
+        }
+        else
+        {
+            forwardToTeensy(msg);
+        }
     }
+    else if (! fromTeensy)
+    {
+        // Notes, pitch bend, aftertouch, channel pressure, program change,
+        // clock/transport, etc. from a controller -> forward raw to the Teensy.
+        // This is what lets standalone play the Teensy without a host.
+        forwardToTeensy(msg);
+    }
+    // Any other message type from the Teensy: ignore (listen-only).
 }
 
 // =============================================================================

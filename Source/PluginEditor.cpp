@@ -139,7 +139,12 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     _headerSliderAtts.add(new SliderAtt(_proc.apvts, "perf_split_note",  _splitNoteKnob));
     _headerSliderAtts.add(new SliderAtt(_proc.apvts, "perf_balance",     _balanceKnob));
 
-    // --- MIDI output selector (standalone only) -----------------------------
+    // --- MIDI output selector (ALL modes — standalone AND VST3) -------------
+    // WHY: stock JUCE's VST3 wrapper drops outgoing SysEx from the processBlock
+    // MIDI bus, so the host (Ableton) never forwards our SET_PARAM/BANK_DUMP to
+    // the Teensy. Opening an OS MIDI output device here bypasses the host MIDI
+    // path entirely, which is the only reliable SysEx route in VST3. The
+    // selector is therefore visible in every wrapper type, not just standalone.
     _midiOutSelector.onChange = [this]
     {
         const int sel = _midiOutSelector.getSelectedId();
@@ -150,26 +155,20 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
             _proc.setMidiOutput(juce::MidiOutput::openDevice(devices[idx].identifier));
     };
     addAndMakeVisible(_midiOutSelector);
-    _midiOutSelector.setVisible(_isStandalone);
+    _midiOutSelector.setVisible(true);   // was: _isStandalone
 
-    // --- MIDI input selector (standalone only) ------------------------------
-    _midiInSelector.onChange = [this]
-    {
-        const int sel = _midiInSelector.getSelectedId();
-        if (sel <= 0) { _proc.closeMidiInput(); return; }
-        auto devices = juce::MidiInput::getAvailableDevices();
-        const int idx = sel - 1;
-        if (idx >= 0 && idx < devices.size())
-            _proc.openMidiInput(devices[idx].identifier);
-    };
-    addAndMakeVisible(_midiInSelector);
-    _midiInSelector.setVisible(_isStandalone);
+    // --- MIDI input checklist (standalone only) -----------------------------
+    // Multi-select: the button opens a PopupMenu with one tickable row per
+    // available input device. Ticking toggles that device in the processor's
+    // open set. The Auto no-feedback rule (in the processor) makes whichever
+    // device equals the MIDI-Out selection listen-only; all others forward.
+    _midiInButton.onClick = [this] { showMidiInputMenu(); };
+    addAndMakeVisible(_midiInButton);
+    _midiInButton.setVisible(_isStandalone);
 
-    if (_isStandalone)
-    {
-        refreshMidiOutputList();
-        refreshMidiInputList();
-    }
+    // Output list is needed in every mode (see selector comment above).
+    // The input menu is built on demand, so nothing to pre-populate here.
+    refreshMidiOutputList();
 
     // --- Style helper for buttons -------------------------------------------
     auto styleBtn = [](juce::TextButton& b, juce::Colour c)
@@ -234,8 +233,11 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     setResizable(true, true);
     setResizeLimits(400, 400, 1600, 2400);
 
-    if (_isStandalone)
-        startTimer(2000);
+    // Poll for MIDI device hot-plug in every mode. The timer refreshes the
+    // output list always, and the input list only in standalone (see
+    // timerCallback). Previously gated to standalone, which left the VST3
+    // output selector stale when the Teensy was plugged in after load.
+    startTimer(2000);
 }
 
 JT8000ControllerEditor::~JT8000ControllerEditor()
@@ -246,7 +248,9 @@ JT8000ControllerEditor::~JT8000ControllerEditor()
 }
 
 // =============================================================================
-// MIDI device list refresh (standalone only)
+// MIDI device selectors
+//   refreshMidiOutputList — output ComboBox, all modes (always shown)
+//   showMidiInputMenu     — input multi-select PopupMenu, standalone only
 // =============================================================================
 void JT8000ControllerEditor::refreshMidiOutputList()
 {
@@ -258,47 +262,70 @@ void JT8000ControllerEditor::refreshMidiOutputList()
     _midiOutSelector.setSelectedId(-1, juce::dontSendNotification);
 }
 
-void JT8000ControllerEditor::refreshMidiInputList()
+// =============================================================================
+// showMidiInputMenu — tickable multi-select of available MIDI input devices.
+//
+// Built fresh on each open so hot-plugged devices appear without a timer.
+// A ticked item means "currently open in the processor"; clicking it toggles
+// that single device (open set is otherwise preserved).
+// =============================================================================
+void JT8000ControllerEditor::showMidiInputMenu()
 {
-    const auto currentId = _proc.getActiveMidiInputId();
-    _midiInSelector.clear(juce::dontSendNotification);
-    _midiInSelector.addItem("-- No MIDI Input --", -1);
     auto devices = juce::MidiInput::getAvailableDevices();
-    int selectedId = -1;
-    for (int i = 0; i < devices.size(); ++i)
+
+    juce::PopupMenu menu;
+    if (devices.isEmpty())
     {
-        _midiInSelector.addItem(devices[i].name, i + 1);
-        if (devices[i].identifier == currentId)
-            selectedId = i + 1;
+        menu.addItem(1, "(no MIDI inputs)", false, false);
     }
-    _midiInSelector.setSelectedId(selectedId, juce::dontSendNotification);
+    else
+    {
+        for (int i = 0; i < devices.size(); ++i)
+        {
+            const bool ticked = _proc.isMidiInputOpen(devices[i].identifier);
+            // itemId = i+1; enabled; ticked = currently open.
+            menu.addItem(i + 1, devices[i].name, true, ticked);
+        }
+    }
+
+    menu.showMenuAsync(
+        juce::PopupMenu::Options().withTargetComponent(&_midiInButton),
+        [this, devices](int result)
+        {
+            if (result <= 0 || result > devices.size()) return;   // dismissed
+
+            const auto toggledId = devices[result - 1].identifier;
+
+            // Rebuild the desired open set = current open set XOR the toggled id.
+            juce::StringArray desired;
+            for (const auto& d : devices)
+                if (_proc.isMidiInputOpen(d.identifier))
+                    desired.add(d.identifier);
+
+            if (desired.contains(toggledId)) desired.removeString(toggledId);
+            else                             desired.add(toggledId);
+
+            _proc.openMidiInputs(desired);
+        });
 }
 
 // =============================================================================
-// Timer — refresh MIDI device lists (standalone only)
+// Timer — MIDI device hot-plug refresh (output: all modes, input: standalone)
 // =============================================================================
 void JT8000ControllerEditor::timerCallback()
 {
-    if (!_isStandalone) return;
-
+    // Only the output ComboBox needs hot-plug polling — it shows a fixed list.
+    // The input checklist is a PopupMenu rebuilt each time it opens, so it
+    // always reflects current devices without polling. Runs in all modes
+    // (the output selector exists in VST3 too).
     const int outSel = _midiOutSelector.getSelectedId();
-    const int inSel  = _midiInSelector.getSelectedId();
-
-    auto outDevices = juce::MidiOutput::getAvailableDevices();
-    auto inDevices  = juce::MidiInput::getAvailableDevices();
+    auto outDevices  = juce::MidiOutput::getAvailableDevices();
 
     if (outDevices.size() + 1 != _midiOutSelector.getNumItems())
     {
         refreshMidiOutputList();
         if (outSel > 0 && outSel <= outDevices.size())
             _midiOutSelector.setSelectedId(outSel, juce::dontSendNotification);
-    }
-
-    if (inDevices.size() + 1 != _midiInSelector.getNumItems())
-    {
-        refreshMidiInputList();
-        if (inSel > 0 && inSel <= inDevices.size())
-            _midiInSelector.setSelectedId(inSel, juce::dontSendNotification);
     }
 }
 
@@ -466,11 +493,17 @@ void JT8000ControllerEditor::resized()
     _titleLabel.setBounds(row1.removeFromLeft(72));
     row1.removeFromLeft(pad);
 
-    if (_isStandalone)
+    // MIDI Out is present in all modes; MIDI In only in standalone. Size each
+    // box to ~1/3 of the row so the patch-name LCD keeps the remainder.
     {
         const int midiBoxW = juce::jmin(160, (row1.getWidth() - pad) / 3);
-        _midiInSelector.setBounds(row1.removeFromRight(midiBoxW));
-        row1.removeFromRight(pad);
+
+        if (_isStandalone)
+        {
+            _midiInButton.setBounds(row1.removeFromRight(midiBoxW));
+            row1.removeFromRight(pad);
+        }
+
         _midiOutSelector.setBounds(row1.removeFromRight(midiBoxW));
         row1.removeFromRight(pad);
     }

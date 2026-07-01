@@ -127,13 +127,28 @@ public:
     juce::String getPatchName() const;
     void         setPatchName(const juce::String& name);
 
-    void openMidiInput(const juce::String& deviceIdentifier);
-    void closeMidiInput();
-    juce::String getActiveMidiInputId() const;
+    // --- MIDI input (standalone) --------------------------------------------
+    // Multi-input: any number of devices may be open simultaneously. The
+    // editor presents a checklist; each ticked device is opened here.
+    //   openMidiInputs()  — open exactly the given set, closing the rest.
+    //   isMidiInputOpen() — query for the editor checklist state.
+    // The legacy single-device methods are retained as thin wrappers so any
+    // existing caller keeps working.
+    void openMidiInput(const juce::String& deviceIdentifier);   // legacy: open just this one
+    void closeMidiInput();                                       // legacy: close all
+    juce::String getActiveMidiInputId() const;                  // legacy: first open id, or ""
+
+    void openMidiInputs(const juce::StringArray& deviceIdentifiers);
+    bool isMidiInputOpen(const juce::String& deviceIdentifier) const;
 
     void sendNoteOn(int channel, int note, float velocity);
     void sendNoteOff(int channel, int note);
     void sendPitchWheel(int channel, int value);
+
+    // Forward an already-formed short MIDI message (note/PB/CC/etc.) to the
+    // Teensy via the direct output port. Used by the input router. No-op if
+    // no direct device is open.
+    void forwardToTeensy(const juce::MidiMessage& msg);
 
     // =========================================================================
     // Echo suppression — public so JP8000SyxImporter can guard the BANK_DUMP
@@ -193,13 +208,20 @@ private:
     std::atomic<bool>      bigOutReady { false };
     juce::CriticalSection  bigOutLock;
 
-    // --- MIDI output device (standalone) ------------------------------------
+    // --- MIDI output device (standalone AND VST3) ---------------------------
     std::unique_ptr<juce::MidiOutput> directMidiOut;
+    juce::String          directMidiOutId;   // identifier of the open out device,
+                                              // "" if none. Read by the input
+                                              // router to apply the Auto rule
+                                              // (input == this id => listen-only).
     juce::CriticalSection midiOutLock;
 
-    // --- MIDI input device (standalone) -------------------------------------
-    std::unique_ptr<juce::MidiInput> midiInputDevice;
-    juce::String midiInputId;
+    // --- MIDI input devices (standalone, multi-input) -----------------------
+    // Any number of inputs open at once. handleIncomingMidiMessage dispatches
+    // by source: the device whose identifier matches directMidiOutId is the
+    // Teensy return channel (listen-only); every other device is a controller
+    // whose performance MIDI is forwarded to the Teensy.
+    juce::OwnedArray<juce::MidiInput> midiInputDevices;
     juce::CriticalSection midiInLock;
     void handleIncomingMidiMessage(juce::MidiInput* source,
                                    const juce::MidiMessage& msg) override;
