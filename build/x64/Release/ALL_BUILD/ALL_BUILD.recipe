@@ -14,6 +14,15 @@
       <FullPath>C:\Users\pcsadmin\Documents\JT8000_Controller\build\JT8000_Controller_artefacts\Release\VST3\JT-8000 Controller.vst3\Contents\x86_64-win\JT-8000 Controller.vst3</FullPath>
     </ProjectOutput>
     <ProjectOutput>
+      <FullPath>C:\Users\pcsadmin\Documents\JT8000_Controller\build\JT8000_Synth_artefacts\Release\Standalone\JT-8000 Synth.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>C:\Users\pcsadmin\Documents\JT8000_Controller\build\Release\JT8000_Synth_vst3_helper.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
+      <FullPath>C:\Users\pcsadmin\Documents\JT8000_Controller\build\JT8000_Synth_artefacts\Release\VST3\JT-8000 Synth.vst3\Contents\x86_64-win\JT-8000 Synth.vst3</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
       <FullPath>C:\Users\pcsadmin\Documents\JT8000_Controller\build\x64\Release\ALL_BUILD</FullPath>
     </ProjectOutput>
   </ProjectOutputs>

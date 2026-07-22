@@ -71,6 +71,9 @@ events:
         - "C:\\Program Files\\PuTTY\\"
         - "C:\\Program Files\\CMake\\bin"
         - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\Scripts\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\mingw64\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Microsoft\\WindowsApps"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\GitHubDesktop\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
@@ -106,7 +109,7 @@ events:
       The output was:
       0
       MSBuild version 18.4.0+6e61e96ac for .NET Framework
-      Build started 21/05/2026 20:40:36.
+      Build started 20/07/2026 18:22:22.
       
       Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\4.3.0-rc3\\CompilerIdC\\CompilerIdC.vcxproj" on node 1 (default targets).
       PrepareForBuild:
@@ -135,7 +138,7 @@ events:
           0 Warning(s)
           0 Error(s)
       
-      Time Elapsed 00:00:00.58
+      Time Elapsed 00:00:00.59
       
       
       Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CompilerIdC.exe"
@@ -204,6 +207,9 @@ events:
       - "C:/Program Files/PuTTY/"
       - "C:/Program Files/CMake/bin/"
       - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/Scripts/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/"
+      - "C:/Users/pcsadmin/AppData/Local/mingw64/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Microsoft/WindowsApps/"
       - "C:/Users/pcsadmin/AppData/Local/GitHubDesktop/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Programs/Microsoft VS Code/bin/"
@@ -253,6 +259,9 @@ events:
         - "C:\\Program Files\\PuTTY\\"
         - "C:\\Program Files\\CMake\\bin"
         - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\Scripts\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\mingw64\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Microsoft\\WindowsApps"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\GitHubDesktop\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
@@ -321,6 +330,9 @@ events:
       - "C:/Program Files/PuTTY/"
       - "C:/Program Files/CMake/bin/"
       - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/Scripts/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/"
+      - "C:/Users/pcsadmin/AppData/Local/mingw64/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Microsoft/WindowsApps/"
       - "C:/Users/pcsadmin/AppData/Local/GitHubDesktop/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Programs/Microsoft VS Code/bin/"
@@ -441,6 +453,15 @@ events:
       - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link.com"
       - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link.exe"
       - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/Scripts/lld-link.com"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/Scripts/lld-link.exe"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/Scripts/lld-link"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/lld-link.com"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/lld-link.exe"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/lld-link"
+      - "C:/Users/pcsadmin/AppData/Local/mingw64/bin/lld-link.com"
+      - "C:/Users/pcsadmin/AppData/Local/mingw64/bin/lld-link.exe"
+      - "C:/Users/pcsadmin/AppData/Local/mingw64/bin/lld-link"
       - "C:/Users/pcsadmin/AppData/Local/Microsoft/WindowsApps/lld-link.com"
       - "C:/Users/pcsadmin/AppData/Local/Microsoft/WindowsApps/lld-link.exe"
       - "C:/Users/pcsadmin/AppData/Local/Microsoft/WindowsApps/lld-link"
@@ -504,6 +525,9 @@ events:
         - "C:\\Program Files\\PuTTY\\"
         - "C:\\Program Files\\CMake\\bin"
         - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\Scripts\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\mingw64\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Microsoft\\WindowsApps"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\GitHubDesktop\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
@@ -570,6 +594,9 @@ events:
       - "C:/Program Files/PuTTY/"
       - "C:/Program Files/CMake/bin/"
       - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/Scripts/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/"
+      - "C:/Users/pcsadmin/AppData/Local/mingw64/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Microsoft/WindowsApps/"
       - "C:/Users/pcsadmin/AppData/Local/GitHubDesktop/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Programs/Microsoft VS Code/bin/"
@@ -619,6 +646,9 @@ events:
         - "C:\\Program Files\\PuTTY\\"
         - "C:\\Program Files\\CMake\\bin"
         - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\Scripts\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\mingw64\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Microsoft\\WindowsApps"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\GitHubDesktop\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
@@ -685,6 +715,9 @@ events:
       - "C:/Program Files/PuTTY/"
       - "C:/Program Files/CMake/bin/"
       - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/Scripts/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/"
+      - "C:/Users/pcsadmin/AppData/Local/mingw64/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Microsoft/WindowsApps/"
       - "C:/Users/pcsadmin/AppData/Local/GitHubDesktop/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Programs/Microsoft VS Code/bin/"
@@ -758,6 +791,9 @@ events:
         - "C:\\Program Files\\PuTTY\\"
         - "C:\\Program Files\\CMake\\bin"
         - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\Scripts\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\mingw64\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Microsoft\\WindowsApps"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\GitHubDesktop\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
@@ -824,6 +860,9 @@ events:
       - "C:/Program Files/PuTTY/"
       - "C:/Program Files/CMake/bin/"
       - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/Scripts/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/"
+      - "C:/Users/pcsadmin/AppData/Local/mingw64/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Microsoft/WindowsApps/"
       - "C:/Users/pcsadmin/AppData/Local/GitHubDesktop/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Programs/Microsoft VS Code/bin/"
@@ -873,6 +912,9 @@ events:
         - "C:\\Program Files\\PuTTY\\"
         - "C:\\Program Files\\CMake\\bin"
         - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\Scripts\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\mingw64\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Microsoft\\WindowsApps"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\GitHubDesktop\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
@@ -945,6 +987,9 @@ events:
         - "C:\\Program Files\\PuTTY\\"
         - "C:\\Program Files\\CMake\\bin"
         - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\Scripts\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\mingw64\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Microsoft\\WindowsApps"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\GitHubDesktop\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
@@ -980,7 +1025,7 @@ events:
       The output was:
       0
       MSBuild version 18.4.0+6e61e96ac for .NET Framework
-      Build started 21/05/2026 20:40:37.
+      Build started 20/07/2026 18:22:23.
       
       Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\4.3.0-rc3\\CompilerIdCXX\\CompilerIdCXX.vcxproj" on node 1 (default targets).
       PrepareForBuild:
@@ -1009,7 +1054,7 @@ events:
           0 Warning(s)
           0 Error(s)
       
-      Time Elapsed 00:00:00.60
+      Time Elapsed 00:00:00.61
       
       
       Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CompilerIdCXX.exe"
@@ -1078,6 +1123,9 @@ events:
       - "C:/Program Files/PuTTY/"
       - "C:/Program Files/CMake/bin/"
       - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/Scripts/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/"
+      - "C:/Users/pcsadmin/AppData/Local/mingw64/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Microsoft/WindowsApps/"
       - "C:/Users/pcsadmin/AppData/Local/GitHubDesktop/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Programs/Microsoft VS Code/bin/"
@@ -1198,6 +1246,15 @@ events:
       - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link.com"
       - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link.exe"
       - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/Scripts/lld-link.com"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/Scripts/lld-link.exe"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/Scripts/lld-link"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/lld-link.com"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/lld-link.exe"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/lld-link"
+      - "C:/Users/pcsadmin/AppData/Local/mingw64/bin/lld-link.com"
+      - "C:/Users/pcsadmin/AppData/Local/mingw64/bin/lld-link.exe"
+      - "C:/Users/pcsadmin/AppData/Local/mingw64/bin/lld-link"
       - "C:/Users/pcsadmin/AppData/Local/Microsoft/WindowsApps/lld-link.com"
       - "C:/Users/pcsadmin/AppData/Local/Microsoft/WindowsApps/lld-link.exe"
       - "C:/Users/pcsadmin/AppData/Local/Microsoft/WindowsApps/lld-link"
@@ -1261,6 +1318,9 @@ events:
         - "C:\\Program Files\\PuTTY\\"
         - "C:\\Program Files\\CMake\\bin"
         - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\Scripts\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\mingw64\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Microsoft\\WindowsApps"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\GitHubDesktop\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
@@ -1329,6 +1389,9 @@ events:
       - "C:/Program Files/PuTTY/"
       - "C:/Program Files/CMake/bin/"
       - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/Scripts/"
+      - "C:/Users/pcsadmin/AppData/Local/Programs/Python/Python314/"
+      - "C:/Users/pcsadmin/AppData/Local/mingw64/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Microsoft/WindowsApps/"
       - "C:/Users/pcsadmin/AppData/Local/GitHubDesktop/bin/"
       - "C:/Users/pcsadmin/AppData/Local/Programs/Microsoft VS Code/bin/"
@@ -1411,6 +1474,9 @@ events:
         - "C:\\Program Files\\PuTTY\\"
         - "C:\\Program Files\\CMake\\bin"
         - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\Scripts\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Python\\Python314\\"
+        - "C:\\Users\\pcsadmin\\AppData\\Local\\mingw64\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Microsoft\\WindowsApps"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\GitHubDesktop\\bin"
         - "C:\\Users\\pcsadmin\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
@@ -1434,8 +1500,8 @@ events:
     checks:
       - "Detecting C compiler ABI info"
     directories:
-      source: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-4ataho"
-      binary: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-4ataho"
+      source: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-2u73a3"
+      binary: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-2u73a3"
     cmakeVariables:
       CMAKE_CXX_STDLIB_MODULES_JSON: ""
       CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
@@ -1445,39 +1511,39 @@ events:
       variable: "CMAKE_C_ABI_COMPILED"
       cached: true
       stdout: |
-        Change Dir: 'C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-4ataho'
+        Change Dir: 'C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-2u73a3'
         
-        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_e3b4d.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_b8f53.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
         MSBuild version 18.4.0+6e61e96ac for .NET Framework
-        Build started 21/05/2026 20:40:38.
+        Build started 20/07/2026 18:22:24.
         
-        Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-4ataho\\cmTC_e3b4d.vcxproj" on node 1 (default targets).
+        Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-2u73a3\\cmTC_b8f53.vcxproj" on node 1 (default targets).
         PrepareForBuild:
           Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
-          Creating directory "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-4ataho\\Debug\\".
-          Creating directory "cmTC_e3b4d.dir\\Debug\\cmTC_e3b4d.tlog\\".
+          Creating directory "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-2u73a3\\Debug\\".
+          Creating directory "cmTC_b8f53.dir\\Debug\\cmTC_b8f53.tlog\\".
         InitializeBuildStatus:
-          Creating "cmTC_e3b4d.dir\\Debug\\cmTC_e3b4d.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
-          Touching "cmTC_e3b4d.dir\\Debug\\cmTC_e3b4d.tlog\\unsuccessfulbuild".
+          Creating "cmTC_b8f53.dir\\Debug\\cmTC_b8f53.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_b8f53.dir\\Debug\\cmTC_b8f53.tlog\\unsuccessfulbuild".
         ClCompile:
-          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /RTC1 /MDd /Fo"cmTC_e3b4d.dir\\Debug\\\\" /Fd"cmTC_e3b4d.dir\\Debug\\vc145.pdb" /external:W1 /TC /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCCompilerABI.c"
+          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /RTC1 /MDd /Fo"cmTC_b8f53.dir\\Debug\\\\" /Fd"cmTC_b8f53.dir\\Debug\\vc145.pdb" /external:W1 /TC /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCCompilerABI.c"
           Microsoft (R) C/C++ Optimizing Compiler Version 19.50.35727 for x64
           Copyright (C) Microsoft Corporation.  All rights reserved.
-          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /RTC1 /MDd /Fo"cmTC_e3b4d.dir\\Debug\\\\" /Fd"cmTC_e3b4d.dir\\Debug\\vc145.pdb" /external:W1 /TC /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCCompilerABI.c"
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /RTC1 /MDd /Fo"cmTC_b8f53.dir\\Debug\\\\" /Fd"cmTC_b8f53.dir\\Debug\\vc145.pdb" /external:W1 /TC /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCCompilerABI.c"
           CMakeCCompilerABI.c
         Link:
-          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-4ataho\\Debug\\cmTC_e3b4d.exe" /INCREMENTAL /ILK:"cmTC_e3b4d.dir\\Debug\\cmTC_e3b4d.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-4ataho/Debug/cmTC_e3b4d.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-4ataho/Debug/cmTC_e3b4d.lib" /MACHINE:X64  /machine:x64 cmTC_e3b4d.dir\\Debug\\CMakeCCompilerABI.obj
-          cmTC_e3b4d.vcxproj -> C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-4ataho\\Debug\\cmTC_e3b4d.exe
+          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-2u73a3\\Debug\\cmTC_b8f53.exe" /INCREMENTAL /ILK:"cmTC_b8f53.dir\\Debug\\cmTC_b8f53.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-2u73a3/Debug/cmTC_b8f53.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-2u73a3/Debug/cmTC_b8f53.lib" /MACHINE:X64  /machine:x64 cmTC_b8f53.dir\\Debug\\CMakeCCompilerABI.obj
+          cmTC_b8f53.vcxproj -> C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-2u73a3\\Debug\\cmTC_b8f53.exe
         FinalizeBuildStatus:
-          Deleting file "cmTC_e3b4d.dir\\Debug\\cmTC_e3b4d.tlog\\unsuccessfulbuild".
-          Touching "cmTC_e3b4d.dir\\Debug\\cmTC_e3b4d.tlog\\cmTC_e3b4d.lastbuildstate".
-        Done Building Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-4ataho\\cmTC_e3b4d.vcxproj" (default targets).
+          Deleting file "cmTC_b8f53.dir\\Debug\\cmTC_b8f53.tlog\\unsuccessfulbuild".
+          Touching "cmTC_b8f53.dir\\Debug\\cmTC_b8f53.tlog\\cmTC_b8f53.lastbuildstate".
+        Done Building Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-2u73a3\\cmTC_b8f53.vcxproj" (default targets).
         
         Build succeeded.
             0 Warning(s)
             0 Error(s)
         
-        Time Elapsed 00:00:00.58
+        Time Elapsed 00:00:00.57
         
       exitCode: 0
   -
@@ -1517,8 +1583,8 @@ events:
     checks:
       - "Detecting CXX compiler ABI info"
     directories:
-      source: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-x8pdyg"
-      binary: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-x8pdyg"
+      source: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-k4dcce"
+      binary: "C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-k4dcce"
     cmakeVariables:
       CMAKE_CXX_FLAGS: "/DWIN32 /D_WINDOWS /EHsc"
       CMAKE_CXX_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
@@ -1529,39 +1595,39 @@ events:
       variable: "CMAKE_CXX_ABI_COMPILED"
       cached: true
       stdout: |
-        Change Dir: 'C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-x8pdyg'
+        Change Dir: 'C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-k4dcce'
         
-        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_1285a.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_12bdf.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
         MSBuild version 18.4.0+6e61e96ac for .NET Framework
-        Build started 21/05/2026 20:40:38.
+        Build started 20/07/2026 18:22:25.
         
-        Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-x8pdyg\\cmTC_1285a.vcxproj" on node 1 (default targets).
+        Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-k4dcce\\cmTC_12bdf.vcxproj" on node 1 (default targets).
         PrepareForBuild:
           Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
-          Creating directory "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-x8pdyg\\Debug\\".
-          Creating directory "cmTC_1285a.dir\\Debug\\cmTC_1285a.tlog\\".
+          Creating directory "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-k4dcce\\Debug\\".
+          Creating directory "cmTC_12bdf.dir\\Debug\\cmTC_12bdf.tlog\\".
         InitializeBuildStatus:
-          Creating "cmTC_1285a.dir\\Debug\\cmTC_1285a.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
-          Touching "cmTC_1285a.dir\\Debug\\cmTC_1285a.tlog\\unsuccessfulbuild".
+          Creating "cmTC_12bdf.dir\\Debug\\cmTC_12bdf.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_12bdf.dir\\Debug\\cmTC_12bdf.tlog\\unsuccessfulbuild".
         ClCompile:
-          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_1285a.dir\\Debug\\\\" /Fd"cmTC_1285a.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCXXCompilerABI.cpp"
+          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_12bdf.dir\\Debug\\\\" /Fd"cmTC_12bdf.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCXXCompilerABI.cpp"
           Microsoft (R) C/C++ Optimizing Compiler Version 19.50.35727 for x64
           Copyright (C) Microsoft Corporation.  All rights reserved.
-          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_1285a.dir\\Debug\\\\" /Fd"cmTC_1285a.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCXXCompilerABI.cpp"
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_12bdf.dir\\Debug\\\\" /Fd"cmTC_12bdf.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.3\\Modules\\CMakeCXXCompilerABI.cpp"
           CMakeCXXCompilerABI.cpp
         Link:
-          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-x8pdyg\\Debug\\cmTC_1285a.exe" /INCREMENTAL /ILK:"cmTC_1285a.dir\\Debug\\cmTC_1285a.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-x8pdyg/Debug/cmTC_1285a.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-x8pdyg/Debug/cmTC_1285a.lib" /MACHINE:X64  /machine:x64 cmTC_1285a.dir\\Debug\\CMakeCXXCompilerABI.obj
-          cmTC_1285a.vcxproj -> C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-x8pdyg\\Debug\\cmTC_1285a.exe
+          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-k4dcce\\Debug\\cmTC_12bdf.exe" /INCREMENTAL /ILK:"cmTC_12bdf.dir\\Debug\\cmTC_12bdf.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-k4dcce/Debug/cmTC_12bdf.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeScratch/TryCompile-k4dcce/Debug/cmTC_12bdf.lib" /MACHINE:X64  /machine:x64 cmTC_12bdf.dir\\Debug\\CMakeCXXCompilerABI.obj
+          cmTC_12bdf.vcxproj -> C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-k4dcce\\Debug\\cmTC_12bdf.exe
         FinalizeBuildStatus:
-          Deleting file "cmTC_1285a.dir\\Debug\\cmTC_1285a.tlog\\unsuccessfulbuild".
-          Touching "cmTC_1285a.dir\\Debug\\cmTC_1285a.tlog\\cmTC_1285a.lastbuildstate".
-        Done Building Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-x8pdyg\\cmTC_1285a.vcxproj" (default targets).
+          Deleting file "cmTC_12bdf.dir\\Debug\\cmTC_12bdf.tlog\\unsuccessfulbuild".
+          Touching "cmTC_12bdf.dir\\Debug\\cmTC_12bdf.tlog\\cmTC_12bdf.lastbuildstate".
+        Done Building Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeScratch\\TryCompile-k4dcce\\cmTC_12bdf.vcxproj" (default targets).
         
         Build succeeded.
             0 Warning(s)
             0 Error(s)
         
-        Time Elapsed 00:00:00.57
+        Time Elapsed 00:00:00.59
         
       exitCode: 0
   -
@@ -1612,37 +1678,37 @@ events:
       stdout: |
         Change Dir: 'C:/Users/pcsadmin/Documents/JT8000_Controller/build/juce_build/tools/CMakeFiles/CMakeTmp'
         
-        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_2b6aa.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_2924b.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
         MSBuild version 18.4.0+6e61e96ac for .NET Framework
-        Build started 21/05/2026 20:40:39.
+        Build started 20/07/2026 18:22:25.
         
-        Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2b6aa.vcxproj" on node 1 (default targets).
+        Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2924b.vcxproj" on node 1 (default targets).
         PrepareForBuild:
           Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
           Creating directory "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\Debug\\".
-          Creating directory "cmTC_2b6aa.dir\\Debug\\cmTC_2b6aa.tlog\\".
+          Creating directory "cmTC_2924b.dir\\Debug\\cmTC_2924b.tlog\\".
         InitializeBuildStatus:
-          Creating "cmTC_2b6aa.dir\\Debug\\cmTC_2b6aa.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
-          Touching "cmTC_2b6aa.dir\\Debug\\cmTC_2b6aa.tlog\\unsuccessfulbuild".
+          Creating "cmTC_2924b.dir\\Debug\\cmTC_2924b.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_2924b.dir\\Debug\\cmTC_2924b.tlog\\unsuccessfulbuild".
         ClCompile:
-          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_2b6aa.dir\\Debug\\\\" /Fd"cmTC_2b6aa.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp
+          C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_2924b.dir\\Debug\\\\" /Fd"cmTC_2924b.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp
           Microsoft (R) C/C++ Optimizing Compiler Version 19.50.35727 for x64
           Copyright (C) Microsoft Corporation.  All rights reserved.
-          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_2b6aa.dir\\Debug\\\\" /Fd"cmTC_2b6aa.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_2924b.dir\\Debug\\\\" /Fd"cmTC_2924b.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp
           juce_runtime_arch_detection.cpp
-        C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp(56,1): error C1189: #error:  JUCE_ARCH x86_64 [C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2b6aa.vcxproj]
-        Done Building Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2b6aa.vcxproj" (default targets) -- FAILED.
+        C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp(56,1): error C1189: #error:  JUCE_ARCH x86_64 [C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2924b.vcxproj]
+        Done Building Project "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2924b.vcxproj" (default targets) -- FAILED.
         
         Build FAILED.
         
-        "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2b6aa.vcxproj" (default target) (1) ->
+        "C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2924b.vcxproj" (default target) (1) ->
         (ClCompile target) -> 
-          C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp(56,1): error C1189: #error:  JUCE_ARCH x86_64 [C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2b6aa.vcxproj]
+          C:\\Users\\pcsadmin\\Documents\\JUCE\\extras\\Build\\CMake\\juce_runtime_arch_detection.cpp(56,1): error C1189: #error:  JUCE_ARCH x86_64 [C:\\Users\\pcsadmin\\Documents\\JT8000_Controller\\build\\juce_build\\tools\\CMakeFiles\\CMakeTmp\\cmTC_2924b.vcxproj]
         
             0 Warning(s)
             1 Error(s)
         
-        Time Elapsed 00:00:00.36
+        Time Elapsed 00:00:00.37
         
       exitCode: 1
 ...
