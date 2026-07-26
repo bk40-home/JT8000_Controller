@@ -50,16 +50,26 @@ static constexpr uint8_t kDelayTypeMap[]  = { 2, 0, 3, 1, 1 };
 struct DefaultCC { int cc; int val; };
 static constexpr DefaultCC kDefaults[] = {
     // Filter engine & topology — default to OBXa mode
-    {113, 96}, {115, 0}, {111, 0}, {114, 0}, {117, 0}, {84, 64},
+    // J3c import policy (signed off 2026-07-20): every JP-8000 import
+    // lands on the DIODE ladder — engine VA Bank (cc113 -> idx 1) with
+    // va_type Diode LP4 (cc115 -> 64 = bucket midpoint of idx 8/17).
+    // Q2c: the JP's -12/-24 dB slope byte (0x28) is deliberately ignored;
+    // both slopes map to Diode LP4.
+    {113, 96}, {115, 64}, {111, 0}, {114, 0}, {117, 0}, {84, 64},
     // Cross-mod & sync — JP-8000 has no cross-mod
     {19, 0}, {20, 0},
     // Drive — bypass
-    {16, 0},
+    // J3c: saturation defaults SOFT ("eq soft with mid settings") — 32 is
+    // kDriveLUT's idx-1 value.  Bass/treble pre-set to 64 (flat) before the
+    // slot walk; the dump's own tone bytes (0x3B/0x3C) then overwrite.
+    {16, 32}, {99, 64}, {100, 64},
     // Reverb — all JT-8000-exclusive
     {72, 0}, {73, 0}, {94, 127},
     {95, 64}, {96, 36}, {97, 0}, {98, 64},
     // Output mix — full dry
-    {74, 127}, {76, 127},
+    // J3c: the audition path runs entirely through the JPFX chain — dry
+    // mix hard 0, JPFX mix full.
+    {74, 0}, {76, 127},
     // Oscillator mix — CRITICAL: SuperSaw (wave 0) maps Ctrl1 to CC 77
     // (SUPERSAW_DETUNE), not CC 60 (OSC1_MIX). If CC 60 isn't explicitly
     // set, it stays at 0 = silence. Default both mix levels here.
@@ -115,7 +125,6 @@ static constexpr Slot kSlots[] = {
     {0x11, 54, Xform::Direct},            // LFO1 rate
     {0x12, 37, Xform::Direct},            // LFO1 delay time
     {0x13, 51, Xform::Direct},            // LFO2 rate (JP maps this here)
-    {0x15, 91, Xform::Bool127},           // Ring mod on/off
     {0x17, 47, Xform::Signed64},          // Osc balance (bipolar)
     {0x18, 56, Xform::Direct},            // LFO1 destination
     {0x19, 33, Xform::Signed64ToUni},     // LFO1 → pitch depth
@@ -127,7 +136,6 @@ static constexpr Slot kSlots[] = {
     // Oscillators
     {0x1E, 21, Xform::Osc1Wave},         // OSC1 waveform
     {0x21, 22, Xform::Osc2Wave},         // OSC2 waveform
-    {0x23, 42, Xform::Osc2Range},        // OSC2 pitch range
     {0x24, 46, Xform::Osc2Fine},         // OSC2 fine tune
 
     // Filter
@@ -322,11 +330,27 @@ static ParsedBank parseSyxBuffer(const uint8_t* buf, size_t len)
             && buf[msgStart + 3] == 0x06
             && buf[msgStart + 4] == 0x12)
         {
-            const int a2      = buf[msgStart + 7];   // message type
+            const int a0      = buf[msgStart + 5];   // ADDRESS SPACE
+            const int a2      = buf[msgStart + 7];   // message type (temp
+                                                     // space) or patch NUMBER
+                                                     // (user-patch space)
             const int dataOff = static_cast<int>(msgStart + 9);
             const int dataLen = static_cast<int>(msgLen) - 10;
 
-            if (a2 == 0x00 && dataLen >= 20)
+            // J3b (D-J9): in the user-patch bank (a0 == 0x02) every
+            // patch-sized message is a standalone patch and a2 is just the
+            // slot number — typing by a2 here misread patch #0 as a
+            // performance header, dropped 0x10 as "tone common", and
+            // kidnapped 0x40/0x42 as upper/lower.  The file-header comment
+            // always documented a0; the code now finally reads it.
+            if (a0 == 0x02)
+            {
+                if (dataLen >= 74)
+                    bank.orphanPatches.push_back(Patch {
+                        extractName(buf, dataOff, 16, static_cast<int>(len)),
+                        dataOff, dataLen, buf });
+            }
+            else if (a2 == 0x00 && dataLen >= 20)
             {
                 // ---- Performance header — start a new group ----
                 groups.emplace_back();
@@ -454,10 +478,13 @@ static uint32_t readVLQ(const uint8_t* buf, size_t limit, size_t& pos)
     return val;
 }
 
-static ParsedBank parseMidBuffer(const uint8_t* buf, size_t len)
+static std::vector<uint8_t> extractMidSysEx(const uint8_t* buf, size_t len)
 {
-    // First pass: extract all embedded SysEx payloads into a flat buffer,
-    // wrapping each with F0...F7 so we can reuse parseSyxBuffer.
+    // Extract all embedded SysEx payloads into a flat buffer, wrapping
+    // each with F0...F7 so the caller can parse it exactly like a .syx.
+    // J3a (D-J8): this vector is RETURNED, not parsed here — the old
+    // version parsed it locally and returned Patches pointing into it,
+    // a use-after-free that read zeros into most imported patches.
     std::vector<uint8_t> assembled;
 
     if (len < 14 || buf[0] != 'M' || buf[1] != 'T' || buf[2] != 'h' || buf[3] != 'd')
@@ -528,11 +555,7 @@ static ParsedBank parseMidBuffer(const uint8_t* buf, size_t len)
         pos = trkEnd;
     }
 
-    if (assembled.empty())
-        return {};
-
-    // Parse the assembled buffer exactly as if it were a .syx file
-    return parseSyxBuffer(assembled.data(), assembled.size());
+    return assembled;
 }
 
 // =========================================================================
@@ -541,15 +564,27 @@ static ParsedBank parseMidBuffer(const uint8_t* buf, size_t len)
 
 ParsedBank parseFile(const uint8_t* buf, size_t len, bool isMidi)
 {
-    return isMidi ? parseMidBuffer(buf, len) : parseSyxBuffer(buf, len);
+    // J3a (D-J8): ONE ownership rule for both formats — the returned bank
+    // owns the bytes its Patches point into.  Fill `backing` first, parse
+    // it, then move it into the result: vector's heap block survives the
+    // move, so every Patch::srcBuffer stays valid for the bank's lifetime.
+    std::vector<uint8_t> backing = isMidi
+        ? extractMidSysEx(buf, len)
+        : std::vector<uint8_t>(buf, buf + len);
+
+    if (backing.empty())
+        return {};
+
+    ParsedBank bank = parseSyxBuffer(backing.data(), backing.size());
+    bank.backing = std::move(backing);
+    return bank;
 }
 
 // =========================================================================
 // Public: setParamByCC
 //
-// For AudioParameterChoice (combo/toggle): convert the incoming CC value
-// to a choice index via ccToChoiceIndex(), then set the normalised value.
-// For AudioParameterInt (knob/slider): set the raw CC value directly.
+// The value is a v1 CC byte; plainFromCCByte (CCDefinitions.h) converts it
+// for whatever shape the row has — choice, int-lattice, or raw.
 // =========================================================================
 
 void setParamByCC(juce::AudioProcessorValueTreeState& apvts, int cc, int value)
@@ -560,16 +595,11 @@ void setParamByCC(juce::AudioProcessorValueTreeState& apvts, int cc, int value)
     auto* pi = apvts.getParameter(p->id);
     if (pi == nullptr) return;
 
-    float normVal;
-    if (isChoiceParam(*p))
-    {
-        int idx = ccToChoiceIndex(juce::jlimit(0, 127, value), p->enumCount);
-        normVal = pi->convertTo0to1(static_cast<float>(idx));
-    }
-    else
-    {
-        normVal = pi->convertTo0to1(static_cast<float>(juce::jlimit(0, 127, value)));
-    }
+    // Shared value law (Phase J1) — the JP-8000 bytes are v1 CC bytes, so
+    // plainFromCCByte lands them on the right choice index / int lattice /
+    // raw value for whatever shape the row has TODAY (osc pitch became a
+    // 5-way select in J1; this call site needed no change to follow).
+    const float normVal = pi->convertTo0to1(plainFromCCByte(*p, juce::jlimit(0, 127, value)));
 
     pi->beginChangeGesture();
     pi->setValueNotifyingHost(normVal);
@@ -581,7 +611,8 @@ void setParamByCC(juce::AudioProcessorValueTreeState& apvts, int cc, int value)
 //
 // Writes a JP-8000 patch into the APVTS. Does NOT send MIDI.
 // Steps:
-//   1. Apply JT-8000 defaults (for params the JP-8000 lacks)
+//   1. Apply JT-8000 defaults + J3c import policy (Diode LP4, JPFX-only
+//      output path, SOFT saturation, flat EQ pre-set)
 //   2. Walk the slot table and apply transforms
 //   3. Handle waveform-dependent Ctrl1/Ctrl2 routing
 //   4. Handle JP-8000 MFX-type overrides (distortion → drive, etc.)
@@ -616,6 +647,30 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
     // Some JP-8000 waveforms route Ctrl1/Ctrl2 to different CCs depending
     // on which waveform is selected (e.g., SuperSaw Ctrl1 → detune CC 77,
     // PW Ctrl1 → mix level CC 60).
+    // Q3 (J3, signed off): ring/cross-mod is a switch + depth PAIR —
+    // 0x15 on/off, 0x16 depth (position-certain: bracketed by the ring
+    // switch and osc balance; 12 distinct values across the reference
+    // bank).  The old single Bool127 slot slammed depth to 0/127 and
+    // threw the dump's actual depth away.
+    setParamByCC(apvts, 91, d(0x15) != 0 ? d(0x16) : 0);
+
+    // J3d (signed off 2026-07-21): Oscillator Shift 0x49 (±2 octaves, OSC
+    // COMMON on the JP; the reference bank uses 0..3) folds into the
+    // 5-option pitch-offset lattice — dropping it left imported patches an
+    // octave or two off pitch.  Q1a: osc1 takes shift alone; osc2 takes the
+    // JP's summed shift + Range (0x23, ±25 semis), clamped to the lattice
+    // (lossy only past ±24).  The old range-only 0x23 slot is superseded.
+    {
+        const int shiftSemis = (juce::jlimit(0, 4, (int)d(0x49)) - 2) * 12;
+        const int rangeSemis =  juce::jlimit(0, 50, (int)d(0x23)) - 25;
+
+        auto latticeIdx = [](int semis)
+        { return juce::jlimit(0, 4, juce::roundToInt((float)semis / 12.0f) + 2); };
+
+        setParamByCC(apvts, 41, choiceIndexToCC(latticeIdx(shiftSemis), 5, nullptr));
+        setParamByCC(apvts, 42, choiceIndexToCC(latticeIdx(shiftSemis + rangeSemis), 5, nullptr));
+    }
+
     if (int cc = osc1Ctrl1CC(osc1Wave)) setParamByCC(apvts, cc, d(0x1F));
     if (int cc = osc1Ctrl2CC(osc1Wave)) setParamByCC(apvts, cc, d(0x20));
     if (int cc = osc2Ctrl1CC(osc2Wave)) setParamByCC(apvts, cc, d(0x25));

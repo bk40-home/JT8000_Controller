@@ -13,6 +13,7 @@
  */
 
 #include "PluginProcessor.h"
+#include <vector>   // mono-fallback scratch (Phase J2)
 #include "PluginEditor.h"
 #include "ParamMapJuce.h"
 #include "SyxProtocol.h"
@@ -43,7 +44,39 @@ JT8000ControllerProcessor::JT8000ControllerProcessor()
 
     if (!apvts.state.hasProperty(kPatchNameProp))
         apvts.state.setProperty(kPatchNameProp, "Init Patch", nullptr);
+
+#if JT8000_HAS_ENGINE
+    // Eager construction (~700 KB heap + table setup) so the unique_ptr never
+    // changes for the life of the processor — the audio thread can read it
+    // without any locking or swap protocol.  Lazy creation would save memory
+    // nobody misses and buy a lifecycle race nobody wants.
+    _engine = std::make_unique<EngineHost>();
+#endif
 }
+
+#if JT8000_HAS_ENGINE
+// =============================================================================
+// prepareToPlay / setEngineMode (Phase J2)
+// =============================================================================
+void JT8000ControllerProcessor::prepareToPlay(double sampleRate, int)
+{
+    _hostSampleRate = sampleRate;
+    // The collector must know the rate before addMessageToQueue is legal;
+    // reset also discards stale cross-thread MIDI from before the restart.
+    _engineInbox.reset(sampleRate);
+    _inboxReady.store(true);
+}
+
+void JT8000ControllerProcessor::setEngineMode(int m)
+{
+    _engineMode.store(juce::jlimit((int)kModeController, (int)kModeBoth, m));
+    // Note-offs on a mode EXIT are handled on the audio thread via the
+    // _engineModePrev edge in processBlock — calling the engine from here
+    // (message thread) would break the single-caller contract.
+}
+#else
+void JT8000ControllerProcessor::prepareToPlay(double, int) {}
+#endif
 
 JT8000ControllerProcessor::~JT8000ControllerProcessor()
 {
@@ -75,6 +108,15 @@ JT8000ControllerProcessor::createParameterLayout()
 
             params.push_back(std::make_unique<juce::AudioParameterChoice>(
                 juce::ParameterID { p.id, 1 }, p.name, choices, p.defVal));
+        }
+        else if (isIntLatticeParam(p))
+        {
+            // Canonical `type: int` (Phase J1 / D-J6): the parameter holds
+            // the REAL value (seq_steps 1..16), so the host lane, popup and
+            // double-click all read in steps — the 0..127 byte is wire-only
+            // (ccByteFromPlain / plainFromCCByte).
+            params.push_back(std::make_unique<juce::AudioParameterInt>(
+                juce::ParameterID { p.id, 1 }, p.name, p.intMin, p.intMax, p.defVal));
         }
         else
         {
@@ -120,8 +162,46 @@ void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 
         if (msg.isController())
         {
-            // Hardware CC -> APVTS. Don't pass through.
-            applyIncomingCC(msg.getControllerNumber(), msg.getControllerValue());
+            // Phase E: NRPN from the firmware decodes to (v1cc, v7) and
+            // reflects into APVTS exactly like a plain CC used to.  The
+            // cluster numbers (6/38/96-101) COLLIDE with real v1 params
+            // (CC 98 = reverb hipass...) so they are consumed either way
+            // and must never reach applyIncomingCC raw.
+            const int num = msg.getControllerNumber();
+            const int val = msg.getControllerValue();
+            int v1cc, v7;
+            if (nrpnDecodeHost_.feed(num, val, &v1cc, &v7))
+                applyIncomingCC(v1cc, v7);
+            else if (! NrpnLink::isClusterCC(num))
+                applyIncomingCC(num, val);   // plain hardware CC, as before
+
+            // Status feed 0x3FFF (Phase J1d): intercepted inside the
+            // decoder BEFORE param routing; here we just latch the word
+            // for the editor's poll.  Per-message, not per-block, so the
+            // fine (CC38) refinement overwrites the coarse half within
+            // the same cluster — the editor only ever sees whole words.
+            uint16_t statusWord;
+            if (nrpnDecodeHost_.takeStatus(&statusWord))
+            {
+                // Phase J2: when the embedded engine is audible, ITS status
+                // drives the dots/playhead (stored below) — hardware words
+                // are still taken (clears the decoder flag) but not latched,
+                // so the two sources never fight over the display.
+                if (! engineAudible())
+                {
+                    _statusWord.store(statusWord);
+                    _statusCount.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+
+#if JT8000_HAS_ENGINE
+            // Phase J2: the embedded engine hears the same inbound stream —
+            // NRPN clusters (its transport decodes them itself), curated and
+            // performance CCs alike.  Teensy-originated broadcasts included:
+            // that is what keeps engine and hardware coherent in Both mode.
+            if (engineAudible())
+                _engine->controlChange((uint8_t)num, (uint8_t)val);
+#endif
         }
         else if (msg.isSysEx())
         {
@@ -140,9 +220,104 @@ void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         }
         else
         {
+#if JT8000_HAS_ENGINE
+            if (engineAudible())
+            {
+                // Notes / wheel from the host bus drive the engine.  JUCE's
+                // getPitchWheelValue() is already RAW 0..16383 — no centring
+                // offset (that trap belongs to the Teensy library only).
+                if      (msg.isNoteOn())     _engine->noteOn ((uint8_t)msg.getNoteNumber(),
+                                                              (uint8_t)msg.getVelocity());
+                else if (msg.isNoteOff())    _engine->noteOff((uint8_t)msg.getNoteNumber());
+                else if (msg.isPitchWheel()) _engine->pitchBendRaw14((uint16_t)msg.getPitchWheelValue());
+            }
+            // Sound mode: the hardware wire is silent — don't pass notes on.
+            if (_engineMode.load() == kModeSound)
+                continue;
+#endif
+            // VST3 fix: in a host (Ableton) the plugin's OUTPUT MIDI bus is
+            // dropped/reordered just like SysEx and NRPN — so host notes that
+            // reach us here never make it to the Teensy via `filtered`.  When a
+            // direct device is open, send channel-voice messages straight to it
+            // (the same reliable path the param NRPN already uses), and DON'T
+            // also queue to the host bus, or a standalone-style setup with both
+            // active would double-trigger.  With no direct device open (pure
+            // standalone-via-host), fall through to `filtered` exactly as before
+            // — behaviour unchanged.
+            {
+                bool sentDirect = false;
+                {
+                    const juce::ScopedLock sl(midiOutLock);
+                    if (directMidiOut != nullptr)
+                    {
+                        directMidiOut->sendMessageNow(msg);
+                        sentDirect = true;
+                    }
+                }
+                if (sentDirect)
+                    continue;
+            }
+
             filtered.addEvent(msg, metadata.samplePosition);
         }
     }
+
+#if JT8000_HAS_ENGINE
+    // =========================================================================
+    // Embedded engine service (Phase J2) — audio thread, the engine's ONLY
+    // caller.  Order: mode edge -> cross-thread inbox -> render -> status.
+    // =========================================================================
+    {
+        const int mode = _engineMode.load();
+        if (mode != _engineModePrev)
+        {
+            // Leaving an audible mode: silence the engine so no voice hangs
+            // sustaining into Controller mode where nothing services it.
+            if (_engineModePrev != kModeController && mode == kModeController)
+                _engine->allNotesOff();
+            _engineModePrev = mode;
+        }
+
+        if (mode != kModeController)
+        {
+            // Cross-thread MIDI (direct MIDI-in devices, and the outgoing
+            // param tee from queueShortMidi) — collector-buffered, drained
+            // here so the single-caller contract holds.
+            juce::MidiBuffer inbox;
+            _engineInbox.removeNextBlockOfMessages(inbox, buffer.getNumSamples());
+            for (const auto meta : inbox)
+            {
+                const auto m = meta.getMessage();
+                if      (m.isController()) _engine->controlChange((uint8_t)m.getControllerNumber(),
+                                                                  (uint8_t)m.getControllerValue());
+                else if (m.isNoteOn())     _engine->noteOn ((uint8_t)m.getNoteNumber(),
+                                                            (uint8_t)m.getVelocity());
+                else if (m.isNoteOff())    _engine->noteOff((uint8_t)m.getNoteNumber());
+                else if (m.isPitchWheel()) _engine->pitchBendRaw14((uint16_t)m.getPitchWheelValue());
+            }
+
+            // Render.  The engine runs at its fixed 44.1 k; rate mismatch is
+            // a UI warning (Q4 sign-off), not a hidden resample.
+            const size_t n = (size_t)buffer.getNumSamples();
+            if (buffer.getNumChannels() >= 2)
+            {
+                _engine->render(buffer.getWritePointer(0), buffer.getWritePointer(1), n);
+            }
+            else if (buffer.getNumChannels() == 1)
+            {
+                // Defensive mono host: render stereo, keep left.
+                static thread_local std::vector<float> scratch;
+                scratch.resize(n);
+                _engine->render(buffer.getWritePointer(0), scratch.data(), n);
+            }
+
+            // Engine telemetry replaces the hardware status feed while
+            // audible — same word format, same editor consumers (J1d).
+            _statusWord.store(_engine->statusWord());
+            _statusCount.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+#endif
 
     // =========================================================================
     // Host MIDI-bus drain (FALLBACK transport only).
@@ -218,7 +393,13 @@ void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 // =============================================================================
 void JT8000ControllerProcessor::applyIncomingCC(int cc, int value)
 {
-    if (cc < 0 || cc > 127) return;
+    // D-J7 (Phase J1): the old `cc > 127` guard predates the NRPN wire and
+    // silently discarded every inbound key above the plain-CC range — so
+    // firmware broadcasts and full resyncs never reflected the perf params
+    // (140..146), the curve params (147..155), or master volume (pseudo
+    // 200) into the UI.  findParamByCC() is the validity gate; unknown keys
+    // fall out one line later exactly as before.
+    if (cc < 0) return;
 
     const CCParam* p = findParamByCC(cc);
     if (p == nullptr) return;
@@ -228,16 +409,9 @@ void JT8000ControllerProcessor::applyIncomingCC(int cc, int value)
     auto* param = apvts.getParameter(p->id);
     if (param == nullptr) return;
 
-    float normVal;
-    if (isChoiceParam(*p))
-    {
-        int idx = ccToChoiceIndex(juce::jlimit(0, 127, value), p->enumCount);
-        normVal = param->convertTo0to1(static_cast<float>(idx));
-    }
-    else
-    {
-        normVal = param->convertTo0to1(static_cast<float>(juce::jlimit(0, 127, value)));
-    }
+    // One value law for every shape (choice / int-lattice / raw) —
+    // plainFromCCByte is the same code the host gate asserts (Phase J1).
+    const float normVal = param->convertTo0to1(plainFromCCByte(*p, value));
 
     _suppressEcho.store(true);
     param->setValueNotifyingHost(normVal);
@@ -397,62 +571,21 @@ void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float n
         return;
     }
 
-    // ---- Resolve 14-bit ParamID and scope ----------------------------------
-    const uint16_t pid = ParamMapJuce::paramId14ForCC(p->cc);
-    if (pid == 0)
-    {
-        DBG("[ParamChg] " << id << " (CC " << p->cc << ") — no ParamID mapping, dropped");
-        return;
-    }
+    // ---- Encode APVTS value to the 7-bit wire form (Phase J1) -------------
+    // ccByteFromPlain is the single home of the value law — choice (LUT /
+    // bucket midpoint / toggle 0-127), int-lattice (seq_steps), and raw all
+    // encode here, and the identical code is asserted by the host gate.
+    const int ccVal = juce::jlimit(0, 127, ccByteFromPlain(*p, newValue));
 
-    int ccVal;
-    if (isChoiceParam(*p))
-        ccVal = choiceIndexToCC(juce::roundToInt(newValue), p->enumCount, p->ccLUT);
-    else
-        ccVal = juce::roundToInt(newValue);
-    ccVal = juce::jlimit(0, 127, ccVal);
-
-    // ---- Layer routing -----------------------------------------------------
-    uint8_t layer;
-    const int scope = ParamMapJuce::scopeForCC(p->cc);
-    if (scope == 1)         layer = SyxProto::kLayerPerf;
-    else if (scope == 2)    layer = SyxProto::kLayerGlobalFx;
-    else
-    {
-        // Patch scope: route per editTarget.
-        switch (editTarget.load())
-        {
-            case EditTarget::LayerA: layer = SyxProto::kLayerA;    break;
-            case EditTarget::LayerB: layer = SyxProto::kLayerB;    break;
-            case EditTarget::Both:   layer = SyxProto::kLayerBoth; break;
-            default:                 layer = SyxProto::kLayerA;    break;
-        }
-    }
-
-    // ---- Native float conversion + send ------------------------------------
-    const float nativeValue = ParamMapJuce::ccByteToNativeFloat(pid, (uint8_t)ccVal);
-
-    // File log — first 5 param changes only to avoid flooding the log file.
-    // Enough to confirm the callback fires and reaches the send call.
-    static int logCount = 0;
-    if (logCount < 5)
-    {
-        JT8000Log::write("[ParamChg] " + id + " CC=" + juce::String(p->cc)
-            + " pid=0x" + juce::String::toHexString((int)pid)
-            + " layer=0x" + juce::String::toHexString((int)layer)
-            + " ccVal=" + juce::String(ccVal)
-            + " native=" + juce::String(nativeValue));
-        ++logCount;
-        if (logCount == 5)
-            JT8000Log::write("[ParamChg] (further entries suppressed)");
-    }
-
-    DBG("[ParamChg] " << id << " CC=" << p->cc << " pid=0x"
-        << juce::String::toHexString((int)pid) << " layer=0x"
-        << juce::String::toHexString((int)layer) << " ccVal=" << ccVal
-        << " native=" << nativeValue);
-
-    sendSysExSetParam(layer, pid, nativeValue);
+    // Layer routing is GONE (flagged deviation): the v2 engine is
+    // single-layer (DEFERRALS_LEDGER "per-layer collapse"), so the layer
+    // byte has no receiver.  editTarget still exists in the UI; outbound
+    // ignores it.  isLocalOnly no longer gates the send either — the bridge
+    // carries the old 128+ ExtCC range (perf 140-146, curves 147-155) as
+    // ordinary NRPN, which is precisely what dissolves ledger item 5.
+    DBG("[ParamChg] " << id << " v1cc=" << p->cc << " ccVal=" << ccVal
+        << " -> NRPN");
+    sendParamNrpn(p->cc, ccVal);
 }
 
 // =============================================================================
@@ -479,29 +612,93 @@ void JT8000ControllerProcessor::sendSysExSetParam(uint8_t layer,
 }
 
 // =============================================================================
-// sendStepSeqEdit — atomic step sequencer write (two SET_PARAMs back-to-back)
+// sendStepSeqEdit — atomic step sequencer write (two NRPNs back-to-back)
 //
-// The firmware applies them in arrival order. Step Select first, then Step
-// Value — same semantics the legacy CC pair (CC 17 then CC 18) had.
+// The firmware applies them in arrival order: Step Select then Step Value —
+// the same shared-address protocol the v1 CC pair (17 then 18) used, and
+// what the v2 sequencer's _seqEditStep expects (DEFERRALS_LEDGER D-5).
+// Layer selection removed with the rest of the layer routing (v2 is
+// single-engine).
 // =============================================================================
 void JT8000ControllerProcessor::sendStepSeqEdit(int step, int value)
 {
-    // Both messages go to the patch-scope edit target since the step sequencer
-    // is per-engine.
-    uint8_t layer;
-    switch (editTarget.load())
+    // D-J1 (Phase J1): seq.step_select is a canonical `type: int` param —
+    // the firmware decodes lroundf(norm * 15) (SynthCore.cpp), NOT a raw
+    // byte.  Sending the bare index as v7 put norm at step/127, collapsing
+    // all 16 bars onto engine steps 0..2 (every grid edit past bar 1
+    // corrupted the wrong step).  The lattice encode makes the round-trip
+    // exact for all 16 steps — asserted in the host gate.
+    const int sel7 = ValueLaw::ccFromIntLattice(juce::jlimit(0, 15, step), 0, 15);
+    sendParamNrpn(17, sel7);                         // seq.step_select (v1 CC 17)
+    sendParamNrpn(18, juce::jlimit(0, 127, value));  // seq.step_value  (v1 CC 18)
+}
+
+// =============================================================================
+// Phase E: NRPN wire helpers.  queueShortMidi mirrors queueSysEx's transport
+// selection exactly (direct device is exclusive and primary; host-bus FIFO
+// is the fallback) so NRPN inherits the double-send protection unchanged.
+// =============================================================================
+void JT8000ControllerProcessor::queueShortMidi(const NrpnLink::Short3* msgs,
+                                                size_t n)
+{
+#if JT8000_HAS_ENGINE
+    // Phase J2 tee: every locally-generated NRPN cluster (knob moves, step
+    // grid, Send All) also reaches the embedded engine — the SAME bytes the
+    // Teensy would receive, which is the whole point of Sound mode being a
+    // faithful audition.  Collector-buffered: this runs on whatever thread
+    // the APVTS callback used.
+    if (engineAudible() && _inboxReady.load())
     {
-        case EditTarget::LayerA: layer = SyxProto::kLayerA;    break;
-        case EditTarget::LayerB: layer = SyxProto::kLayerB;    break;
-        case EditTarget::Both:   layer = SyxProto::kLayerBoth; break;
-        default:                 layer = SyxProto::kLayerA;    break;
+        const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
+        for (size_t k = 0; k < n; ++k)
+            _engineInbox.addMessageToQueue(juce::MidiMessage(msgs[k].b[0],
+                                                             msgs[k].b[1],
+                                                             msgs[k].b[2], now));
     }
+    if (_engineMode.load() == kModeSound)
+        return;   // hardware wire stays silent in Sound mode
+#endif
+    {
+        const juce::ScopedLock sl(midiOutLock);
+        if (directMidiOut != nullptr)
+        {
+            for (size_t k = 0; k < n; ++k)
+                directMidiOut->sendMessageNow(juce::MidiMessage(msgs[k].b, 3));
+            return;   // exclusive — never also queue to the bus
+        }
+    }
+    for (size_t k = 0; k < n; ++k)
+    {
+        int s1, sz1, s2, sz2;
+        fifo.prepareToWrite(1, s1, sz1, s2, sz2);
+        if (sz1 <= 0) { DBG("[queueShortMidi] FIFO full — dropped"); return; }
+        auto& slot = messageBuffer[s1];
+        slot.data[0] = msgs[k].b[0];
+        slot.data[1] = msgs[k].b[1];
+        slot.data[2] = msgs[k].b[2];
+        slot.numBytes = 3;
+        fifo.finishedWrite(1);
+    }
+}
 
-    // Step Select (0x0E10) — value is the step index (0..15) as a float.
-    sendSysExSetParam(layer, 0x0E10, (float)juce::jlimit(0, 15, step));
+void JT8000ControllerProcessor::sendParamNrpn(int v1cc, int ccVal)
+{
+    NrpnLink::Short3 m[6];
+    const size_t n = NrpnLink::encodeParam((uint16_t)v1cc,
+                                           (uint8_t)juce::jlimit(0, 127, ccVal),
+                                           1 /*channel*/, m);
+    if (n == 0)
+    {
+        DBG("[sendParamNrpn] v1cc " << v1cc << " unmapped — dropped");
+        return;   // stale control or v2-only slot: never guess a ParamID
+    }
+    queueShortMidi(m, n);
+}
 
-    // Step Value (0x0E11) — value is 0..127 (the actual step value).
-    sendSysExSetParam(layer, 0x0E11, (float)juce::jlimit(0, 127, value));
+void JT8000ControllerProcessor::requestResync()
+{
+    NrpnLink::Short3 m[5];
+    queueShortMidi(m, NrpnLink::encodeResyncRequest(1, m));
 }
 
 // =============================================================================
@@ -520,6 +717,12 @@ void JT8000ControllerProcessor::sendStepSeqEdit(int step, int value)
 // =============================================================================
 void JT8000ControllerProcessor::queueSysEx(const uint8_t* data, int len)
 {
+#if JT8000_HAS_ENGINE
+    // Sound mode: SysEx is hardware-only traffic (patch ops, SET_PARAM) the
+    // embedded engine does not parse — suppress it with the rest of the wire.
+    if (_engineMode.load() == kModeSound) return;
+#endif
+
     if (len <= 0 || len > kSysExSlotBytes)
     {
         DBG("[queueSysEx] bad len " << len);
@@ -591,118 +794,23 @@ void JT8000ControllerProcessor::queueSysEx(const uint8_t* data, int len)
 // =============================================================================
 void JT8000ControllerProcessor::sendBankDump()
 {
-    juce::Array<uint8_t> buf;
-    buf.ensureStorageAllocated((int)SyxProto::kBankDumpMaxLen);
-
-    auto put = [&](uint8_t b) { buf.add(b); };
-
-    // Header
-    put(0xF0);
-    put(SyxProto::kMfrId);
-    put(SyxProto::kSubIdJ);
-    put(SyxProto::kSubIdT);
-    put(SyxProto::kDeviceDefault);
-    put(SyxProto::kMsgBankDump);
-    // Reserve count placeholder — patched at the end.
-    const int countOffset = buf.size();
-    put(0); put(0);
-
-    // Helper: append one entry (layer + pid + float).
-    uint16_t entryCount = 0;
-    auto appendEntry = [&](uint8_t layer, uint16_t pid, float value)
-    {
-        put(layer);
-        put(SyxProto::paramIdHi(pid));
-        put(SyxProto::paramIdLo(pid));
-        uint8_t f5[SyxProto::kFloatBytes];
-        SyxProto::encodeFloat(value, f5);
-        for (int i = 0; i < (int)SyxProto::kFloatBytes; ++i) put(f5[i]);
-        ++entryCount;
-    };
-
-    // Walk every APVTS-bound param. For each:
-    //   - Look up 14-bit ParamID
-    //   - Read APVTS value (CC byte / choice index form)
-    //   - Convert to native float
-    //   - Emit entry(ies) based on scope
+    // Phase E: "send patch to synth" is now simply every APVTS-bound param
+    // as NRPN — the same single code path as a knob turn.  The v1 BANK_DUMP
+    // blob (layer bytes, 5-byte floats, count patching) has no v2 receiver;
+    // the firmware assembles state param-by-param, then its own broadcast
+    // mirrors the result to every other editor (live view for free).
     for (int i = 0; i < kNumParams; ++i)
     {
         const auto& p = kAllParams[i];
-        const uint16_t pid = ParamMapJuce::paramId14ForCC(p.cc);
-        if (pid == 0) continue;
+        if (p.style == ControlStyle::StepGrid) continue;   // grid has its own path
 
-        // Read APVTS value -> CC byte form.
         auto* param = apvts.getParameter(p.id);
-        if (!param) continue;
-        const float zeroToOne = param->getValue();
-        const float realValue = param->convertFrom0to1(zeroToOne);
+        if (param == nullptr) continue;
 
-        int ccVal;
-        if (isChoiceParam(p))
-            ccVal = choiceIndexToCC(juce::roundToInt(realValue), p.enumCount, p.ccLUT);
-        else
-            ccVal = juce::roundToInt(realValue);
-        ccVal = juce::jlimit(0, 127, ccVal);
-
-        const float nativeValue = ParamMapJuce::ccByteToNativeFloat(pid, (uint8_t)ccVal);
-
-        const int scope = ParamMapJuce::scopeForCC(p.cc);
-        if (scope == 1)         appendEntry(SyxProto::kLayerPerf,     pid, nativeValue);
-        else if (scope == 2)    appendEntry(SyxProto::kLayerGlobalFx, pid, nativeValue);
-        else
-        {
-            // Patch scope — route based on current editTarget.
-            //
-            // The APVTS holds ONE layer's worth of patch values. The caller
-            // sets editTarget before calling sendBankDump() to control which
-            // firmware engine receives these values:
-            //   LayerA → emit kLayerA only
-            //   LayerB → emit kLayerB only
-            //   Both   → emit kLayerBoth (firmware applies to both engines)
-            switch (editTarget.load())
-            {
-                case EditTarget::LayerA:
-                    appendEntry(SyxProto::kLayerA, pid, nativeValue);
-                    break;
-                case EditTarget::LayerB:
-                    appendEntry(SyxProto::kLayerB, pid, nativeValue);
-                    break;
-                case EditTarget::Both:
-                default:
-                    appendEntry(SyxProto::kLayerBoth, pid, nativeValue);
-                    break;
-            }
-        }
-    }
-
-    // Patch the count.
-    buf.set(countOffset,     (uint8_t)((entryCount >> 7) & 0x7F));
-    buf.set(countOffset + 1, (uint8_t)( entryCount       & 0x7F));
-
-    // Trailer.
-    put(0xF7);
-
-    // TRANSPORT SELECTION — same mutual exclusion as queueSysEx:
-    //   direct device open  -> send now, skip the bus handoff
-    //   no direct device     -> hand to bigOutBuf for processBlock to flush
-    {
-        const juce::ScopedLock sl(midiOutLock);
-        if (directMidiOut != nullptr)
-        {
-            // SysEx constructor expects body without F0/F7.
-            auto msg = juce::MidiMessage::createSysExMessage(
-                buf.getRawDataPointer() + 1, buf.size() - 2);
-            directMidiOut->sendMessageNow(msg);
-            return;   // direct device is exclusive — do NOT also queue to the bus
-        }
-    }
-
-    // Fallback: no direct device — hand off via bigOutBuf for the audio
-    // thread (processBlock) to flush onto the host MIDI bus.
-    {
-        const juce::ScopedLock sl(bigOutLock);
-        bigOutBuf = buf;
-        bigOutReady.store(true);
+        // Same single value law as parameterChanged — ccByteFromPlain covers
+        // choice, int-lattice, and raw rows (Phase J1).
+        const float plain = param->convertFrom0to1(param->getValue());
+        sendParamNrpn(p.cc, juce::jlimit(0, 127, ccByteFromPlain(p, plain)));
     }
 }
 
@@ -716,16 +824,10 @@ void JT8000ControllerProcessor::sendBankDump()
 // =============================================================================
 void JT8000ControllerProcessor::sendBankDumpRequest()
 {
-    uint8_t buf[SyxProto::kMsgBankDumpReqLen];
-    buf[0]                          = 0xF0;
-    buf[SyxProto::kOffsetMfrId]     = SyxProto::kMfrId;
-    buf[SyxProto::kOffsetSubIdJ]    = SyxProto::kSubIdJ;
-    buf[SyxProto::kOffsetSubIdT]    = SyxProto::kSubIdT;
-    buf[SyxProto::kOffsetDeviceId]  = SyxProto::kDeviceDefault;
-    buf[SyxProto::kOffsetMsgType]   = SyxProto::kMsgBankDumpRequest;
-    buf[SyxProto::kMsgBankDumpReqLen - 1] = 0xF7;
-
-    queueSysEx(buf, (int)SyxProto::kMsgBankDumpReqLen);
+    // Phase E: the pull is the reserved resync NRPN (0x3F00) — the firmware
+    // replies with EVERY parameter, paced, to every port.  Name kept so the
+    // editor's existing call sites stay valid.
+    requestResync();
 }
 
 // =============================================================================
@@ -738,12 +840,8 @@ void JT8000ControllerProcessor::sendBankDumpRequest()
 // =============================================================================
 void JT8000ControllerProcessor::requestLayerSync()
 {
-    switch (editTarget.load())
-    {
-        case EditTarget::LayerA: pendingSyncLayer.store(SyxProto::kLayerA); break;
-        case EditTarget::LayerB: pendingSyncLayer.store(SyxProto::kLayerB); break;
-        default:                 pendingSyncLayer.store(SyxProto::kLayerA); break;
-    }
+    // Phase E: the v2 engine is single-layer — there is no per-layer cache
+    // to select.  A target switch now just pulls the (one) current state.
     sendBankDumpRequest();
 }
 
@@ -879,6 +977,10 @@ juce::String JT8000ControllerProcessor::getActiveMidiInputId() const
 // =============================================================================
 void JT8000ControllerProcessor::forwardToTeensy(const juce::MidiMessage& msg)
 {
+#if JT8000_HAS_ENGINE
+    // Sound mode = desktop audition only; the hardware hears nothing (J2).
+    if (_engineMode.load() == kModeSound) return;
+#endif
     const juce::ScopedLock sl(midiOutLock);
     if (directMidiOut != nullptr)
         directMidiOut->sendMessageNow(msg);
@@ -904,6 +1006,17 @@ void JT8000ControllerProcessor::forwardToTeensy(const juce::MidiMessage& msg)
 void JT8000ControllerProcessor::handleIncomingMidiMessage(juce::MidiInput* source,
                                                           const juce::MidiMessage& msg)
 {
+#if JT8000_HAS_ENGINE
+    // Phase J2: every performance/param message also feeds the embedded
+    // engine via the collector (this runs on the MIDI system thread — the
+    // collector is the bridge that keeps the audio thread the engine's only
+    // caller).  SysEx is excluded: the engine's transport is CC/NRPN-only,
+    // recorded in the ledger.
+    if (engineAudible() && _inboxReady.load() && ! msg.isSysEx())
+        _engineInbox.addMessageToQueue(
+            juce::MidiMessage(msg, juce::Time::getMillisecondCounterHiRes() * 0.001));
+#endif
+
     // Determine role: is this message from the Teensy (listen-only) device?
     bool fromTeensy = false;
     {
@@ -917,6 +1030,36 @@ void JT8000ControllerProcessor::handleIncomingMidiMessage(juce::MidiInput* sourc
     {
         const int cc = msg.getControllerNumber();
 
+        // Phase E: NRPN from the Teensy decodes first (independent stream
+        // state from the VST3 bus); cluster CCs never reach the param table.
+        {
+            int v1cc, v7;
+            const bool decoded =
+                nrpnDecodeDirect_.feed(cc, msg.getControllerValue(), &v1cc, &v7);
+
+            // Status feed 0x3FFF (Phase J1d) — latch before any early-out.
+            // The direct stream is per-message, so a coarse-only word can be
+            // latched for one poll tick; the CC38 refinement corrects it a
+            // message later (worst case one wrong-playhead frame).
+            uint16_t statusWord;
+            if (nrpnDecodeDirect_.takeStatus(&statusWord))
+            {
+                if (! engineAudible())   // engine status wins while audible (J2)
+                {
+                    _statusWord.store(statusWord);
+                    _statusCount.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+
+            if (decoded)
+            {
+                applyIncomingCC(v1cc, v7);
+                return;
+            }
+            if (NrpnLink::isClusterCC(cc))
+                return;   // consumed: selection/deselect bytes
+        }
+
         // Does this CC map to a plugin parameter?
         const bool isParamCC = (findParamByCC(cc) != nullptr);
 
@@ -927,6 +1070,10 @@ void JT8000ControllerProcessor::handleIncomingMidiMessage(juce::MidiInput* sourc
             // we deliberately do NOT also forward the raw CC: the SET_PARAM
             // SysEx fired by the APVTS change is the canonical path, keeping
             // parameter edits on the SysEx wire (not the CC wire we moved off).
+            // (Phase J1 note: plain CC 7 lands here as v1 seq.rate — the
+            // firmware's curated `cc: 7` = master volume map applies only to
+            // controllers wired to the Teensy directly, not through us.
+            // Pre-existing behaviour, recorded in the ledger, unchanged.)
             applyIncomingCC(cc, msg.getControllerValue());
         }
         else if (! fromTeensy)
@@ -974,13 +1121,25 @@ void JT8000ControllerProcessor::handleIncomingMidiMessage(juce::MidiInput* sourc
 void JT8000ControllerProcessor::getStateInformation(juce::MemoryBlock& dest)
 {
     if (auto xml = apvts.state.createXml())
+    {
+#if JT8000_HAS_ENGINE
+        // App-level setting, not patch data: rides the state XML root so a
+        // reopened session keeps its mode, but Init Patch never touches it.
+        xml->setAttribute("engineMode", _engineMode.load());
+#endif
         copyXmlToBinary(*xml, dest);
+    }
 }
 
 void JT8000ControllerProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary(data, sizeInBytes))
+    {
+#if JT8000_HAS_ENGINE
+        setEngineMode(xml->getIntAttribute("engineMode", _engineMode.load()));
+#endif
         apvts.replaceState(juce::ValueTree::fromXml(*xml));
+    }
 }
 
 // =============================================================================

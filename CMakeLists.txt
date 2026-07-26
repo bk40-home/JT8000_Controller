@@ -37,6 +37,60 @@ endif()
 add_subdirectory(${JUCE_DIR} ${CMAKE_BINARY_DIR}/juce_build)
 
 # ---------------------------------------------------------------------------
+# Embedded firmware engine (Phase J2) — OPTIONAL, single source of truth.
+#
+#   cmake .. -DJT_ENGINE_DIR=/path/to/jteensy8000-v2
+#
+# Points at your firmware CHECKOUT — nothing is copied into this repo, so
+# the desktop engine can never drift from the hardware engine.  Unset, this
+# project builds exactly as before: controller only, no Sound modes, no
+# JT8000_Synth target.
+#
+# The engine compiles with the firmware's own host-test flag family
+# (-DJT_TESTING gates read-only debug hooks only; it is what `make render`
+# — the audible regression baseline — uses, so the audition is bit-faithful
+# to that baseline).  test/ supplies the AudioStream_F32/progmem stubs.
+# ---------------------------------------------------------------------------
+set(JT_ENGINE_DIR "" CACHE PATH "Path to a jteensy8000-v2 checkout (empty = controller-only build)")
+
+if(JT_ENGINE_DIR)
+    if(NOT EXISTS "${JT_ENGINE_DIR}/src/core/SynthCore.h")
+        message(FATAL_ERROR "JT_ENGINE_DIR does not look like jteensy8000-v2: ${JT_ENGINE_DIR}")
+    endif()
+
+    # GLOB is deliberate here: the source list belongs to the FIRMWARE repo's
+    # Makefile, and duplicating it by hand in this repo is exactly the drift
+    # this project forbids.  CONFIGURE_DEPENDS re-globs when files change.
+    file(GLOB JT_ENGINE_SOURCES CONFIGURE_DEPENDS
+        "${JT_ENGINE_DIR}/src/core/*.cpp"
+        "${JT_ENGINE_DIR}/src/core/dsp/*.cpp")
+
+    add_library(jt_engine STATIC ${JT_ENGINE_SOURCES} Source/EngineHost.cpp)
+    target_include_directories(jt_engine PUBLIC
+        "${JT_ENGINE_DIR}/src"
+        "${JT_ENGINE_DIR}/test"      # AudioStream_F32 / progmem host stubs
+        "${CMAKE_CURRENT_SOURCE_DIR}/Source")
+    target_compile_definitions(jt_engine PUBLIC JT_TESTING=1)
+    target_compile_features(jt_engine PUBLIC cxx_std_17)
+    if(MSVC)
+        # /W4 without /WX: the firmware's -Werror gate is g++/clang; blocking
+        # Kris's MSVC build on warnings in code this repo must not modify
+        # would be self-harm.  New warnings still show in the log.
+        #
+        # /FI force-includes the GCC-builtin shim (__builtin_ctz et al) into
+        # every engine TU — MSVC lacks those intrinsics and the firmware
+        # sources must stay untouched.  See Source/MsvcBuiltinShim.h.
+        target_compile_options(jt_engine PRIVATE /W4
+            "/FI${CMAKE_CURRENT_SOURCE_DIR}/Source/MsvcBuiltinShim.h")
+    else()
+        target_compile_options(jt_engine PRIVATE -Wall -Wextra -Wdouble-promotion -Werror)
+    endif()
+    message(STATUS "JT-8000: embedded engine ENABLED from ${JT_ENGINE_DIR}")
+else()
+    message(STATUS "JT-8000: controller-only build (set JT_ENGINE_DIR for Sound modes)")
+endif()
+
+# ---------------------------------------------------------------------------
 # Plugin target
 #
 # IS_MIDI_EFFECT is FALSE — Ableton cannot load MIDI-only VST3 plugins.
@@ -56,12 +110,21 @@ juce_add_plugin(JT8000_Controller
     IS_MIDI_EFFECT             FALSE
 )
 
-target_sources(JT8000_Controller PRIVATE
+# ---------------------------------------------------------------------------
+# Shared application sources + per-target wiring (Phase J2: two targets share
+# one source tree; only compile definitions differ)
+# ---------------------------------------------------------------------------
+set(JT_APP_SOURCES
     Source/PluginProcessor.cpp
     Source/PluginProcessor.h
     Source/PluginEditor.cpp
     Source/PluginEditor.h
     Source/CCDefinitions.h
+    Source/ValueLaw.h
+    Source/JtBridgeExt.h
+    Source/NrpnLink.h
+    Source/StatusDots.h
+    Source/EngineHost.h
     Source/JT8000LookAndFeel.h
     Source/JT8000LookAndFeel.cpp
     Source/SectionComponent.h
@@ -77,24 +140,58 @@ target_sources(JT8000_Controller PRIVATE
     Source/JT8000Log.h
 )
 
-# Compile definitions — PRIVATE prevents leaking into moduleinfo.json
-target_compile_definitions(JT8000_Controller
-    PRIVATE
-        JUCE_WEB_BROWSER=0
-        JUCE_USE_CURL=0
-        JUCE_VST3_CAN_REPLACE_VST2=0
-        JUCE_DISPLAY_SPLASH_SCREEN=0
-)
+function(jt_wire_target tgt)
+    target_sources(${tgt} PRIVATE ${JT_APP_SOURCES})
 
-# Link libraries — all PRIVATE. juce_audio_devices required for Windows MIDI.
-target_link_libraries(JT8000_Controller
-    PRIVATE
-        juce::juce_audio_processors
-        juce::juce_audio_devices
-        juce::juce_audio_utils
-        juce::juce_gui_basics
-        juce::juce_gui_extra
-        juce::juce_data_structures
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_warning_flags
-)
+    # PRIVATE throughout — PUBLIC definitions leak into moduleinfo.json
+    # (the Ableton subcategory corruption, ledgered from Phase D).
+    target_compile_definitions(${tgt}
+        PRIVATE
+            JUCE_WEB_BROWSER=0
+            JUCE_USE_CURL=0
+            JUCE_VST3_CAN_REPLACE_VST2=0
+            JUCE_DISPLAY_SPLASH_SCREEN=0
+    )
+
+    target_link_libraries(${tgt}
+        PRIVATE
+            juce::juce_audio_processors
+            juce::juce_audio_devices
+            juce::juce_audio_utils
+            juce::juce_gui_basics
+            juce::juce_gui_extra
+            juce::juce_data_structures
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_warning_flags
+    )
+
+    if(JT_ENGINE_DIR)
+        target_compile_definitions(${tgt} PRIVATE JT8000_HAS_ENGINE=1)
+        target_link_libraries(${tgt} PRIVATE jt_engine)
+    endif()
+endfunction()
+
+jt_wire_target(JT8000_Controller)
+
+# ---------------------------------------------------------------------------
+# JT8000_Synth (Phase J2, sign-off Q2b) — the same application built as a
+# VST3 INSTRUMENT: sits on an instrument track, receives notes, sounds via
+# the embedded engine (default mode Sound; Both still reaches the Teensy).
+# Exists only when the engine does.
+# ---------------------------------------------------------------------------
+if(JT_ENGINE_DIR)
+    juce_add_plugin(JT8000_Synth
+        COMPANY_NAME               "JT8000"
+        PLUGIN_MANUFACTURER_CODE   JT8K
+        PLUGIN_CODE                JT8S
+        FORMATS                    VST3 Standalone
+        PRODUCT_NAME               "JT-8000 Synth"
+        JUCE_GENERATE_JUCE_HEADER  TRUE
+        IS_SYNTH                   TRUE
+        NEEDS_MIDI_INPUT           TRUE
+        NEEDS_MIDI_OUTPUT          TRUE
+        IS_MIDI_EFFECT             FALSE
+    )
+    jt_wire_target(JT8000_Synth)
+    target_compile_definitions(JT8000_Synth PRIVATE JT8000_SYNTH_TARGET=1)
+endif()

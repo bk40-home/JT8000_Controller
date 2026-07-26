@@ -59,7 +59,10 @@ struct Patch
     juce::String   name;        // 16-char name trimmed
     int            dataOffset;  // byte offset of parameter block in srcBuffer
     int            dataLen;     // length of parameter block
-    const uint8_t* srcBuffer;   // raw file buffer (caller owns lifetime)
+    const uint8_t* srcBuffer;   // points INTO ParsedBank::backing — the bank
+                                // owns the bytes (J3a).  Never a caller
+                                // buffer: the old caller-owns contract is
+                                // what let the .mid path dangle (D-J8).
 };
 
 /** JP-8000 performance mode — maps directly to header byte offset +0x10. */
@@ -88,6 +91,14 @@ struct ParsedBank
 {
     std::vector<Performance>  performances;   // grouped upper/lower
     std::vector<Patch>        orphanPatches;  // patches without a header
+
+    // J3a (D-J8 fix): the bank OWNS the SysEx bytes every Patch points
+    // into.  For .syx this is a copy of the file; for .mid it is the
+    // reassembled SysEx stream (previously a parseMidBuffer local that
+    // died at return — the use-after-free that zeroed imported patches).
+    // Moving a ParsedBank is safe (heap pointer survives the move);
+    // copying one is not meaningful and callers hold it by value/ref.
+    std::vector<uint8_t>      backing;
 };
 
 /** Where to send a loaded patch. */

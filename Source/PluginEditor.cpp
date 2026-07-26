@@ -90,40 +90,71 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
         s.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     };
 
-    // Populate combo items — must match the ccLUT-based choice ordering
-    // in CCDefinitions.h so the ComboBoxAttachment below lines up 1:1.
+    // Populate combo items from the CCDefinitions row itself (Phase J1):
+    // hand-typed duplicates of the option lists were how the header could
+    // drift from the table — now the table IS the item source, so a row
+    // change (like D-J5's new selects) can never desynchronise the UI.
     // (JUCE ComboBox::addItem IDs are 1-based; the attachment maps
     //  index 0..N-1 to combo IDs 1..N.)
-    _editTargetCombo.addItem("A",    1);
-    _editTargetCombo.addItem("B",    2);
-    _editTargetCombo.addItem("Both", 3);
-
-    _perfModeCombo.addItem("Single", 1);
-    _perfModeCombo.addItem("Layer",  2);
-    _perfModeCombo.addItem("Split",  3);
-
-    for (int i = 1; i <= 16; ++i)
+    auto fillFromRow = [](juce::ComboBox& cb, const char* paramId)
     {
-        _chACombo.addItem("Ch " + juce::String(i), i);
-        _chBCombo.addItem("Ch " + juce::String(i), i);
-    }
+        if (const CCParam* p = findParamByID(paramId))
+            for (int i = 0; i < p->enumCount; ++i)
+                cb.addItem(p->enumNames[i], i + 1);
+    };
+    fillFromRow(_editTargetCombo, "perf_edit_target");
+    fillFromRow(_perfModeCombo,   "perf_mode");
+    fillFromRow(_chACombo,        "perf_midi_ch_a");
+    fillFromRow(_chBCombo,        "perf_midi_ch_b");
+    fillFromRow(_voiceSplitCombo, "perf_voice_split");   // D-J5: was a raw knob
+    fillFromRow(_balanceCombo,    "perf_balance");       // D-J5: was a raw knob
 
     styleCombo(_editTargetCombo);
     styleCombo(_chACombo);
     styleCombo(_chBCombo);
     styleCombo(_perfModeCombo);
+    styleCombo(_voiceSplitCombo);
+    styleCombo(_balanceCombo);
 
-    styleKnob(_voiceSplitKnob);
     styleKnob(_splitNoteKnob);
-    styleKnob(_balanceKnob);
+    styleKnob(_masterVolKnob);                           // J1c
 
     addAndMakeVisible(_editTargetCombo);
     addAndMakeVisible(_chACombo);
     addAndMakeVisible(_chBCombo);
     addAndMakeVisible(_perfModeCombo);
-    addAndMakeVisible(_voiceSplitKnob);
+    addAndMakeVisible(_voiceSplitCombo);
     addAndMakeVisible(_splitNoteKnob);
-    addAndMakeVisible(_balanceKnob);
+    addAndMakeVisible(_balanceCombo);
+    addAndMakeVisible(_masterVolKnob);
+    addAndMakeVisible(_statusDots);                      // J1d
+
+    // ---- Embedded engine controls (Phase J2) -------------------------------
+    // Present only when the build carries the engine; a controller-only
+    // build shows exactly the pre-J2 header.
+    if (_proc.engineAvailable())
+    {
+        _engineModeCombo.addItem("Controller", 1);
+        _engineModeCombo.addItem("Sound",      2);
+        _engineModeCombo.addItem("Both",       3);
+        styleCombo(_engineModeCombo);
+        _engineModeCombo.setSelectedItemIndex(_proc.engineMode(),
+                                              juce::dontSendNotification);
+        _engineModeCombo.onChange = [this]
+        {
+            _proc.setEngineMode(_engineModeCombo.getSelectedItemIndex());
+            applyEngineSampleRatePolicy();
+        };
+        addAndMakeVisible(_engineModeCombo);
+
+        _rateWarnLabel.setText(juce::String::fromUTF8("â ") + "44.1k",
+                               juce::dontSendNotification);
+        _rateWarnLabel.setColour(juce::Label::textColourId, juce::Colour(0xfff08020));
+        _rateWarnLabel.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+        _rateWarnLabel.setJustificationType(juce::Justification::centred);
+        _rateWarnLabel.setTooltip("Engine is 44.1 kHz-tuned; device runs another rate (pitch off)");
+        addChildComponent(_rateWarnLabel);   // visibility driven by the timer
+    }
 
     // Bind each control to its APVTS parameter. JUCE handles the two-way
     // sync; our parameterChanged() in PluginProcessor still fires for the
@@ -135,9 +166,10 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_midi_ch_a",   _chACombo));
     _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_midi_ch_b",   _chBCombo));
     _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_mode",        _perfModeCombo));
-    _headerSliderAtts.add(new SliderAtt(_proc.apvts, "perf_voice_split", _voiceSplitKnob));
+    _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_voice_split", _voiceSplitCombo));  // D-J5
+    _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_balance",     _balanceCombo));     // D-J5
     _headerSliderAtts.add(new SliderAtt(_proc.apvts, "perf_split_note",  _splitNoteKnob));
-    _headerSliderAtts.add(new SliderAtt(_proc.apvts, "perf_balance",     _balanceKnob));
+    _headerSliderAtts.add(new SliderAtt(_proc.apvts, "master_volume",    _masterVolKnob));    // J1c
 
     // --- MIDI output selector (ALL modes — standalone AND VST3) -------------
     // WHY: stock JUCE's VST3 wrapper drops outgoing SysEx from the processBlock
@@ -233,11 +265,12 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     setResizable(true, true);
     setResizeLimits(400, 400, 1600, 2400);
 
-    // Poll for MIDI device hot-plug in every mode. The timer refreshes the
-    // output list always, and the input list only in standalone (see
-    // timerCallback). Previously gated to standalone, which left the VST3
-    // output selector stale when the Teensy was plugged in after load.
-    startTimer(2000);
+    // One timer, two cadences (Phase J1d): every tick services the engine
+    // status feed (voice dots + grid playhead — cheap, change-driven), and
+    // every kDevicePollTicks-th tick runs the MIDI device hot-plug scan at
+    // its original 2 s rate (device enumeration is NOT cheap on some OSes,
+    // so it must not ride the fast tick).
+    startTimer(kStatusPollMs);
 }
 
 JT8000ControllerEditor::~JT8000ControllerEditor()
@@ -259,7 +292,20 @@ void JT8000ControllerEditor::refreshMidiOutputList()
     auto devices = juce::MidiOutput::getAvailableDevices();
     for (int i = 0; i < devices.size(); ++i)
         _midiOutSelector.addItem(devices[i].name, i + 1);
-    _midiOutSelector.setSelectedId(-1, juce::dontSendNotification);
+
+    // Restore the SHOWN selection from the processor's currently-open device.
+    // The processor keeps directMidiOut open across editor lifetimes, so on a
+    // rebuild (host reopening the window) the combo must reflect what is
+    // already selected — otherwise it reads "No MIDI Output" while control
+    // traffic still flows out the direct device.  Match by identifier, not
+    // name, since names can repeat.  Fall back to -1 when nothing is open.
+    const juce::String openId = _proc.getDirectMidiOutId();
+    int shownId = -1;
+    if (openId.isNotEmpty())
+        for (int i = 0; i < devices.size(); ++i)
+            if (devices[i].identifier == openId) { shownId = i + 1; break; }
+
+    _midiOutSelector.setSelectedId(shownId, juce::dontSendNotification);
 }
 
 // =============================================================================
@@ -312,21 +358,71 @@ void JT8000ControllerEditor::showMidiInputMenu()
 // =============================================================================
 // Timer — MIDI device hot-plug refresh (output: all modes, input: standalone)
 // =============================================================================
+// =============================================================================
+// applyEngineSampleRatePolicy (Phase J2, sign-off Q4 — fallback variant)
+//
+// The auto-request originally reached the standalone's device manager via
+// juce::StandalonePluginHolder; this JUCE version does not export that
+// class through juce_audio_utils (MSVC C2039, 2026-07-20), and the flagged
+// fallback applies: the orange rate label carries the whole policy.  Set
+// 44 100 Hz once in Options -> Audio Settings — the standalone persists it.
+// Ledgered: revisit if a public device-manager hook appears, alongside the
+// proper-resampling item.
+// =============================================================================
+void JT8000ControllerEditor::applyEngineSampleRatePolicy()
+{
+    // Intentionally empty — see header comment.  The _rateWarnLabel in
+    // timerCallback() is the active off-rate signal on every platform.
+}
+
 void JT8000ControllerEditor::timerCallback()
 {
-    // Only the output ComboBox needs hot-plug polling — it shows a fixed list.
-    // The input checklist is a PopupMenu rebuilt each time it opens, so it
-    // always reflects current devices without polling. Runs in all modes
-    // (the output selector exists in VST3 too).
-    const int outSel = _midiOutSelector.getSelectedId();
+    // ---- Fast lane: engine status feed (J1d) --------------------------------
+    // Liveness first: the counter moves once per received status cluster,
+    // heartbeat included, so "count moved" == "wire alive" even when the
+    // word itself never changes.
+    const uint32_t count = _proc.statusCount();
+    if (count != _lastStatusCount) { _lastStatusCount = count; _ticksSinceBeat = 0; }
+    else if (_ticksSinceBeat < kLinkStaleTicks) ++_ticksSinceBeat;
+
+    const bool     alive = _ticksSinceBeat < kLinkStaleTicks;
+    const uint16_t word  = _proc.statusWord();
+
+    // Both sinks are change-driven internally, so feeding them every tick
+    // costs a couple of integer compares when nothing moved.
+    _statusDots.setStatus(word, alive);
+
+    // Rate warning (J2): visible only while the engine is audible at a
+    // non-native rate.  setVisible is a no-op when unchanged — tick-safe.
+    _rateWarnLabel.setVisible(_proc.engineAvailable()
+                              && _proc.engineMode() != 0
+                              && std::abs(_proc.hostSampleRate()
+                                          - _proc.engineSampleRate()) > 1.0);
+
+    const bool running = alive && ValueLaw::statusRunning(word);
+    const int  step    = (int)ValueLaw::statusPlayStep(word);
+    for (auto* sec : _sections)
+        for (auto* grid : sec->getStepGrids())
+            grid->setPlayhead(step, running);
+
+    // ---- Slow lane: MIDI device hot-plug scan (original 2 s cadence) --------
+    // Only the output ComboBox needs polling — it shows a fixed list.  The
+    // input checklist is a PopupMenu rebuilt each time it opens, so it always
+    // reflects current devices without polling.  Runs in all modes (the
+    // output selector exists in VST3 too).  Device enumeration can be
+    // expensive OS-side; it must never ride the 50 ms tick.
+    if (++_pollTick < kDevicePollTicks)
+        return;
+    _pollTick = 0;
+
     auto outDevices  = juce::MidiOutput::getAvailableDevices();
 
+    // Rebuild only when the device set changed (hot-plug).  The restore is
+    // handled inside refreshMidiOutputList BY IDENTIFIER, which — unlike the
+    // old index-based reselect — survives a device being added or removed
+    // ahead of the open one in the list.
     if (outDevices.size() + 1 != _midiOutSelector.getNumItems())
-    {
         refreshMidiOutputList();
-        if (outSel > 0 && outSel <= outDevices.size())
-            _midiOutSelector.setSelectedId(outSel, juce::dontSendNotification);
-    }
 }
 
 // =============================================================================
@@ -508,6 +604,16 @@ void JT8000ControllerEditor::resized()
         row1.removeFromRight(pad);
     }
 
+    // Phase J2: engine mode + rate warning sit between LCD and MIDI boxes;
+    // zero width when built without the engine, so pre-J2 layout is intact.
+    if (_proc.engineAvailable())
+    {
+        _engineModeCombo.setBounds(row1.removeFromRight(96));
+        row1.removeFromRight(pad);
+        _rateWarnLabel.setBounds(row1.removeFromRight(52));
+        row1.removeFromRight(pad);
+    }
+
     _patchNameLabel.setBounds(row1);
 
     // ---- Row 2 — action buttons ---------------------------------------------
@@ -546,16 +652,29 @@ void JT8000ControllerEditor::resized()
     row3.removeFromLeft(pad);
     _chBCombo.setBounds(row3.removeFromLeft(comboW));
 
-    // Right block — lay out from the right so labels/knobs anchor cleanly
-    _balanceKnob.setBounds(row3.removeFromRight(knobW));
+    // Right block — lay out from the right so labels/knobs anchor cleanly.
+    // Phase J1: Voice Split and Layer Balance are combos now (D-J5), Master
+    // Volume anchors the far right (J1c) — same order as before with the
+    // volume outermost, mirroring a hardware master section.
+    _masterVolKnob.setBounds(row3.removeFromRight(knobW));
+    row3.removeFromRight(pad);
+    _balanceCombo.setBounds(row3.removeFromRight(56));      // "AB" — narrow is fine
     row3.removeFromRight(pad);
     _splitNoteKnob.setBounds(row3.removeFromRight(knobW));
     row3.removeFromRight(pad);
-    _voiceSplitKnob.setBounds(row3.removeFromRight(knobW));
+    _voiceSplitCombo.setBounds(row3.removeFromRight(comboW));
     row3.removeFromRight(pad);
     _perfModeCombo.setBounds(row3.removeFromRight(comboW));
     row3.removeFromRight(pad);
     _perfSetLabel.setBounds(row3.removeFromRight(labelW));
+
+    // Status strip (J1d) lives in the flexible middle gap: it is the least
+    // critical header element, so it is the first thing a narrow window
+    // squeezes away — hide rather than overlap.
+    row3.removeFromLeft(pad);
+    constexpr int dotsW = 120;
+    _statusDots.setVisible(row3.getWidth() >= dotsW / 2);
+    _statusDots.setBounds(row3.withWidth(juce::jmin(dotsW, row3.getWidth())));
 
     _viewport.setBounds(area);
     layoutSections();

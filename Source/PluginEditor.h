@@ -27,6 +27,7 @@
 #include "JP8000SyxImporter.h"
 #include "SyxPickerOverlay.h"
 #include "TouchSafeViewport.h"
+#include "StatusDots.h"
 
 // =============================================================================
 // Main Editor
@@ -65,9 +66,14 @@ private:
 
     juce::Label     _perfSetLabel;         // "Perf:" static label
     juce::ComboBox  _perfModeCombo;        // perf_mode (Single/Layer/Split)
-    juce::Slider    _voiceSplitKnob;       // perf_voice_split
-    juce::Slider    _splitNoteKnob;        // perf_split_note
-    juce::Slider    _balanceKnob;          // perf_balance
+    juce::ComboBox  _voiceSplitCombo;      // perf_voice_split ("1+7".."7+1") — D-J5
+    juce::Slider    _splitNoteKnob;        // perf_split_note (0..127 note number)
+    juce::ComboBox  _balanceCombo;         // perf_balance / "Layer Bal" (A/AB/B) — D-J5
+    juce::Slider    _masterVolKnob;        // master_volume (J1c — the 140th param)
+    StatusDots      _statusDots;           // engine voice dots + RUN (J1d)
+    juce::ComboBox  _engineModeCombo;      // Controller / Sound / Both (J2 —
+                                           // hidden when built without engine)
+    juce::Label     _rateWarnLabel;        // "≠44.1k" when audible off-rate (J2)
 
     // APVTS attachments for the perf-global header controls. OwnedArray so
     // we can construct them all at once after createEditor() / APVTS exists.
@@ -105,6 +111,20 @@ private:
     void valueTreePropertyChanged(juce::ValueTree& tree,
                                   const juce::Identifier& property) override;
     void timerCallback() override;
+    void applyEngineSampleRatePolicy();   // J2: standalone 44.1 k request
+
+    // ---- Status poll bookkeeping (J1d) -------------------------------------
+    // One timer, two cadences: the tick runs at kStatusPollMs for the status
+    // feed; the MIDI-device hot-plug scan (the old 2 s job) runs every
+    // kDevicePollTicks ticks so its cost is unchanged.  Liveness = the
+    // processor's status counter moved within kLinkStaleTicks ticks (the
+    // firmware heartbeats at >= 1 Hz, so ~3 s of silence means wire dead).
+    static constexpr int kStatusPollMs    = 50;
+    static constexpr int kDevicePollTicks = 40;   // 40 * 50 ms = 2 s, as before
+    static constexpr int kLinkStaleTicks  = 60;   // 3 s without a heartbeat
+    int      _pollTick        = 0;
+    uint32_t _lastStatusCount = 0;
+    int      _ticksSinceBeat  = kLinkStaleTicks;  // start "stale" until proven alive
 
     // Header layout constants
     //   Row 1: Title, patch name, MIDI IO selectors        — 36px

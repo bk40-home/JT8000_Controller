@@ -34,12 +34,19 @@ public:
     uint8_t getStepValue(int step) const;
     void    setStepValue(int step, uint8_t value, bool notify = false);
 
+    /* Playhead from the engine status feed (Phase J1d).  step -1 or
+       running=false clears the marker.  Repaints ONLY the two affected
+       bar rects (old + new position) — at 1/16-note rates a full-grid
+       repaint would be pure waste. */
+    void setPlayhead(int step, bool running);
+
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
 
 private:
     uint8_t _steps[kNumSteps] = {};
+    int     _playStep = -1;    // -1 = no marker (stopped / no status yet)
 
     /* Convert mouse position to step index and value */
     void setFromMouse(const juce::MouseEvent& e);
