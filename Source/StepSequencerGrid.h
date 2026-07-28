@@ -40,6 +40,10 @@ public:
        repaint would be pure waste. */
     void setPlayhead(int step, bool running);
 
+    /* Bar fill colour — defaults to orange (gate lane); the aux-lane grid
+       sets cyan so the two lanes are distinguishable at a glance (D-U1). */
+    void setBarColour(juce::Colour c) { _barColour = c; repaint(); }
+
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
@@ -47,6 +51,7 @@ public:
 private:
     uint8_t _steps[kNumSteps] = {};
     int     _playStep = -1;    // -1 = no marker (stopped / no status yet)
+    juce::Colour _barColour { 0xfff08020 };   // gate orange by default
 
     /* Convert mouse position to step index and value */
     void setFromMouse(const juce::MouseEvent& e);

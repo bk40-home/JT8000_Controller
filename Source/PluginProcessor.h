@@ -136,6 +136,9 @@ public:
 
     // --- Phase E: NRPN wire (see NrpnLink.h for the protocol contract) ------
     void sendParamNrpn(int v1cc, int ccVal);       // one edit -> 6 short msgs
+    // Option B: send a v2-only param (no v1 CC) by ParamID directly — the seq
+    // aux lane.  Same 6-CC NRPN, addressed by ParamID instead of via the bridge.
+    void sendParamNrpnById(uint16_t paramId, int ccVal);
     void requestResync();                          // full-state pull (0x3F00)
 private:
     void queueShortMidi(const NrpnLink::Short3* msgs, size_t n);
@@ -223,6 +226,8 @@ public:
     // 0x0E10, then Step Value 0x0E11). Called by PluginEditor's grid handler
     // to bypass APVTS for transient step writes.
     void sendStepSeqEdit(int step, int value);
+    // Aux lane (Stage B/C/D): step write + dest/depth, all by ParamID (Option B).
+    void sendStepSeqAuxEdit(int step, int value);
 
     juce::String getPatchName() const;
     void         setPatchName(const juce::String& name);

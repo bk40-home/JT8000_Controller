@@ -151,6 +151,19 @@ void SectionComponent::addStepGrid(std::function<void(int,int)> sendCCPair)
     _controls.push_back({ grid, 580, 100, nullptr, false });
 }
 
+// Aux-lane grid (Stage B/C/D): identical to addStepGrid but cyan-barred and
+// wired to the aux send path.  Appended after the gate grid in the STEP_SEQ
+// section so both lanes are visible; the lane's params reach the engine by
+// ParamID (Option B), not CC.
+void SectionComponent::addAuxStepGrid(std::function<void(int,int)> sendAuxPair)
+{
+    auto* grid = _stepGrids.add(new StepSequencerGrid());
+    grid->onStepChanged = std::move(sendAuxPair);
+    grid->setBarColour(juce::Colour(0xff20d0f0));   // cyan — aux lane (D-U1)
+    addAndMakeVisible(grid);
+    _controls.push_back({ grid, 580, 100, nullptr, false });
+}
+
 // -----------------------------------------------------------------------
 // addEnvelope — visual ADSR editor with draggable dots
 // -----------------------------------------------------------------------
@@ -162,6 +175,68 @@ void SectionComponent::addEnvelope(juce::AudioProcessorValueTreeState& apvts,
 
     // Full width, 140px tall (room for value labels + shape + param labels)
     _controls.push_back({ env, 580, 140, nullptr, false });
+}
+
+// Raw controls (no APVTS) for v2-only params — the seq aux dest/depth.
+// The widget's own onChange/onValueChange std::function carries the edit out
+// via the supplied callback; nothing is attached to APVTS.
+// -----------------------------------------------------------------------
+void SectionComponent::addRawCombo(const juce::String& name,
+                                   const char* const* enumNames, int enumCount,
+                                   int initialIndex,
+                                   std::function<void(int)> onChange)
+{
+    auto* label = _labels.add(new juce::Label({}, name));
+    label->setFont(juce::FontOptions(9.0f));
+    label->setColour(juce::Label::textColourId, kLabelCol);
+    addAndMakeVisible(label);
+
+    auto* combo = _combos.add(new juce::ComboBox());
+    if (enumNames != nullptr && enumCount > 0)
+        for (int i = 0; i < enumCount; ++i)
+            combo->addItem(enumNames[i], i + 1);   // item IDs are 1-based
+    combo->setSelectedId(initialIndex + 1, juce::dontSendNotification);
+    combo->setLookAndFeel(&_lnf);
+
+    // Fire the callback with the 0-based index on every user change.
+    juce::ComboBox* raw = combo;
+    combo->onChange = [raw, cb = std::move(onChange)]()
+    {
+        if (cb) cb(raw->getSelectedId() - 1);
+    };
+
+    addAndMakeVisible(combo);
+    _controls.push_back({ combo, 120, 40, label, true });
+}
+
+void SectionComponent::addRawKnob(const juce::String& name, int initialValue,
+                                  std::function<void(int)> onChange)
+{
+    auto* slider = _sliders.add(new juce::Slider());
+    slider->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+    slider->setRotaryParameters(JT8000LookAndFeel::kRotaryStart,
+                                JT8000LookAndFeel::kRotaryEnd, true);
+    slider->setRange(0, 127, 1);
+    slider->setValue(initialValue, juce::dontSendNotification);
+    slider->setDoubleClickReturnValue(true, 64.0);
+    slider->setLookAndFeel(&_lnf);
+
+    juce::Slider* raw = slider;
+    slider->onValueChange = [raw, cb = std::move(onChange)]()
+    {
+        if (cb) cb((int)raw->getValue());
+    };
+
+    addAndMakeVisible(slider);
+
+    auto* label = _labels.add(new juce::Label({}, name));
+    label->setFont(juce::FontOptions(9.0f));
+    label->setColour(juce::Label::textColourId, kLabelCol);
+    label->setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(label);
+
+    _controls.push_back({ slider, 58, 52, label, false });
 }
 
 // -----------------------------------------------------------------------

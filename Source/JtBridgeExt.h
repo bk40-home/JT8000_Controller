@@ -51,6 +51,7 @@ inline constexpr ExtPair kExtPairs[] = {
     { 201,             0x000D         },    // osc1.pwm_lfo1_depth  (G2)
     { 202,             0x008D         },    // osc2.pwm_lfo1_depth  (G2)
     { 203,             0x0107         },    // mix.pitch_mod_dest   (G1)
+    { 204,             0x0801         },    // master.usb_return_level (USB soundcard return)
 };
 
 inline int32_t paramIdFromV1Cc(uint16_t v1cc)

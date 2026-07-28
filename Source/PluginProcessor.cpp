@@ -633,6 +633,17 @@ void JT8000ControllerProcessor::sendStepSeqEdit(int step, int value)
     sendParamNrpn(18, juce::jlimit(0, 127, value));  // seq.step_value  (v1 CC 18)
 }
 
+// Aux-lane step write (Stage B/C/D).  Same select-then-value protocol as the
+// gate lane, but the aux params have no v1 CC, so they're addressed by ParamID
+// directly (Option B).  The select uses the identical 1..16 int lattice encode
+// so the firmware's lroundf(norm*15) round-trips exactly for all 16 steps.
+void JT8000ControllerProcessor::sendStepSeqAuxEdit(int step, int value)
+{
+    const int sel7 = ValueLaw::ccFromIntLattice(juce::jlimit(0, 15, step), 0, 15);
+    sendParamNrpnById(NrpnLink::AuxParamId::kStepSelect, sel7);
+    sendParamNrpnById(NrpnLink::AuxParamId::kStepValue, juce::jlimit(0, 127, value));
+}
+
 // =============================================================================
 // Phase E: NRPN wire helpers.  queueShortMidi mirrors queueSysEx's transport
 // selection exactly (direct device is exclusive and primary; host-bus FIFO
@@ -692,6 +703,19 @@ void JT8000ControllerProcessor::sendParamNrpn(int v1cc, int ccVal)
         DBG("[sendParamNrpn] v1cc " << v1cc << " unmapped — dropped");
         return;   // stale control or v2-only slot: never guess a ParamID
     }
+    queueShortMidi(m, n);
+}
+
+// Option B: address a v2-only param (seq aux lane) by ParamID directly, for
+// params that have no v1 CC and thus no bridge entry.  Same wire + transport
+// as sendParamNrpn; only the addressing differs.  value7 is the raw 7-bit
+// value the firmware decodes (norm = value7 * 129 / 16383).
+void JT8000ControllerProcessor::sendParamNrpnById(uint16_t paramId, int ccVal)
+{
+    NrpnLink::Short3 m[6];
+    const size_t n = NrpnLink::encodeParamById(paramId,
+                                               (uint8_t)juce::jlimit(0, 127, ccVal),
+                                               1 /*channel*/, m);
     queueShortMidi(m, n);
 }
 

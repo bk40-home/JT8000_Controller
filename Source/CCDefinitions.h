@@ -275,6 +275,10 @@ static const char* const kArbBankNames[] = {
 };
 static const char* const kSeqDirNames[]  = { "Forward","Reverse","Bounce","Random" };
 static const char* const kSeqDestNames[] = { "None","Pitch","Filter","PWM","Amp" };
+// Aux lane (Stage B/C/D) has its OWN 5-destination set (order matches
+// kOpt_seq_aux_dest in ParamTable.h).  Same option COUNT as the gate lane,
+// so the 5-band kSeqDestLUT {0,32,64,95,127} maps 1:1 here too.
+static const char* const kSeqAuxDestNames[] = { "None","Filter","Pan","DelaySend","Drive" };
 
 // -----------------------------------------------------------------------
 // CC lookup tables for params with firmware-specific decode thresholds.
@@ -584,6 +588,15 @@ static const CCParam kAllParams[] =
     // >127 also guarantees no plain hardware CC can ever alias this row.
     // defVal 102 == round(0.8 * 127), the canonical default.
     { 200, "master_volume",     "Master Vol",   Section::PERFORMANCE_GLOBAL, 102, KNOB,                                             true },
+
+    // USB audio return level — the v2 "synth as soundcard" monitor path.
+    // Global, v2-only (canonical ParamID 0x0801, no v1 CC), so keyed by
+    // PSEUDO-cc 204 (JtBridgeExt maps it onto the NRPN wire, same scheme as
+    // master_volume's 200).  >127 guarantees no plain hardware CC can alias it.
+    // isLocalOnly = true: it is global output setup, not patch data, so Init
+    // Patch preserves it.  defVal 127 == round(1.0 * 127), the canonical
+    // default (return at unity — the firmware mixer sums it under the synth).
+    { 204, "usb_return_level",  "USB Return",   Section::PERFORMANCE_GLOBAL, 127, KNOB,                                             true },
 };
 
 #undef KNOB

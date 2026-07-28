@@ -147,7 +147,7 @@ void StepSequencerGrid::paint(juce::Graphics& g)
         if (norm > 0.005f)
         {
             const float fillH = norm * area.getHeight();
-            g.setColour(kBarFill);
+            g.setColour(_barColour);
             g.fillRoundedRectangle(area.getX(), area.getBottom() - fillH,
                                    area.getWidth(), fillH, 2.0f);
         }

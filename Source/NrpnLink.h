@@ -36,6 +36,16 @@
 
 namespace NrpnLink {
 
+// Seq aux-lane ParamIDs (v2-only, no v1 CC — addressed by ParamID via
+// encodeParamById / sendParamNrpnById).  Must match params.yaml / ParamTable.h
+// (StageB: 0x068C..0x068F).  Kept here beside the encoder that uses them.
+namespace AuxParamId {
+    inline constexpr uint16_t kDestination = 0x068C;
+    inline constexpr uint16_t kDepth       = 0x068D;
+    inline constexpr uint16_t kStepSelect  = 0x068E;
+    inline constexpr uint16_t kStepValue   = 0x068F;
+}
+
 // One 3-byte channel-voice message, ready for juce::MidiMessage(d, 3).
 struct Short3 { uint8_t b[3]; };
 
@@ -61,6 +71,24 @@ inline size_t encodeParam(uint16_t v1cc, uint8_t value7,
     out[3] = cc(channel, 38, (uint8_t)( v14       & 0x7F));
     out[4] = cc(channel, 101, 127);   // one deselect per edit: 18 bytes,
     out[5] = cc(channel, 100, 127);   // robustness > bandwidth here too
+    return 6;
+}
+
+// Encode one parameter edit BY ParamID directly (no v1-CC bridge lookup).
+// For v2-only params that were never assigned a 7-bit v1 CC — the seq aux
+// lane (SEQ_AUX_*, 0x068C..0x068F).  Same 6-CC self-contained NRPN as
+// encodeParam (address + data + RPN-null park); the only difference is the
+// ParamID comes straight in instead of via paramIdFromV1Cc.  out[] >= 6.
+inline size_t encodeParamById(uint16_t paramId, uint8_t value7,
+                              uint8_t channel, Short3* out)
+{
+    const uint16_t v14 = (uint16_t)value7 * 129u;
+    out[0] = cc(channel, 99, (uint8_t)((paramId >> 7) & 0x7F));
+    out[1] = cc(channel, 98, (uint8_t)( paramId       & 0x7F));
+    out[2] = cc(channel,  6, (uint8_t)((v14 >> 7) & 0x7F));
+    out[3] = cc(channel, 38, (uint8_t)( v14       & 0x7F));
+    out[4] = cc(channel, 101, 127);
+    out[5] = cc(channel, 100, 127);
     return 6;
 }
 

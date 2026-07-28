@@ -118,6 +118,7 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
 
     styleKnob(_splitNoteKnob);
     styleKnob(_masterVolKnob);                           // J1c
+    styleKnob(_usbReturnKnob);                           // USB soundcard return
 
     addAndMakeVisible(_editTargetCombo);
     addAndMakeVisible(_chACombo);
@@ -127,6 +128,7 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     addAndMakeVisible(_splitNoteKnob);
     addAndMakeVisible(_balanceCombo);
     addAndMakeVisible(_masterVolKnob);
+    addAndMakeVisible(_usbReturnKnob);                   // USB soundcard return
     addAndMakeVisible(_statusDots);                      // J1d
 
     // ---- Embedded engine controls (Phase J2) -------------------------------
@@ -170,6 +172,7 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_balance",     _balanceCombo));     // D-J5
     _headerSliderAtts.add(new SliderAtt(_proc.apvts, "perf_split_note",  _splitNoteKnob));
     _headerSliderAtts.add(new SliderAtt(_proc.apvts, "master_volume",    _masterVolKnob));    // J1c
+    _headerSliderAtts.add(new SliderAtt(_proc.apvts, "usb_return_level", _usbReturnKnob));    // USB soundcard return
 
     // --- MIDI output selector (ALL modes — standalone AND VST3) -------------
     // WHY: stock JUCE's VST3 wrapper drops outgoing SysEx from the processBlock
@@ -221,10 +224,13 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
         {
             for (auto* grid : sec->getStepGrids())
             {
+                // Each grid owns its lane's send callback (gate → gate lane,
+                // aux → aux lane).  Use it so Send All routes both correctly;
+                // hardcoding sendStepSeqEdit here would push the aux grid's
+                // values onto the gate lane.
+                if (! grid->onStepChanged) continue;
                 for (int s = 0; s < StepSequencerGrid::kNumSteps; ++s)
-                {
-                    _proc.sendStepSeqEdit(s, grid->getStepValue(s));
-                }
+                    grid->onStepChanged(s, grid->getStepValue(s));
             }
         }
     };
@@ -478,8 +484,26 @@ void JT8000ControllerEditor::buildSections()
             case ControlStyle::Combo:  sec->addComboBox(_proc.apvts, p); break;
             case ControlStyle::Toggle: sec->addToggle(_proc.apvts, p);   break;
             case ControlStyle::StepGrid:
+                // Aux destination + depth FIRST — small controls on their own
+                // row above the two full-width grids.  Placed before the grids
+                // so the grids' full-bounds paint can't overlap them (the
+                // earlier ordering put them after the 580px-wide aux grid and
+                // they never became visible).  No CC/APVTS — send by ParamID.
+                sec->addRawCombo("Aux Dest", kSeqAuxDestNames, 5, 0,
+                    [this](int idx) {
+                        const int band = kSeqDestLUT[juce::jlimit(0, 4, idx)];
+                        _proc.sendParamNrpnById(NrpnLink::AuxParamId::kDestination, band);
+                    });
+                sec->addRawKnob("Aux Depth", 64,
+                    [this](int v) {
+                        _proc.sendParamNrpnById(NrpnLink::AuxParamId::kDepth, v);
+                    });
+                // Gate grid (orange), then aux grid (cyan) below the controls.
                 sec->addStepGrid([this](int step, int value) {
                     _proc.sendStepSeqEdit(step, value);
+                });
+                sec->addAuxStepGrid([this](int step, int value) {
+                    _proc.sendStepSeqAuxEdit(step, value);
                 });
                 break;
         }
@@ -658,6 +682,8 @@ void JT8000ControllerEditor::resized()
     // volume outermost, mirroring a hardware master section.
     _masterVolKnob.setBounds(row3.removeFromRight(knobW));
     row3.removeFromRight(pad);
+    _usbReturnKnob.setBounds(row3.removeFromRight(knobW));  // immediately left of master vol
+    row3.removeFromRight(pad);
     _balanceCombo.setBounds(row3.removeFromRight(56));      // "AB" — narrow is fine
     row3.removeFromRight(pad);
     _splitNoteKnob.setBounds(row3.removeFromRight(knobW));
@@ -739,7 +765,7 @@ void JT8000ControllerEditor::initPatch()
             for (int s = 0; s < StepSequencerGrid::kNumSteps; ++s)
             {
                 grid->setStepValue(s, 0, false);
-                _proc.sendStepSeqEdit(s, 0);
+                if (grid->onStepChanged) grid->onStepChanged(s, 0);   // per-lane send
             }
         }
     }

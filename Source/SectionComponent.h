@@ -31,6 +31,18 @@ public:
     void addComboBox(juce::AudioProcessorValueTreeState& apvts, const CCParam& param);
     void addToggle(juce::AudioProcessorValueTreeState& apvts, const CCParam& param);
     void addStepGrid(std::function<void(int,int)> sendCCPair);
+    void addAuxStepGrid(std::function<void(int,int)> sendAuxPair);   // Stage B/C/D aux lane
+
+    // Raw controls for v2-only params with no CC/APVTS binding (the seq aux
+    // dest/depth — Option B).  Value goes out via the callback, not an
+    // attachment.  addRawCombo: enum select, callback gets the 0-based index.
+    // addRawKnob: 0..127 rotary, callback gets the raw 7-bit value.
+    void addRawCombo(const juce::String& name,
+                     const char* const* enumNames, int enumCount,
+                     int initialIndex,
+                     std::function<void(int)> onChange);
+    void addRawKnob(const juce::String& name, int initialValue,
+                    std::function<void(int)> onChange);
     void addEnvelope(juce::AudioProcessorValueTreeState& apvts,
                      JuceEnvFlavour flavour);
 

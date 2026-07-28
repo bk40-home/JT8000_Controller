@@ -70,6 +70,7 @@ private:
     juce::Slider    _splitNoteKnob;        // perf_split_note (0..127 note number)
     juce::ComboBox  _balanceCombo;         // perf_balance / "Layer Bal" (A/AB/B) — D-J5
     juce::Slider    _masterVolKnob;        // master_volume (J1c — the 140th param)
+    juce::Slider    _usbReturnKnob;        // usb_return_level (USB soundcard return monitor)
     StatusDots      _statusDots;           // engine voice dots + RUN (J1d)
     juce::ComboBox  _engineModeCombo;      // Controller / Sound / Both (J2 —
                                            // hidden when built without engine)
