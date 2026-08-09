@@ -164,9 +164,23 @@ void SectionComponent::addAuxStepGrid(std::function<void(int,int)> sendAuxPair)
     _controls.push_back({ grid, 580, 100, nullptr, false });
 }
 
-// -----------------------------------------------------------------------
-// addEnvelope — visual ADSR editor with draggable dots
-// -----------------------------------------------------------------------
+// Arpeggiator tri-lane pattern grid (Phase 9).  Taller than the seq grid
+// because it stacks three lanes (on/off, accent, ratchet) plus a number strip.
+// Edits reach the engine by ParamID (ArpParamId), not CC — the callback maps
+// the lane index to the right ParamID in the editor.
+void SectionComponent::addArpGrid(std::function<void(int, int, int)> sendLaneEdit)
+{
+    auto* grid = _arpGrids.add(new ArpPatternGrid());
+    grid->onLaneEdit = [cb = std::move(sendLaneEdit)]
+                       (int step, ArpPatternGrid::Lane lane, int value)
+    {
+        if (cb) cb(step, (int)lane, value);
+    };
+    addAndMakeVisible(grid);
+    // Full width; taller than the 100px seq grid to fit three lanes.
+    _controls.push_back({ grid, 580, 150, nullptr, false });
+}
+
 void SectionComponent::addEnvelope(juce::AudioProcessorValueTreeState& apvts,
                                    JuceEnvFlavour flavour)
 {

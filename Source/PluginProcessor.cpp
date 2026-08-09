@@ -404,7 +404,8 @@ void JT8000ControllerProcessor::applyIncomingCC(int cc, int value)
     const CCParam* p = findParamByCC(cc);
     if (p == nullptr) return;
 
-    if (p->style == ControlStyle::StepGrid) return;
+    if (p->style == ControlStyle::StepGrid ||
+        p->style == ControlStyle::ArpGrid) return;
 
     auto* param = apvts.getParameter(p->id);
     if (param == nullptr) return;
@@ -644,6 +645,28 @@ void JT8000ControllerProcessor::sendStepSeqAuxEdit(int step, int value)
     sendParamNrpnById(NrpnLink::AuxParamId::kStepValue, juce::jlimit(0, 127, value));
 }
 
+// Arp per-step pattern write (Phase 9).  Same select-then-value protocol as the
+// seq aux lane, but the value goes to one of THREE lane ParamIDs chosen by
+// `lane`.  arp.step_select uses the identical 1..16 int-lattice encode so the
+// firmware's lroundf(norm*15) round-trips exactly for all 16 steps.  The grid
+// has already put `value` in wire form (on/off 0|127, accent 0..127, ratchet on
+// the {0,42,85,127} lattice), so we pass it straight through.
+void JT8000ControllerProcessor::sendArpStepEdit(int step, int lane, int value)
+{
+    const int sel7 = ValueLaw::ccFromIntLattice(juce::jlimit(0, 15, step), 0, 15);
+    sendParamNrpnById(NrpnLink::ArpParamId::kStepSelect, sel7);
+
+    uint16_t laneId = NrpnLink::ArpParamId::kStepOnOff;
+    switch (lane)
+    {
+        case 0: laneId = NrpnLink::ArpParamId::kStepOnOff;   break;
+        case 1: laneId = NrpnLink::ArpParamId::kStepAccent;  break;
+        case 2: laneId = NrpnLink::ArpParamId::kStepRatchet; break;
+        default: return;   // unknown lane — never guess
+    }
+    sendParamNrpnById(laneId, juce::jlimit(0, 127, value));
+}
+
 // =============================================================================
 // Phase E: NRPN wire helpers.  queueShortMidi mirrors queueSysEx's transport
 // selection exactly (direct device is exclusive and primary; host-bus FIFO
@@ -826,7 +849,8 @@ void JT8000ControllerProcessor::sendBankDump()
     for (int i = 0; i < kNumParams; ++i)
     {
         const auto& p = kAllParams[i];
-        if (p.style == ControlStyle::StepGrid) continue;   // grid has its own path
+        if (p.style == ControlStyle::StepGrid ||
+            p.style == ControlStyle::ArpGrid) continue;   // grids have their own path
 
         auto* param = apvts.getParameter(p.id);
         if (param == nullptr) continue;

@@ -131,6 +131,8 @@ set(JT_APP_SOURCES
     Source/SectionComponent.cpp
     Source/StepSequencerGrid.h
     Source/StepSequencerGrid.cpp
+    Source/ArpPatternGrid.h
+    Source/ArpPatternGrid.cpp
     Source/Envelopedisplay.h
     Source/Envelopedisplay.cpp
     Source/JP8000SyxImporter.h

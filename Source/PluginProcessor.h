@@ -228,6 +228,10 @@ public:
     void sendStepSeqEdit(int step, int value);
     // Aux lane (Stage B/C/D): step write + dest/depth, all by ParamID (Option B).
     void sendStepSeqAuxEdit(int step, int value);
+    // Phase 9: arp per-step pattern edit.  lane 0=OnOff,1=Accent,2=Ratchet.
+    // value is already in wire (0..127) form.  Select-then-value by ParamID,
+    // exactly like the seq aux lane.
+    void sendArpStepEdit(int step, int lane, int value);
 
     juce::String getPatchName() const;
     void         setPatchName(const juce::String& name);

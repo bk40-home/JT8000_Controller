@@ -70,6 +70,8 @@ enum class Section : int
     FX_OUTPUT,
     VELOCITY, PERFORMANCE, BPM,
     STEP_SEQ,
+    VOICE_MODE,
+    ARP,
     PERFORMANCE_GLOBAL,   // pseudo: rendered in header, not as a section
     NUM_SECTIONS
 };
@@ -84,6 +86,7 @@ static const char* sectionNames[] = {
     "Velocity", "Performance", "BPM Clock",
     "Step Sequencer",
     "Voice mode",
+    "Arpeggiator",
     "Performance Global",   // PERFORMANCE_GLOBAL — header-only, no panel
 };
 
@@ -98,6 +101,7 @@ static const int sectionRow[] = {
      2,  2,  2,            // FX_OUTPUT, VELOCITY, PERFORMANCE
     -1, -1,                // BPM, STEP_SEQ
     3,                     // VOICE_MODE
+    -1,                    // ARP (full width — global row + tri-lane grid)
     -1,                    // PERFORMANCE_GLOBAL (ignored by section builder)
 };
 
@@ -110,7 +114,8 @@ enum class ControlStyle : int
     Slider,
     Combo,
     Toggle,
-    StepGrid
+    StepGrid,
+    ArpGrid       // Phase 9: bespoke tri-lane arp pattern grid (on/off/accent/ratchet)
 };
 
 // -----------------------------------------------------------------------
@@ -279,6 +284,13 @@ static const char* const kSeqDestNames[] = { "None","Pitch","Filter","PWM","Amp"
 // kOpt_seq_aux_dest in ParamTable.h).  Same option COUNT as the gate lane,
 // so the 5-band kSeqDestLUT {0,32,64,95,127} maps 1:1 here too.
 static const char* const kSeqAuxDestNames[] = { "None","Filter","Pan","DelaySend","Drive" };
+// Arpeggiator note-ordering modes — order FROZEN with firmware ArpMode /
+// params.yaml arp_mode.  UpDn Inc repeats the top & bottom notes; Exc doesn't.
+static const char* const kArpModeNames[] = {
+    "Up","Down","UpDn Inc","UpDn Exc","AsPlayed","Random","Chord"
+};
+// Arp octave span (1..4 octaves) — choice index 0..3.
+static const char* const kArpOctNames[]  = { "1","2","3","4" };
 
 // -----------------------------------------------------------------------
 // CC lookup tables for params with firmware-specific decode thresholds.
@@ -562,6 +574,29 @@ static const CCParam kAllParams[] =
     { 13,  "seq_retrigger", "Retrigger",  Section::STEP_SEQ, 0,   TOGGLE(kOnOffNames, 2) },
     { 116, "seq_sync",      "Sync",       Section::STEP_SEQ, 0,   COMBO(kTimingNames, 12) },
     { 17,  "seq_step_sel",  "Step Grid",  Section::STEP_SEQ, 0,   ControlStyle::StepGrid, nullptr, 0, nullptr },
+
+    // === ARPEGGIATOR (Phase 9) ===========================================
+    // Nine GLOBAL params on out-of-band pseudo-CCs 205..213 (JtBridgeExt maps
+    // each onto its firmware ParamID 0x0880..0x0888 over NRPN).  The per-step
+    // pattern (on/off + accent + ratchet) is NOT here — it's the tri-lane
+    // ArpPatternGrid, sent direct-by-ParamID via NrpnLink::ArpParamId, exactly
+    // like the seq aux lane.  defVal for combos/toggles = choice INDEX; for
+    // knobs = CC value 0..127.
+    //   rate: choice 7 == "1/16" (trance staple).  octaves: choice 0 == "1".
+    //   gate/swing/free: CC 64 == 0.5 norm.  steps: int-lattice 1..16, def 16.
+    { 205, "arp_enable",   "Enable",   Section::ARP, 0,  TOGGLE(kOnOffNames, 2) },
+    { 206, "arp_mode",     "Mode",     Section::ARP, 0,  COMBO(kArpModeNames, 7) },
+    { 207, "arp_octaves",  "Octaves",  Section::ARP, 0,  COMBO(kArpOctNames, 4) },
+    { 208, "arp_latch",    "Latch",    Section::ARP, 0,  TOGGLE(kOnOffNames, 2) },
+    { 209, "arp_rate",     "Rate",     Section::ARP, 7,  COMBO(kTimingNames, 12) },
+    { 210, "arp_free",     "Free Hz",  Section::ARP, 64, KNOB },
+    { 211, "arp_gate",     "Gate",     Section::ARP, 64, KNOB },
+    { 212, "arp_swing",    "Swing",    Section::ARP, 64, KNOB },
+    { 213, "arp_steps",    "Steps",    Section::ARP, 16, KNOB, false, 1, 16 },   // type:int 1..16 (D-J6 lattice)
+    // Tri-lane pattern grid sentinel (no CC/APVTS — sent direct-by-ParamID via
+    // ArpPatternGrid -> sendArpStepEdit).  cc 214 is a placeholder key never put
+    // on the wire; buildSections special-cases ControlStyle::ArpGrid.
+    { 214, "arp_grid",     "Pattern",  Section::ARP, 0,  ControlStyle::ArpGrid, nullptr, 0, nullptr },
 
     // === PERFORMANCE GLOBAL — local-only (not sent as MIDI) ===============
     // These seven entries have isLocalOnly = true. All upstream code paths

@@ -232,6 +232,9 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
                 for (int s = 0; s < StepSequencerGrid::kNumSteps; ++s)
                     grid->onStepChanged(s, grid->getStepValue(s));
             }
+            // Arp pattern grids push all three lanes via their own callback.
+            for (auto* agrid : sec->getArpGrids())
+                agrid->sendAll();
         }
     };
 
@@ -410,6 +413,9 @@ void JT8000ControllerEditor::timerCallback()
     for (auto* sec : _sections)
         for (auto* grid : sec->getStepGrids())
             grid->setPlayhead(step, running);
+    for (auto* sec : _sections)
+        for (auto* agrid : sec->getArpGrids())
+            agrid->setPlayhead(step, running);
 
     // ---- Slow lane: MIDI device hot-plug scan (original 2 s cadence) --------
     // Only the output ComboBox needs polling — it shows a fixed list.  The
@@ -504,6 +510,15 @@ void JT8000ControllerEditor::buildSections()
                 });
                 sec->addAuxStepGrid([this](int step, int value) {
                     _proc.sendStepSeqAuxEdit(step, value);
+                });
+                break;
+
+            case ControlStyle::ArpGrid:
+                // Phase 9: the tri-lane arp pattern grid.  No CC/APVTS — each
+                // lane edit is sent direct-by-ParamID (ArpParamId) via
+                // sendArpStepEdit, exactly like the seq aux lane.
+                sec->addArpGrid([this](int step, int lane, int value) {
+                    _proc.sendArpStepEdit(step, lane, value);
                 });
                 break;
         }

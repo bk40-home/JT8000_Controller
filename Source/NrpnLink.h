@@ -46,6 +46,20 @@ namespace AuxParamId {
     inline constexpr uint16_t kStepValue   = 0x068F;
 }
 
+// Arpeggiator per-step ParamIDs (v2-only, no v1 CC — Phase 9).  The three
+// pattern lanes are addressed by ParamID directly, exactly like the seq aux
+// lane above: select the step, then write the lane.  Must match params.yaml /
+// ParamTable.h section 17 (0x0889..0x088C).  The nine GLOBAL arp params DO have
+// pseudo-CCs (JtBridgeExt 205..213) and travel the normal CC/APVTS path; only
+// these per-step lanes bypass it (they were never meant to be automatable, same
+// as the sequencer's steps).
+namespace ArpParamId {
+    inline constexpr uint16_t kStepSelect  = 0x0889;
+    inline constexpr uint16_t kStepOnOff   = 0x088A;
+    inline constexpr uint16_t kStepAccent  = 0x088B;
+    inline constexpr uint16_t kStepRatchet = 0x088C;
+}
+
 // One 3-byte channel-voice message, ready for juce::MidiMessage(d, 3).
 struct Short3 { uint8_t b[3]; };
 

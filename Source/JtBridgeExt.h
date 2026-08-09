@@ -52,6 +52,20 @@ inline constexpr ExtPair kExtPairs[] = {
     { 202,             0x008D         },    // osc2.pwm_lfo1_depth  (G2)
     { 203,             0x0107         },    // mix.pitch_mod_dest   (G1)
     { 204,             0x0801         },    // master.usb_return_level (USB soundcard return)
+    // ---- Arpeggiator GLOBAL params (Phase 9) — 9 v2-only params, no v1 CC.
+    // Out-of-band pseudo-CCs 205..213 (>155, same rule as 200): only the NRPN
+    // decode path can ever produce them, so no collision with a real/wire CC.
+    // The four per-step lane params (0x0889..0x088C) are NOT here — they go
+    // direct-by-ParamID via NrpnLink::ArpParamId (like the seq aux lane).
+    { 205,             0x0880         },    // arp.enable
+    { 206,             0x0881         },    // arp.mode
+    { 207,             0x0882         },    // arp.octaves
+    { 208,             0x0883         },    // arp.latch
+    { 209,             0x0884         },    // arp.rate
+    { 210,             0x0885         },    // arp.free_hz
+    { 211,             0x0886         },    // arp.gate_length
+    { 212,             0x0887         },    // arp.swing
+    { 213,             0x0888         },    // arp.step_count
 };
 
 inline int32_t paramIdFromV1Cc(uint16_t v1cc)
