@@ -389,6 +389,10 @@ static const char* const kLayerBalNames[] = { "A","AB","B" };
 // Master parameter table
 // defVal: raw CC 0-127 for Knob/Slider, choice index 0..N-1 for Combo/Toggle
 // -----------------------------------------------------------------------
+// The sequencer's aux lane never had APVTS rows. Generated from params.yaml
+// by tools/emit_ccparams.py — see MERGE_NOTES.md.
+#include "JtParamsMissingNames.h"
+
 static const CCParam kAllParams[] =
 {
     // === OSC 1 ===
@@ -632,6 +636,9 @@ static const CCParam kAllParams[] =
     // Patch preserves it.  defVal 127 == round(1.0 * 127), the canonical
     // default (return at unity — the firmware mixer sums it under the synth).
     { 204, "usb_return_level",  "USB Return",   Section::PERFORMANCE_GLOBAL, 127, KNOB,                                             true },
+
+#include "JtParamsMissingRows.h"
+
 };
 
 #undef KNOB

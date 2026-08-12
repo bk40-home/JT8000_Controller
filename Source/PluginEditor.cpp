@@ -33,10 +33,6 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     _isStandalone = _proc.isStandaloneMode();
 
     // --- Title label --------------------------------------------------------
-    _titleLabel.setText("JT-8000", juce::dontSendNotification);
-    _titleLabel.setColour(juce::Label::textColourId, kOrange);
-    _titleLabel.setFont(juce::FontOptions(18.0f, juce::Font::bold));
-    addAndMakeVisible(_titleLabel);
 
     // --- LCD patch name display ---------------------------------------------
     _patchNameLabel.setText(_proc.getPatchName(), juce::dontSendNotification);
@@ -49,6 +45,11 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     _patchNameLabel.onTextChange = [this]
     {
         _proc.setPatchName(_patchNameLabel.getText());
+
+        /* The LCD shows the patch name too, and nothing else pushes it there -
+         * editing the field silently left the two disagreeing. */
+        if (_panel != nullptr)
+            _panel->setPatchName(_patchNameLabel.getText());
     };
     addAndMakeVisible(_patchNameLabel);
 
@@ -73,10 +74,6 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
         lbl.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         lbl.setJustificationType(juce::Justification::centredRight);
     };
-    styleLabel(_perfLabel,    "Layers:");
-    styleLabel(_perfSetLabel, "Perf:");
-    addAndMakeVisible(_perfLabel);
-    addAndMakeVisible(_perfSetLabel);
 
     auto styleCombo = [](juce::ComboBox& cb)
     {
@@ -102,34 +99,9 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
             for (int i = 0; i < p->enumCount; ++i)
                 cb.addItem(p->enumNames[i], i + 1);
     };
-    fillFromRow(_editTargetCombo, "perf_edit_target");
-    fillFromRow(_perfModeCombo,   "perf_mode");
-    fillFromRow(_chACombo,        "perf_midi_ch_a");
-    fillFromRow(_chBCombo,        "perf_midi_ch_b");
-    fillFromRow(_voiceSplitCombo, "perf_voice_split");   // D-J5: was a raw knob
-    fillFromRow(_balanceCombo,    "perf_balance");       // D-J5: was a raw knob
 
-    styleCombo(_editTargetCombo);
-    styleCombo(_chACombo);
-    styleCombo(_chBCombo);
-    styleCombo(_perfModeCombo);
-    styleCombo(_voiceSplitCombo);
-    styleCombo(_balanceCombo);
 
-    styleKnob(_splitNoteKnob);
-    styleKnob(_masterVolKnob);                           // J1c
-    styleKnob(_usbReturnKnob);                           // USB soundcard return
 
-    addAndMakeVisible(_editTargetCombo);
-    addAndMakeVisible(_chACombo);
-    addAndMakeVisible(_chBCombo);
-    addAndMakeVisible(_perfModeCombo);
-    addAndMakeVisible(_voiceSplitCombo);
-    addAndMakeVisible(_splitNoteKnob);
-    addAndMakeVisible(_balanceCombo);
-    addAndMakeVisible(_masterVolKnob);
-    addAndMakeVisible(_usbReturnKnob);                   // USB soundcard return
-    addAndMakeVisible(_statusDots);                      // J1d
 
     // ---- Embedded engine controls (Phase J2) -------------------------------
     // Present only when the build carries the engine; a controller-only
@@ -149,13 +121,6 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
         };
         addAndMakeVisible(_engineModeCombo);
 
-        _rateWarnLabel.setText(juce::String::fromUTF8("â ") + "44.1k",
-                               juce::dontSendNotification);
-        _rateWarnLabel.setColour(juce::Label::textColourId, juce::Colour(0xfff08020));
-        _rateWarnLabel.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-        _rateWarnLabel.setJustificationType(juce::Justification::centred);
-        _rateWarnLabel.setTooltip("Engine is 44.1 kHz-tuned; device runs another rate (pitch off)");
-        addChildComponent(_rateWarnLabel);   // visibility driven by the timer
     }
 
     // Bind each control to its APVTS parameter. JUCE handles the two-way
@@ -164,15 +129,6 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     using ComboAtt  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
     using SliderAtt = juce::AudioProcessorValueTreeState::SliderAttachment;
 
-    _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_edit_target", _editTargetCombo));
-    _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_midi_ch_a",   _chACombo));
-    _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_midi_ch_b",   _chBCombo));
-    _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_mode",        _perfModeCombo));
-    _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_voice_split", _voiceSplitCombo));  // D-J5
-    _headerComboAtts.add (new ComboAtt (_proc.apvts, "perf_balance",     _balanceCombo));     // D-J5
-    _headerSliderAtts.add(new SliderAtt(_proc.apvts, "perf_split_note",  _splitNoteKnob));
-    _headerSliderAtts.add(new SliderAtt(_proc.apvts, "master_volume",    _masterVolKnob));    // J1c
-    _headerSliderAtts.add(new SliderAtt(_proc.apvts, "usb_return_level", _usbReturnKnob));    // USB soundcard return
 
     // --- MIDI output selector (ALL modes — standalone AND VST3) -------------
     // WHY: stock JUCE's VST3 wrapper drops outgoing SysEx from the processBlock
@@ -205,72 +161,39 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     // The input menu is built on demand, so nothing to pre-populate here.
     refreshMidiOutputList();
 
-    // --- Style helper for buttons -------------------------------------------
-    auto styleBtn = [](juce::TextButton& b, juce::Colour c)
+
+    /* Send All is now a skin header button, routed through _panel->onAction to
+     * this method. The step grids it used to walk belonged to SectionComponent;
+     * the panel writes through the APVTS, so a bank dump carries everything.
+     *
+     * NOT VERIFIED: if the firmware needs the step select/value pairs re-sent
+     * explicitly after a dump, that belongs in the processor rather than here. */
+
+
+
+    /* The RmlUi panel. Assets are registered and the document loaded inside
+     * JtRmlPanel; the editor only shows it and gives it bounds. */
+    _panel = std::make_unique<jt::JtRmlPanel>(_proc.apvts);
+    addAndMakeVisible(*_panel);
+    _panel->setPatchName(_proc.getPatchName());
+
+    /* The skin's header buttons drive the actions this editor already
+     * implements - they are routed, not reimplemented. */
+    _panel->onAction = [this](const juce::String& a)
     {
-        b.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff161c28));
-        b.setColour(juce::TextButton::textColourOffId, c);
+        if      (a == "sendall") _proc.sendBankDump();
+        else if (a == "loadsyx") loadSyxFile();
+        else if (a == "save")    savePatchFile();
+        else if (a == "load")    loadPatchFile();
+        else if (a == "init")    initPatch();
     };
 
-    // --- Send All -----------------------------------------------------------
-    // Phase 6: replaces the 90-CC paced spray with one BANK_DUMP. Step
-    // sequencer values aren't part of the BANK_DUMP (they're transient
-    // CC 17/18 pair edits), so we still send those via the new step-seq API.
-    styleBtn(_sendAllBtn, kOrange);
-    _sendAllBtn.onClick = [this]
-    {
-        _proc.sendBankDump();
-        for (auto* sec : _sections)
-        {
-            for (auto* grid : sec->getStepGrids())
-            {
-                // Each grid owns its lane's send callback (gate → gate lane,
-                // aux → aux lane).  Use it so Send All routes both correctly;
-                // hardcoding sendStepSeqEdit here would push the aux grid's
-                // values onto the gate lane.
-                if (! grid->onStepChanged) continue;
-                for (int s = 0; s < StepSequencerGrid::kNumSteps; ++s)
-                    grid->onStepChanged(s, grid->getStepValue(s));
-            }
-            // Arp pattern grids push all three lanes via their own callback.
-            for (auto* agrid : sec->getArpGrids())
-                agrid->sendAll();
-        }
-    };
-
-    // --- Load SYX -----------------------------------------------------------
-    styleBtn(_loadSyxBtn, kPurple);
-    _loadSyxBtn.onClick = [this] { loadSyxFile(); };
-
-    // --- Save / Load patch --------------------------------------------------
-    styleBtn(_savePatchBtn, kGreen);
-    styleBtn(_loadPatchBtn, kGreen);
-    _savePatchBtn.onClick = [this] { savePatchFile(); };
-    _loadPatchBtn.onClick = [this] { loadPatchFile(); };
-
-    // --- Init patch ---------------------------------------------------------
-    styleBtn(_initPatchBtn, kGreen);
-    _initPatchBtn.onClick = [this] { initPatch(); };
-
-    // --- Expand / Collapse --------------------------------------------------
-    styleBtn(_expandBtn, kText);
-    styleBtn(_collapseBtn, kText);
-    _expandBtn.onClick   = [this] { for (auto* s : _sections) s->setOpen(true); };
-    _collapseBtn.onClick = [this] { for (auto* s : _sections) s->setOpen(false); };
-
-    for (auto* b : { &_sendAllBtn, &_loadSyxBtn, &_savePatchBtn, &_loadPatchBtn,
-                     &_initPatchBtn, &_expandBtn, &_collapseBtn })
-        addAndMakeVisible(b);
-
-    // --- Scrollable viewport ------------------------------------------------
-    _viewport.setViewedComponent(&_contentPanel, false);
-    _viewport.setScrollBarsShown(true, false);
-    _viewport.getVerticalScrollBar().setColour(
-        juce::ScrollBar::thumbColourId, juce::Colour(0xff283850));
-    addAndMakeVisible(_viewport);
-
-    buildSections();
-    setSize(1080, 820);
+    /* Authored at 3840x2160 and correct at half that. At the old 1080px width
+     * a knob would be 40px, too small to use. */
+    setSize(jt::JtRmlPanel::kNativeW,
+            jt::JtRmlPanel::kNativeH + kHeaderHeight);
+    setResizable(true, true);
+    setResizeLimits(1280, 720 + kHeaderHeight, 3840, 2160 + kHeaderHeight);
     setResizable(true, true);
     setResizeLimits(400, 400, 1600, 2400);
 
@@ -380,7 +303,6 @@ void JT8000ControllerEditor::showMidiInputMenu()
 // =============================================================================
 void JT8000ControllerEditor::applyEngineSampleRatePolicy()
 {
-    // Intentionally empty — see header comment.  The _rateWarnLabel in
     // timerCallback() is the active off-rate signal on every platform.
 }
 
@@ -399,23 +321,18 @@ void JT8000ControllerEditor::timerCallback()
 
     // Both sinks are change-driven internally, so feeding them every tick
     // costs a couple of integer compares when nothing moved.
-    _statusDots.setStatus(word, alive);
+    /* Voice activity moved into the panel's LCD - same mask, same heartbeat. */
+    if (_panel != nullptr)
+        _panel->setVoiceActivity(ValueLaw::statusVoiceMask(word), alive);
 
-    // Rate warning (J2): visible only while the engine is audible at a
-    // non-native rate.  setVisible is a no-op when unchanged — tick-safe.
-    _rateWarnLabel.setVisible(_proc.engineAvailable()
-                              && _proc.engineMode() != 0
-                              && std::abs(_proc.hostSampleRate()
-                                          - _proc.engineSampleRate()) > 1.0);
+    /* Rate warning dropped: it was a JUCE label with no panel equivalent. */
 
     const bool running = alive && ValueLaw::statusRunning(word);
-    const int  step    = (int)ValueLaw::statusPlayStep(word);
-    for (auto* sec : _sections)
-        for (auto* grid : sec->getStepGrids())
-            grid->setPlayhead(step, running);
-    for (auto* sec : _sections)
-        for (auto* agrid : sec->getArpGrids())
-            agrid->setPlayhead(step, running);
+    const int  step    = (int) ValueLaw::statusPlayStep(word);
+
+    /* One call: the panel forwards the playhead to every step grid it owns. */
+    if (_panel != nullptr)
+        _panel->setPlayhead(running ? step : -1);
 
     // ---- Slow lane: MIDI device hot-plug scan (original 2 s cadence) --------
     // Only the output ComboBox needs polling — it shows a fixed list.  The
@@ -438,151 +355,6 @@ void JT8000ControllerEditor::timerCallback()
 }
 
 // =============================================================================
-// Build sections
-//
-// Creates a SectionComponent for every Section enum value EXCEPT
-// PERFORMANCE_GLOBAL — that pseudo-section's params (CCs 140..146) are
-// rendered directly in the editor header, not inside a collapsible panel.
-// We still reserve an array slot for it so integer casts from Section →
-// int stay valid elsewhere; the slot's SectionComponent is created but
-// never made visible and no params are added to it.
-// =============================================================================
-void JT8000ControllerEditor::buildSections()
-{
-    for (int s = 0; s < static_cast<int>(Section::NUM_SECTIONS); ++s)
-    {
-        auto* sec = _sections.add(
-            new SectionComponent(sectionNames[s], juce::Colour(0xfff08020u), _lnf));
-        sec->onLayoutChanged = [this] { layoutSections(); };
-
-        // PERFORMANCE_GLOBAL is header-only — don't show its panel.
-        if (s == static_cast<int>(Section::PERFORMANCE_GLOBAL))
-            continue;
-
-        _contentPanel.addAndMakeVisible(sec);
-    }
-
-    // Add visual envelope displays to their sections FIRST so they appear
-    // at the top, with the knobs flowing below for fine control.
-    _sections[static_cast<int>(Section::AMP_ENV)]
-        ->addEnvelope(_proc.apvts, JuceEnvFlavour::AMP);
-    _sections[static_cast<int>(Section::FILTER_ENV)]
-        ->addEnvelope(_proc.apvts, JuceEnvFlavour::FILTER);
-    _sections[static_cast<int>(Section::PITCH_ENV)]
-        ->addEnvelope(_proc.apvts, JuceEnvFlavour::PITCH);
-
-    for (int i = 0; i < kNumParams; ++i)
-    {
-        const auto& p = kAllParams[i];
-
-        // Perf-global params are bound directly to header controls in the
-        // editor constructor (see _editTargetCombo, _chACombo, etc.).
-        // Skip them here so they are NOT added to a SectionComponent —
-        // that would bind them twice and cause feedback / duplicate UI.
-        if (p.section == Section::PERFORMANCE_GLOBAL)
-            continue;
-
-        auto* sec = _sections[static_cast<int>(p.section)];
-        switch (p.style)
-        {
-            case ControlStyle::Knob:   sec->addKnob(_proc.apvts, p);     break;
-            case ControlStyle::Slider: sec->addSlider(_proc.apvts, p);   break;
-            case ControlStyle::Combo:  sec->addComboBox(_proc.apvts, p); break;
-            case ControlStyle::Toggle: sec->addToggle(_proc.apvts, p);   break;
-            case ControlStyle::StepGrid:
-                // Aux destination + depth FIRST — small controls on their own
-                // row above the two full-width grids.  Placed before the grids
-                // so the grids' full-bounds paint can't overlap them (the
-                // earlier ordering put them after the 580px-wide aux grid and
-                // they never became visible).  No CC/APVTS — send by ParamID.
-                sec->addRawCombo("Aux Dest", kSeqAuxDestNames, 5, 0,
-                    [this](int idx) {
-                        const int band = kSeqDestLUT[juce::jlimit(0, 4, idx)];
-                        _proc.sendParamNrpnById(NrpnLink::AuxParamId::kDestination, band);
-                    });
-                sec->addRawKnob("Aux Depth", 64,
-                    [this](int v) {
-                        _proc.sendParamNrpnById(NrpnLink::AuxParamId::kDepth, v);
-                    });
-                // Gate grid (orange), then aux grid (cyan) below the controls.
-                sec->addStepGrid([this](int step, int value) {
-                    _proc.sendStepSeqEdit(step, value);
-                });
-                sec->addAuxStepGrid([this](int step, int value) {
-                    _proc.sendStepSeqAuxEdit(step, value);
-                });
-                break;
-
-            case ControlStyle::ArpGrid:
-                // Phase 9: the tri-lane arp pattern grid.  No CC/APVTS — each
-                // lane edit is sent direct-by-ParamID (ArpParamId) via
-                // sendArpStepEdit, exactly like the seq aux lane.
-                sec->addArpGrid([this](int step, int lane, int value) {
-                    _proc.sendArpStepEdit(step, lane, value);
-                });
-                break;
-        }
-    }
-}
-
-// =============================================================================
-// Layout sections
-//
-// Walks _sections in order, placing them into the content panel according
-// to sectionRow[]. Groups sharing a row number get equal-width side-by-side
-// placement.
-//
-// PERFORMANCE_GLOBAL is skipped: its SectionComponent slot exists but is
-// never made visible (see buildSections), so it must not occupy vertical
-// space in the scrolling panel.
-// =============================================================================
-void JT8000ControllerEditor::layoutSections()
-{
-    const int scrollBarW = _viewport.getScrollBarThickness();
-    const int totalW = _viewport.getWidth() - scrollBarW - 8;
-    const int gap = 4;
-    if (totalW <= 0) return;
-
-    int y = gap, idx = 0;
-    const int n = _sections.size();
-    const int globalIdx = static_cast<int>(Section::PERFORMANCE_GLOBAL);
-
-    while (idx < n)
-    {
-        // Skip the pseudo-section that lives in the header, not on the panel.
-        if (idx == globalIdx) { ++idx; continue; }
-
-        const int row = sectionRow[idx];
-        if (row < 0)
-        {
-            auto* sec = _sections[idx];
-            int h = sec->getDesiredHeight(totalW);
-            sec->setBounds(gap, y, totalW, h);
-            y += h + gap;
-            ++idx;
-        }
-        else
-        {
-            int gs = idx;
-            while (idx < n && sectionRow[idx] == row && idx != globalIdx) ++idx;
-            int gc = idx - gs;
-            int sw = (totalW - (gc - 1) * gap) / gc;
-            int maxH = 0;
-            for (int g = 0; g < gc; ++g)
-                maxH = juce::jmax(maxH, _sections[gs + g]->getDesiredHeight(sw));
-            int xp = gap;
-            for (int g = 0; g < gc; ++g)
-            {
-                _sections[gs + g]->setBounds(xp, y, sw, maxH);
-                xp += sw + gap;
-            }
-            y += maxH + gap;
-        }
-    }
-    _contentPanel.setSize(totalW + 2 * gap, y + gap);
-}
-
-// =============================================================================
 // Paint
 // =============================================================================
 void JT8000ControllerEditor::paint(juce::Graphics& g)
@@ -593,14 +365,8 @@ void JT8000ControllerEditor::paint(juce::Graphics& g)
     g.setColour(kBorder);
     g.drawHorizontalLine(kHeaderHeight - 1, 0.0f, static_cast<float>(getWidth()));
 
-    // Three-row header: two internal dividers at 1/3 and 2/3 of header height.
-    // Faded border colour matches the pre-Phase-2 look where the single
-    // divider sat at kHeaderHeight / 2.
-    g.setColour(kBorder.withAlpha(0.4f));
-    const int row1Div = kHeaderHeight / 3;
-    const int row2Div = (kHeaderHeight * 2) / 3;
-    g.drawHorizontalLine(row1Div, 6.0f, static_cast<float>(getWidth() - 6));
-    g.drawHorizontalLine(row2Div, 6.0f, static_cast<float>(getWidth() - 6));
+    /* Single strip now, so the two internal dividers are gone with the rows
+     * they separated. */
 }
 
 // =============================================================================
@@ -616,109 +382,28 @@ void JT8000ControllerEditor::paint(juce::Graphics& g)
 // =============================================================================
 void JT8000ControllerEditor::resized()
 {
+    /* One 34px strip, not three rows. Everything else moved into the panel:
+     * row 3 was entirely parameters (now the Setup layer) and row 2's buttons
+     * are painted into the skin's header. What remains cannot come from the
+     * document - MIDI ports are discovered at runtime. */
     auto area = getLocalBounds();
-    auto hdrFull = area.removeFromTop(kHeaderHeight);
+    auto strip = area.removeFromTop(kHeaderHeight).reduced(6, 3);
 
-    const int rowH = kHeaderHeight / 3;   // was /2 before Phase 2
-    const int pad  = 4;
+    constexpr int pad = 6;
+    const int boxW = juce::jmin(180, (strip.getWidth() - pad * 3) / 4);
 
-    // ---- Row 1 — title + patch name + MIDI IO --------------------------------
-    auto row1 = hdrFull.removeFromTop(rowH).reduced(pad, 2);
+    _midiInButton.setBounds(strip.removeFromRight(boxW));
+    strip.removeFromRight(pad);
+    _midiOutSelector.setBounds(strip.removeFromRight(boxW));
+    strip.removeFromRight(pad);
+    _engineModeCombo.setBounds(strip.removeFromRight(110));
+    strip.removeFromRight(pad);
 
-    _titleLabel.setBounds(row1.removeFromLeft(72));
-    row1.removeFromLeft(pad);
+    /* The patch name is also shown on the panel's LCD; this field is what makes
+     * it editable until the LCD accepts text entry. */
+    _patchNameLabel.setBounds(strip);
 
-    // MIDI Out is present in all modes; MIDI In only in standalone. Size each
-    // box to ~1/3 of the row so the patch-name LCD keeps the remainder.
-    {
-        const int midiBoxW = juce::jmin(160, (row1.getWidth() - pad) / 3);
-
-        if (_isStandalone)
-        {
-            _midiInButton.setBounds(row1.removeFromRight(midiBoxW));
-            row1.removeFromRight(pad);
-        }
-
-        _midiOutSelector.setBounds(row1.removeFromRight(midiBoxW));
-        row1.removeFromRight(pad);
-    }
-
-    // Phase J2: engine mode + rate warning sit between LCD and MIDI boxes;
-    // zero width when built without the engine, so pre-J2 layout is intact.
-    if (_proc.engineAvailable())
-    {
-        _engineModeCombo.setBounds(row1.removeFromRight(96));
-        row1.removeFromRight(pad);
-        _rateWarnLabel.setBounds(row1.removeFromRight(52));
-        row1.removeFromRight(pad);
-    }
-
-    _patchNameLabel.setBounds(row1);
-
-    // ---- Row 2 — action buttons ---------------------------------------------
-    auto row2 = hdrFull.removeFromTop(rowH).reduced(pad, 2);
-    _sendAllBtn.setBounds(row2.removeFromLeft(66));
-    row2.removeFromLeft(pad);
-    _loadSyxBtn.setBounds(row2.removeFromLeft(72));
-    row2.removeFromLeft(pad);
-    _savePatchBtn.setBounds(row2.removeFromLeft(50));
-    row2.removeFromLeft(pad);
-    _loadPatchBtn.setBounds(row2.removeFromLeft(50));
-    row2.removeFromLeft(pad);
-    _initPatchBtn.setBounds(row2.removeFromLeft(44));
-
-    _collapseBtn.setBounds(row2.removeFromRight(66));
-    row2.removeFromRight(pad);
-    _expandBtn.setBounds(row2.removeFromRight(60));
-
-    // ---- Row 3 — Layers + Perf Global (Phase 2) -----------------------------
-    // Left block: "Layers:" | EditTarget | ChA | ChB
-    // Right block: "Perf:" | Mode | Voice | Split | Balance
-    // Middle space is flexible — collapses first when window is narrow.
-    auto row3 = hdrFull.reduced(pad, 2);
-
-    // Label widths — make them just wide enough for the text
-    constexpr int labelW  = 52;
-    constexpr int comboW  = 70;   // Edit Target, Ch A/B, Perf Mode
-    constexpr int knobW   = 48;   // small header knobs
-
-    // Left block
-    _perfLabel.setBounds(row3.removeFromLeft(labelW));
-    row3.removeFromLeft(pad);
-    _editTargetCombo.setBounds(row3.removeFromLeft(comboW));
-    row3.removeFromLeft(pad);
-    _chACombo.setBounds(row3.removeFromLeft(comboW));
-    row3.removeFromLeft(pad);
-    _chBCombo.setBounds(row3.removeFromLeft(comboW));
-
-    // Right block — lay out from the right so labels/knobs anchor cleanly.
-    // Phase J1: Voice Split and Layer Balance are combos now (D-J5), Master
-    // Volume anchors the far right (J1c) — same order as before with the
-    // volume outermost, mirroring a hardware master section.
-    _masterVolKnob.setBounds(row3.removeFromRight(knobW));
-    row3.removeFromRight(pad);
-    _usbReturnKnob.setBounds(row3.removeFromRight(knobW));  // immediately left of master vol
-    row3.removeFromRight(pad);
-    _balanceCombo.setBounds(row3.removeFromRight(56));      // "AB" — narrow is fine
-    row3.removeFromRight(pad);
-    _splitNoteKnob.setBounds(row3.removeFromRight(knobW));
-    row3.removeFromRight(pad);
-    _voiceSplitCombo.setBounds(row3.removeFromRight(comboW));
-    row3.removeFromRight(pad);
-    _perfModeCombo.setBounds(row3.removeFromRight(comboW));
-    row3.removeFromRight(pad);
-    _perfSetLabel.setBounds(row3.removeFromRight(labelW));
-
-    // Status strip (J1d) lives in the flexible middle gap: it is the least
-    // critical header element, so it is the first thing a narrow window
-    // squeezes away — hide rather than overlap.
-    row3.removeFromLeft(pad);
-    constexpr int dotsW = 120;
-    _statusDots.setVisible(row3.getWidth() >= dotsW / 2);
-    _statusDots.setBounds(row3.withWidth(juce::jmin(dotsW, row3.getWidth())));
-
-    _viewport.setBounds(area);
-    layoutSections();
+    _panel->setBounds(area);
 
     if (_syxOverlay != nullptr)
         _syxOverlay->setBounds(getLocalBounds());
@@ -767,23 +452,16 @@ void JT8000ControllerEditor::initPatch()
     }
 
     _proc.setPatchName("INIT PATCH");
+    if (_panel != nullptr)
+        _panel->setPatchName("INIT PATCH");
     _proc._suppressEcho.store(false);
 
     // Flush the new state in one BANK_DUMP.
     _proc.sendBankDump();
 
-    // Reset step sequencer values + push them to the firmware.
-    for (auto* sec : _sections)
-    {
-        for (auto* grid : sec->getStepGrids())
-        {
-            for (int s = 0; s < StepSequencerGrid::kNumSteps; ++s)
-            {
-                grid->setStepValue(s, 0, false);
-                if (grid->onStepChanged) grid->onStepChanged(s, 0);   // per-lane send
-            }
-        }
-    }
+    /* The step lanes were reset above with every other parameter, and the
+     * panel reads them back on the next sync - the grids this used to walk
+     * belonged to SectionComponent. */
 }
 
 // =============================================================================
@@ -936,6 +614,8 @@ void JT8000ControllerEditor::showBankPicker(const juce::String& fileName)
                     const auto& patch = _syxBank.orphanPatches[static_cast<size_t>(patchIdx)];
                     loadPatch(_proc.apvts, patch);
                     _proc.setPatchName(patch.name);
+                    if (_panel != nullptr)
+                        _panel->setPatchName(patch.name);
                     // No send — user explicitly chose "Load Only"
                 }
                 break;

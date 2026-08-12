@@ -91,6 +91,13 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# RmlUi panel (new UI). Fetches RmlUi and builds the embedded skin blob once;
+# jt_rmlui_wire() then links it into each target.
+# ---------------------------------------------------------------------------
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/JtRmlUi.cmake)
+jt_rmlui_prepare()
+
+# ---------------------------------------------------------------------------
 # Plugin target
 #
 # IS_MIDI_EFFECT is FALSE — Ableton cannot load MIDI-only VST3 plugins.
@@ -140,6 +147,21 @@ set(JT_APP_SOURCES
     Source/SyxProtocol.h
     Source/ParamMapJuce.h
     Source/JT8000Log.h
+
+    # ---- RmlUi panel -------------------------------------------------------
+    # The bridge (renderer, interfaces, host component) and the custom controls.
+    # SectionComponent stays in the build for now: nothing references it once
+    # buildSections() is gone, and removing files is a separate commit.
+    Source/JtRmlRenderer.h    Source/JtRmlRenderer.cpp
+    Source/JtRmlSystem.h      Source/JtRmlSystem.cpp
+    Source/JtRmlFile.h        Source/JtRmlFile.cpp
+    Source/JtRmlFont.h        Source/JtRmlFont.cpp
+    Source/JtRmlKnob.h        Source/JtRmlKnob.cpp
+    Source/JtRmlCombo.h       Source/JtRmlCombo.cpp
+    Source/JtRmlElements.h    Source/JtRmlElements.cpp
+    Source/JtRmlComponent.h   Source/JtRmlComponent.cpp
+    Source/JtRmlBinding.h     Source/JtRmlBinding.cpp
+    Source/JtRmlPanel.h       Source/JtRmlPanel.cpp
 )
 
 function(jt_wire_target tgt)
@@ -166,6 +188,9 @@ function(jt_wire_target tgt)
             juce::juce_recommended_config_flags
             juce::juce_recommended_warning_flags
     )
+
+    # RmlUi + the embedded skin, for both targets.
+    jt_rmlui_wire(${tgt})
 
     if(JT_ENGINE_DIR)
         target_compile_definitions(${tgt} PRIVATE JT8000_HAS_ENGINE=1)

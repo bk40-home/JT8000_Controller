@@ -1,7 +1,7 @@
 /*
  * PluginEditor.h — JT-8000 Controller Main Window
  *
- * Owns the JT8000LookAndFeel instance and passes it to all SectionComponents.
+ * Owns the JT8000LookAndFeel instance and hosts the RmlUi panel.
  * Header bar with MIDI routing, SYX import, patch save/load, expand/collapse.
  *
  * VST3 NOTES:
@@ -18,16 +18,16 @@
  */
 
 #pragma once
+
+#include "JtRmlPanel.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "PluginProcessor.h"
-#include "SectionComponent.h"
 #include "JT8000LookAndFeel.h"
 #include "JP8000SyxImporter.h"
 #include "SyxPickerOverlay.h"
 #include "TouchSafeViewport.h"
-#include "StatusDots.h"
 
 // =============================================================================
 // Main Editor
@@ -48,7 +48,6 @@ private:
     JT8000LookAndFeel _lnf;
     bool _isStandalone = false;
 
-    juce::Label     _titleLabel;
     juce::Label     _patchNameLabel;
     juce::ComboBox  _midiOutSelector;
     juce::TextButton _midiInButton { "MIDI In" };   // opens a tickable device
@@ -59,42 +58,19 @@ private:
     // ---- Perf-Global header controls (Phase 2) ----------------------------
     // Rendered on the third header row. Bound to APVTS params (CCs 140..146)
     // via attachments so state save/restore Just Works.
-    juce::Label     _perfLabel;            // "Layers:" static label
-    juce::ComboBox  _editTargetCombo;      // perf_edit_target (A/B/Both)
-    juce::ComboBox  _chACombo;             // perf_midi_ch_a (Ch 1..16)
-    juce::ComboBox  _chBCombo;             // perf_midi_ch_b (Ch 1..16)
 
-    juce::Label     _perfSetLabel;         // "Perf:" static label
-    juce::ComboBox  _perfModeCombo;        // perf_mode (Single/Layer/Split)
-    juce::ComboBox  _voiceSplitCombo;      // perf_voice_split ("1+7".."7+1") — D-J5
-    juce::Slider    _splitNoteKnob;        // perf_split_note (0..127 note number)
-    juce::ComboBox  _balanceCombo;         // perf_balance / "Layer Bal" (A/AB/B) — D-J5
-    juce::Slider    _masterVolKnob;        // master_volume (J1c — the 140th param)
-    juce::Slider    _usbReturnKnob;        // usb_return_level (USB soundcard return monitor)
-    StatusDots      _statusDots;           // engine voice dots + RUN (J1d)
     juce::ComboBox  _engineModeCombo;      // Controller / Sound / Both (J2 —
                                            // hidden when built without engine)
-    juce::Label     _rateWarnLabel;        // "≠44.1k" when audible off-rate (J2)
 
     // APVTS attachments for the perf-global header controls. OwnedArray so
     // we can construct them all at once after createEditor() / APVTS exists.
-    juce::OwnedArray<juce::AudioProcessorValueTreeState::ComboBoxAttachment> _headerComboAtts;
-    juce::OwnedArray<juce::AudioProcessorValueTreeState::SliderAttachment>   _headerSliderAtts;
 
-    juce::TextButton _sendAllBtn   { "Send All" };
-    juce::TextButton _loadSyxBtn   { "Load SYX" };
-    juce::TextButton _savePatchBtn { "Save" };
-    juce::TextButton _loadPatchBtn { "Load" };
-    juce::TextButton _initPatchBtn { "Init" };
-    juce::TextButton _expandBtn    { "Expand" };
-    juce::TextButton _collapseBtn  { "Collapse" };
 
-    TouchSafeViewport _viewport;
-    juce::Component _contentPanel;
-    juce::OwnedArray<SectionComponent> _sections;
+    /* The RmlUi panel replaces the accordion. The 34px strip above it keeps
+     * only what cannot come from the document: MIDI device lists are discovered
+     * at runtime. */
+    std::unique_ptr<jt::JtRmlPanel> _panel;
 
-    void buildSections();
-    void layoutSections();
     void refreshMidiOutputList();
     void showMidiInputMenu();      // pops the tickable multi-select device menu
 
@@ -133,7 +109,9 @@ private:
     //          / Expand / Collapse                         — 36px
     //   Row 3: Layers + Perf Global controls               — 36px
     // Total = 108px. Was 72 before Phase 2 (two rows).
-    static constexpr int kHeaderHeight = 108;
+    /* 108 -> 34. Row 3 was entirely parameters and now lives in the panel's
+     * Setup layer; row 2's buttons are painted into the skin's header. */
+    static constexpr int kHeaderHeight = 34;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(JT8000ControllerEditor)
 };
