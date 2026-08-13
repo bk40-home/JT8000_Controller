@@ -265,7 +265,7 @@
 	<div class="shiftbtn" style="left:2928dp; top:66dp; width:300dp; height:162dp;"/>
 
 	<!-- Oscillator 1 -->
-	<combo class="combo v-main v-shift v-reverb v-seq v-arp v-setup" param="osc1_wave" key="osc1.wave" default="0.0" options="SIN, SAW, SQR, TRI, ARB, PLS, rSAW, S&amp;H, vTRI, BLS, rBLS, BLSQ, BLP, SSAW" index="0" style="left:71dp; top:466dp; width:139dp; height:40dp;"/>
+	<combo class="combo v-main v-shift v-reverb v-seq v-arp v-setup" param="osc1_wave" key="osc1.wave" default="0.0" options="SIN, SAW, SQR, TRI, ARB, PLS, rSAW, S&amp;H, vTRI, BLS, rBLS, BLSQ, BLP, SSAW, vSAW, BLvSAW, vTRI2, BLvTRI" index="0" style="left:71dp; top:466dp; width:139dp; height:40dp;"/>
 	<combo class="combo v-main v-shift v-reverb v-seq v-arp v-setup" param="osc1_pitch" key="osc1.pitch_offset" default="0.5" options="-24, -12, 0, +12, +24" index="2" style="left:71dp; top:563dp; width:117dp; height:40dp;"/>
 	<knob class="knob v-main v-shift v-reverb v-seq v-arp v-setup" param="osc1_fine" key="osc1.fine_tune" default="0.5" style="left:266dp; top:466dp; width:144dp; height:144dp;"/>
 	<knob class="knob v-main v-shift v-reverb v-seq v-arp v-setup" param="osc1_detune" key="osc1.detune" default="0.5" style="left:436dp; top:466dp; width:144dp; height:144dp;"/>
@@ -283,7 +283,7 @@
 	<combo class="combo v-main v-shift v-reverb v-seq v-arp v-setup" param="pitch_mod_dest" key="mix.pitch_mod_dest" default="0.0" options="OSC1+2, OSC2, X-MOD" index="0" style="left:411dp; top:978dp; width:159dp; height:40dp;"/>
 
 	<!-- Oscillator 2 -->
-	<combo class="combo v-main v-shift v-reverb v-seq v-arp v-setup" param="osc2_wave" key="osc2.wave" default="0.0" options="SIN, SAW, SQR, TRI, ARB, PLS, rSAW, S&amp;H, vTRI, BLS, rBLS, BLSQ, BLP, SSAW" index="0" style="left:1311dp; top:466dp; width:139dp; height:40dp;"/>
+	<combo class="combo v-main v-shift v-reverb v-seq v-arp v-setup" param="osc2_wave" key="osc2.wave" default="0.0" options="SIN, SAW, SQR, TRI, ARB, PLS, rSAW, S&amp;H, vTRI, BLS, rBLS, BLSQ, BLP, SSAW, vSAW, BLvSAW, vTRI2, BLvTRI" index="0" style="left:1311dp; top:466dp; width:139dp; height:40dp;"/>
 	<combo class="combo v-main v-shift v-reverb v-seq v-arp v-setup" param="osc2_pitch" key="osc2.pitch_offset" default="0.5" options="-24, -12, 0, +12, +24" index="2" style="left:1311dp; top:563dp; width:117dp; height:40dp;"/>
 	<knob class="knob v-main v-shift v-reverb v-seq v-arp v-setup" param="osc2_fine" key="osc2.fine_tune" default="0.5" style="left:1506dp; top:466dp; width:144dp; height:144dp;"/>
 	<knob class="knob v-main v-shift v-reverb v-seq v-arp v-setup" param="osc2_detune" key="osc2.detune" default="0.5" style="left:1676dp; top:466dp; width:144dp; height:144dp;"/>
@@ -320,45 +320,45 @@
 	<combo class="combo v-main v-shift v-reverb v-seq v-arp v-setup" param="flt_xp" key="filter.obxa_xpander_mode" default="0.0" options="LP4, LP3, LP2, LP1, HP3, HP2, HP1, BP4, BP2, N2, PH3, HP2+LP1, HP3+LP1, N2+LP1, PH3+LP1" index="0" style="left:3238dp; top:1058dp; width:170dp; height:40dp;"/>
 
 	<!-- Amp Envelope -->
-	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="amp_a" key="env_amp.attack" default="0.0" style="left:217dp; top:1284dp; width:23dp; height:255dp;">
+	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="amp_a" key="env_amp.attack" default="0.0" style="left:50dp; top:1284dp; width:23dp; height:255dp;">
 		<div class="thumb"/>
 	</fader>
-	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="amp_d" key="env_amp.decay" default="0.0094" style="left:305dp; top:1284dp; width:23dp; height:255dp;">
+	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="amp_d" key="env_amp.decay" default="0.0094" style="left:140dp; top:1284dp; width:23dp; height:255dp;">
 		<div class="thumb"/>
 	</fader>
-	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="amp_s" key="env_amp.sustain" default="1.0" style="left:394dp; top:1284dp; width:23dp; height:255dp;">
+	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="amp_s" key="env_amp.sustain" default="1.0" style="left:230dp; top:1284dp; width:23dp; height:255dp;">
 		<div class="thumb"/>
 	</fader>
-	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="amp_r" key="env_amp.release" default="0.0003" style="left:482dp; top:1284dp; width:23dp; height:255dp;">
+	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="amp_r" key="env_amp.release" default="0.0003" style="left:320dp; top:1284dp; width:23dp; height:255dp;">
 		<div class="thumb"/>
 	</fader>
 
 	<!-- Filter Envelope -->
-	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="fe_a" key="env_filter.attack" default="0.0" style="left:790dp; top:1284dp; width:23dp; height:255dp;">
+	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="fe_a" key="env_filter.attack" default="0.0" style="left:650dp; top:1284dp; width:23dp; height:255dp;">
 		<div class="thumb"/>
 	</fader>
-	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="fe_d" key="env_filter.decay" default="0.0094" style="left:878dp; top:1284dp; width:23dp; height:255dp;">
+	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="fe_d" key="env_filter.decay" default="0.0094" style="left:740dp; top:1284dp; width:23dp; height:255dp;">
 		<div class="thumb"/>
 	</fader>
-	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="fe_s" key="env_filter.sustain" default="0.0" style="left:967dp; top:1284dp; width:23dp; height:255dp;">
+	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="fe_s" key="env_filter.sustain" default="0.0" style="left:830dp; top:1284dp; width:23dp; height:255dp;">
 		<div class="thumb"/>
 	</fader>
-	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="fe_r" key="env_filter.release" default="0.0003" style="left:1055dp; top:1284dp; width:23dp; height:255dp;">
+	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="fe_r" key="env_filter.release" default="0.0003" style="left:920dp; top:1284dp; width:23dp; height:255dp;">
 		<div class="thumb"/>
 	</fader>
 
 	<!-- Pitch Envelope -->
-	<knob class="knob v-main v-shift v-reverb v-seq v-arp v-setup" param="pe_depth" key="env_pitch.depth" default="0.5" style="left:1344dp; top:1314dp; width:144dp; height:144dp;"/>
-	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="pe_a" key="env_pitch.attack" default="0.0" style="left:1533dp; top:1284dp; width:23dp; height:255dp;">
+	<knob class="knob v-main v-shift v-reverb v-seq v-arp v-setup" param="pe_depth" key="env_pitch.depth" default="0.5" style="left:1300p; top:1314dp; width:144dp; height:144dp;"/>
+	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="pe_a" key="env_pitch.attack" default="0.0" style="left:1400dp; top:1284dp; width:23dp; height:255dp;">
 		<div class="thumb"/>
 	</fader>
-	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="pe_d" key="env_pitch.decay" default="0.0094" style="left:1621dp; top:1284dp; width:23dp; height:255dp;">
+	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="pe_d" key="env_pitch.decay" default="0.0094" style="left:1490dp; top:1284dp; width:23dp; height:255dp;">
 		<div class="thumb"/>
 	</fader>
-	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="pe_s" key="env_pitch.sustain" default="0.0" style="left:1710dp; top:1284dp; width:23dp; height:255dp;">
+	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="pe_s" key="env_pitch.sustain" default="0.0" style="left:1580dp; top:1284dp; width:23dp; height:255dp;">
 		<div class="thumb"/>
 	</fader>
-	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="pe_r" key="env_pitch.release" default="0.0003" style="left:1798dp; top:1284dp; width:23dp; height:255dp;">
+	<fader class="fader v-main v-shift v-reverb v-seq v-arp v-setup" param="pe_r" key="env_pitch.release" default="0.0003" style="left:1670dp; top:1284dp; width:23dp; height:255dp;">
 		<div class="thumb"/>
 	</fader>
 

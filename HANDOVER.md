@@ -1,180 +1,167 @@
 # JT-8000 UI — HANDOVER
 
-Everything needed to continue in a fresh thread. Nothing earlier needs re-reading.
+Everything a fresh session needs. Nothing earlier needs re-reading.
 
-**Attach to the new thread:** this file, `DECISIONS.md`, the `Source/` folder,
-the `skin/` folder, and the generator scripts listed under "Toolchain".
-
----
-
-## 1. What this is
-
-A new visual UI for the JT-8000 JUCE plugin, replacing the accordion editor.
-Built as an **RmlUi 6.3 skin** (HTML/CSS-like) with a **custom JUCE bridge**
-written from scratch. The sound engine is finished and untouched.
-
-**Status:** panel design complete and rendered; C++ bridge complete and
-compile-verified; nothing has ever been *run*.
+**Attach to the new chat:** this file, `LAYOUT.md`, `DECISIONS.md`, the
+`Source/` folder, `skin/`, and `tools/`.
 
 ---
 
-## 2. Settled decisions — do not re-open
+## 1. Status
 
-Full detail in `DECISIONS.md`. The load-bearing ones:
+A new UI for the JT-8000 JUCE plugin, built as an **RmlUi 6.2 skin** with a
+hand-written JUCE bridge. **It builds, runs and works.** Knobs, faders, combos,
+toggles and step grids all move and bind; SYX loading updates the display and
+the engine; layers and SHIFT switch; the LCD follows the pointer.
 
-| Decision | Why |
-|---|---|
-| **RmlUi 6.3 direct (MIT)**, own bridge | gearmulator's `juceRmlUi` is GPL-3 |
-| **Software renderer** on `juce::Graphics` | avoids an OpenGL context in a VST3 editor |
-| **Sprite artwork, script-generated** | matched to gearmulator's jeTrancy skin to ~2% error |
-| **Legends baked into background PNGs** | the reference does this; keeps the renderer tiny |
-| **Canvas 3840x2160 dp** shown at 1920x1080 | one `SetDensityIndependentPixelRatio` call |
-| **Cells at 90%** — knob 144 dp = 72 px | largest that fits; content 2152 of 2160 dp |
-| **`params.yaml` is the single source** | the JUCE emitter was the missing piece |
-
-### Panel arrangement (final)
-
-- **Row 1** — Oscillator 1, Oscillator 2, then Mixer stacked over Filter
-- **Row 2** — Amp Env, Filter Env, Pitch Env, LFO 1, LFO 2
-- **Layer area** — Main (EQ & Drive, Mod FX, Delay, Output Mix), or Reverb,
-  or Step Sequencer, or Arpeggiator, or Setup
-- **Header 260 dp** — brand, LCD, preset arrows, 5 layer buttons, SHIFT
-- **Shift** is latching, trims only: the 9 envelope curves + 4 LFO globals
-
-160 parameters: 141 visible, 13 on shift, the rest inside the stepgrids.
+What remains is layout polish and the gaps in §6.
 
 ---
 
-## 3. The three real problems found, and their fixes
+## 2. The one thing to understand first
 
-These were discovered by reading your repos, and matter more than the UI work.
+**Layout is data, not code.** `tools/layout.json` holds every block rect and
+every control position. `tools/JT8000_Editor.html` edits it visually. The
+generators read it and never recompute it.
 
-**a) The JUCE emitter was never written.** `gen_params.py`'s own header says the
-ESP32 and JUCE emitters were planned for Phase 5. Only the ESP one exists, which
-is why `CCDefinitions.h` is hand-authored and **18 firmware parameters have no
-APVTS entry at all** — the whole arpeggiator and the sequencer's aux lane.
-→ `emit_juce.py` generates `JtParamTable.h`. **142 existing APVTS ids preserved
-byte-for-byte** (they are persisted in saved patches and host automation, so
-renaming them would break every session), 18 added.
+This replaced two computed engines (`pack.py`, then `grid.py`). Both re-derived
+the whole panel on any change, so a request to align one row moved things that
+were already right. **Do not reintroduce automatic layout.** If the layout looks
+wrong, the answer is the editor, not a better algorithm.
 
-**b) `JtBridgeTable.h` claimed to be generated and was not.** It carries a
-"GENERATED — DO NOT HAND-EDIT, CI runs --check" banner, but no emitter existed.
-→ `emit_bridge.py` generates it. Regression-checked: **all 139 existing entries
-byte-identical, 0 changed, 0 dropped, 21 added.**
-
-**c) Panel keys and APVTS ids diverged.** `osc1.fine_tune` vs `osc1_fine` —
-**only 26 of 160 map by substitution.** Recovered by joining `JtBridgeTable.h`
-against `CCDefinitions.h`; seeded into `params.yaml` as `juce_id` and `v1_cc`.
-
-**To apply:** run `seed_ids.py` twice (`--field juce_id`, `--field v1_cc`) then
-add four lines to `gen_params.py`'s `main()` — documented at the top of each
-emitter. `params.seeded.yaml` is the already-seeded result.
+Read `LAYOUT.md` before touching anything visual.
 
 ---
 
-## 4. Toolchain — what generates what
+## 3. Pipeline
 
 ```
-params.yaml                      SINGLE SOURCE
-  ├─ gen_params.py               → ParamTable.h        (firmware, exists)
-  ├─ emit_juce.py     [NEW]      → JtParamTable.h      (JUCE APVTS)
-  ├─ emit_bridge.py   [NEW]      → JtBridgeTable.h     (v1 CC bridge)
-  └─ seed_ids.py      [NEW]      adds juce_id / v1_cc back into params.yaml
-
-rebuild_blocks.py  → blocks.json     (controls, measured legend widths)
-pack.py            → block geometry  (packing rules, no overlaps by construction)
-render_panel.py    → panel PNGs      (preview + baked backgrounds)
-gen_skin.py        → skin/           (jt8000.rml + rcss + 6 backgrounds)
-
-gen_knob_tus.py / gen_combo.py / gen_widgets.py / gen_slider_tus.py
-                   → sprite sheets
+params.yaml --> rebuild_blocks.py --> blocks.json     (what is on the panel)
+                                          |
+layout.json ------------------------------+--> gen_skin.py --> skin/
+   ^                                      |                   | jt8000.rml
+   +-- JT8000_Editor.html                 +--> render_panel.py | jt8000.rcss
+                                                              | bg_base.png
+                                                              + band_*.png
 ```
 
-Regenerate the skin: `rebuild_blocks.py` → `gen_skin.py`.
+- **One base image** plus five small layer bands, not six full canvases
+  (8.5 MB -> 2.8 MB).
+- **All lettering is live text**, not baked, so SHIFT is a class swap and text
+  stays crisp at any window size.
+- Only the chassis, wells and button bodies are painted.
+
+**Canvas 3840 x 2400 dp, shown at 1920 x 1200.** Grown from 2160 because
+squeezing cells to fit produced 40 px knobs, which are unusable.
 
 ---
 
-## 5. C++ — 18 files, 3,505 lines, all compile-clean
+## 4. C++ bridge — 11 files in `Source/`
 
-Verified with `-Wall -Wextra` against **real RmlUi 6.3 headers** (cloned from
-GitHub) plus a minimal JUCE shim. Not linked, not run.
+Compile-verified against real RmlUi 6.2 headers with `-Wall -Wextra`.
 
 | File | Role |
 |---|---|
-| `JtRmlRenderer` | `RenderInterface` on `juce::Graphics`. Axis-aligned quads → `drawImage`/`fillRect`; `Path` fallback. `stats().pathFallbacks` should stay 0 |
-| `JtRmlSystem` | monotonic clock, logging, cursor, clipboard |
-| `JtRmlFile` | embedded `BinaryData` with a disk override for iteration |
+| `JtRmlRenderer` | `RenderInterface` on `juce::Graphics`. Axis-aligned quads -> `drawImage`/`fillRect`; `Path` fallback. `stats().pathFallbacks` should stay 0 |
+| `JtRmlSystem` | Monotonic clock, log ring, cursor, clipboard |
+| `JtRmlFile` | Embedded `BinaryData`, with a disk override for iteration |
 | `JtRmlFont` | `juce::Font`-backed; whole strings cached as one texture, LRU 256 |
 | `JtRmlKnob` | 128-frame sprite rotary |
-| `JtRmlCombo` | selector with document-level popup |
-| `JtRmlElements` | `JtRmlControl` base + fader, toggle, **stepgrid** |
-| `JtRmlComponent` | hosts the context, input, tick, paint |
+| `JtRmlCombo` | Selector with a document-level popup |
+| `JtRmlElements` | `JtRmlControl` base + fader, toggle, stepgrid |
+| `JtRmlComponent` | Owns the context, input, tick, paint |
 | `JtRmlBinding` | APVTS both ways, LCD readout |
+| `JtRmlPanel` | Wrapper the editor holds. Assets, actions, voice dots |
+| `PluginEditor` | 34 px strip plus the panel |
 
-### API traps already paid for
+### Traps already paid for — do not re-learn these
 
-- `Rml::StyleSheetSpecification` has **no** `GetInstance()` — static-only in 6.3
+- `Rml::StyleSheetSpecification` has **no** `GetInstance()` in 6.x
 - `Element::SetProperty` needs the typed `PropertyId` overload
 - `GetClientWidth/Height` are **non-const** — they can force a layout
 - `Rml::StringView` is only forward-declared in `FontEngineInterface.h`
-- JUCE does **not** specialise `std::hash<juce::String>` — keys must be `std::string`
-- `drag: drag` in RCSS is **mandatory** or a control never receives drag events
+- JUCE does **not** specialise `std::hash<juce::String>`
+- `drag: drag` in RCSS is **mandatory** on every draggable control
 - All four interfaces must be set **before** `Rml::Initialise()`
-- `RMLUI_FONT_ENGINE=none` is **wrong** — combos and the LCD are live text
+- `RMLUI_FONT_ENGINE=none` is wrong — combos and the LCD are live text
+- **There is no RmlUi 6.3 tag.** Its own CMakeLists says 6.3 because master is
+  6.3-dev. Pin **6.2**
+- `ninepatch(outer, inner)` takes **two sprite names**, not a sprite plus edges
+- A `@spritesheet` with only `src` defines **no sprites** and is discarded
+- RmlUi has **no `@font-face`** and **no `pointer-events`**
+- Textures must load through `Rml::GetFileInterface()`, not `juce::File` — the
+  skin is `BinaryData` and there is no file to open
+- Combo items must listen for **Mousedown**, not Click: pressing one moves
+  focus, blur hides the list, and a `display:none` element receives no click
+- Destroying the popup inside its own event handler is a use-after-free — hide,
+  then destroy in `OnUpdate`
+- `Rml::Initialise()` is global; the context name must be unique per instance
+- `JtRmlFont` must release its texture cache **before** `Rml::Shutdown()`
 
 ---
 
-## 6. Stepgrid — protocol matched to the ESP32 controller
+## 5. Parameters
 
-From `PHASE9_ARP_ESP_NOTE.md`. The hardware and the plugin must agree, so
-`JtRmlStepGrid` implements the same six rules:
+`params.yaml` is the single source across firmware, ESP32 and plugin.
 
-1. **Order**: `step_select` (address) first, then `step_value` (data)
-2. **Lattice**: step → norm is `step / 15.0f`, not `/16` (Int over 1..16)
-3. **Forced value write**: painting the same value on a *different* step writes
-   an equal float; a store that skips equal writes drops it (the `D-5` quirk)
-4. **Selecting is a READ** — never write the new step's value back out, or
-   browsing corrupts the pattern
-5. **The cache IS the pattern** — the store only holds the last step written
-6. **Lane → pair**: gate `seq.step_select/step_value`,
-   aux `seq.aux_step_select/aux_step_value`, arp `arp.step_select/arp.step_accent`.
-   The arp grid drives **accent only**; on/off and ratchet are ordinary controls
+Two emitters were written because **the JUCE emitter never existed** — which is
+why 18 firmware parameters had no APVTS entry and `JtBridgeTable.h` was
+hand-maintained behind a "GENERATED" banner:
 
-Also confirmed: `params.yaml` and the ESP `ParamTable.h` **already agree** — all
-13 arp IDs identical, 160 params, 18 sections, section 17 = Arpeggiator.
+- `emit_juce.py` -> `JtParamTable.h` (142 existing APVTS ids preserved
+  byte-for-byte; they are persisted in saved patches and host automation)
+- `emit_bridge.py` -> `JtBridgeTable.h` (all 139 existing entries identical)
+- `seed_ids.py` adds `juce_id` and `v1_cc` to `params.yaml`
 
-ESP lane colours, for later alignment: gate `0xFC00` orange, aux `0x07FF` cyan,
-arp `0xF81F` magenta, playhead white, focus yellow. **Colours deferred.**
+**Not yet wired into `gen_params.py`** — four lines, documented at the top of
+each. Until then they are run by hand.
 
 ---
 
-## 7. Next steps, in order
+## 6. Outstanding
 
-1. **Editor wiring** — instantiate `JtRmlComponent` in `PluginEditor`, register
-   `BinaryData` with `JtRmlFile` (use `getNamedResourceOriginalFilename`;
-   JUCE mangles `bg_main.png` → `bg_main_png`), construct `JtRmlBinding`, wire
-   the header's layer buttons to `setView()`
-2. **Apply the emitters** — seed `params.yaml`, add four lines to
-   `gen_params.py`, regenerate across all three repos
-3. **`gen_skin.py`** does not yet emit the header's LCD or layer buttons as
-   elements, nor the stepgrid's `select`/`value` attributes
-4. **Build it** — `JtRmlUi.cmake` fetches RmlUi and embeds the skin
-5. Lane colours; `JtRmlCombo` needs `.combo-list` / `.combo-item` RCSS
+**Layout**
+- Osc 1's Arbitrary group wraps awkwardly; LFO Per-Destination wraps 3+2.
+  Both are editor jobs now, not code jobs.
+- Lane colours not yet aligned with the ESP32's: gate orange `0xFC00`, aux cyan
+  `0x07FF`, arp magenta `0xF81F`.
 
-### Open questions
-
-- 13 controls report **UNBOUND** at skin-emit time until the emitters are applied
-- `usb_return_level` exists in the plugin with no `params.yaml` key (the `0x0801`
-  regen already in your DEFERRALS ledger)
-- `ArpPatternGrid` is referenced by the ESP note but is not in the source you sent
+**Function**
+- `usb_return_level` is in the APVTS with no `params.yaml` key — the `0x0801`
+  regeneration in the deferrals ledger.
+- **Send All** now only calls `_proc.sendBankDump()`. The old version also
+  re-sent step select/value pairs, which are not in the dump. If the firmware
+  needs them, that belongs in the processor. **Untested.**
+- `SyxPickerOverlay` is still a JUCE overlay, by choice.
+- Preset arrows were removed; there is no preset browser yet.
+- `SectionComponent`, `StepSequencerGrid`, `ArpPatternGrid`, `Envelopedisplay`
+  remain in the build but unreferenced. Deleting them is its own commit.
 
 ---
 
-## 8. Working style that worked
+## 7. How this session went wrong, twice
 
-- Compile against real headers rather than writing blind — it caught 7 API
-  errors that would each have cost an evening
+Worth knowing so it is not repeated.
+
+**Layout churn.** A request to align one envelope row led to rewriting the
+layout engine twice. Each rewrite resolved constraints differently and moved
+things that were already right. The fix was to stop computing layout at all.
+**When something looks wrong by eye, reach for the editor.**
+
+**Scripted edits destroyed a source file, twice.** `PluginEditor.cpp` was wiped
+by a Python edit that split on `\r\n` when the file is **LF** — the whole file
+became one line, matched, and vanished. Check line endings first, and prefer
+line-range edits over pattern matching on large files.
+
+---
+
+## 8. Working style that helped
+
+- Compile against **real** headers, not from memory. It caught a dozen API
+  errors that would each have cost an evening.
 - Generators carry **gates**: the build aborts if a parameter is dropped, a
-  context slot is unnamed, or a legend overflows
-- Measure, never estimate — every layout collision traced back to guessing text
-  width from character count
+  context slot is unnamed, or a legend overflows.
+- **Measure, never estimate.** Every layout collision traced back to guessing
+  text width from character count.
+- Diagnostics belong in the product: the panel prints its own state and RmlUi's
+  log when it cannot draw, because a plugin has no console.
