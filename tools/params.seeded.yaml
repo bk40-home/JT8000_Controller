@@ -1372,7 +1372,7 @@ params:
     name: "Bass"
     label: "BASS"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: -1, max: 1, curve: lin}
     unit: "norm"
     bipolar_display: true
@@ -1386,7 +1386,7 @@ params:
     name: "Treble"
     label: "TREBLE"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: -1, max: 1, curve: lin}
     unit: "norm"
     bipolar_display: true
@@ -1400,7 +1400,7 @@ params:
     name: "Drive"
     label: "DRIVE"
     type: select
-    scope: patch
+    scope: patch_shared
     options: drive
     default: 0
     smooth_ms: 0
@@ -1412,7 +1412,7 @@ params:
     name: "Mod FX"
     label: "MOD TYPE"
     type: select
-    scope: patch
+    scope: patch_shared
     options: f_x_mod_effect
     default: 0
     smooth_ms: 0
@@ -1424,7 +1424,7 @@ params:
     name: "Mod Mix"
     label: "MOD MIX"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: 0, max: 1, curve: lin}
     unit: "norm"
     default: 0
@@ -1438,7 +1438,7 @@ params:
     name: "Mod Rate"
     label: "MOD RATE"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: 0, max: 1, curve: lin}
     unit: "norm"
     default: 0.5
@@ -1451,7 +1451,7 @@ params:
     name: "Mod FB"
     label: "MOD FB"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: 0, max: 1, curve: lin}
     unit: "norm"
     default: 0
@@ -1464,7 +1464,7 @@ params:
     name: "Delay FX"
     label: "DLY TYPE"
     type: select
-    scope: patch
+    scope: patch_shared
     options: f_x_delay_effect
     default: 0
     smooth_ms: 0
@@ -1476,7 +1476,7 @@ params:
     name: "Delay Time"
     label: "DLY TIME"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: 0, max: 1, curve: lin}
     unit: "norm"
     default: 0.5
@@ -1489,7 +1489,7 @@ params:
     name: "Delay Mix"
     label: "DLY MIX"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: 0, max: 1, curve: lin}
     unit: "norm"
     default: 0
@@ -1503,7 +1503,7 @@ params:
     name: "Delay FB"
     label: "DLY FB"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: 0, max: 1, curve: lin}
     unit: "norm"
     default: 0
@@ -1516,7 +1516,7 @@ params:
     name: "Delay Sync"
     label: "DLY SYNC"
     type: select
-    scope: patch
+    scope: patch_shared
     options: timing_mode
     default: 0
     smooth_ms: 0
@@ -1528,7 +1528,7 @@ params:
     name: "Dry Mix"
     label: "DRY"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: 0, max: 1, curve: lin}
     unit: "norm"
     default: 1
@@ -1541,7 +1541,7 @@ params:
     name: "JPFX Mix"
     label: "JPFX"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: 0, max: 1, curve: lin}
     unit: "norm"
     default: 1
@@ -1707,7 +1707,7 @@ params:
     name: "Seq Enable"
     label: "ON"
     type: toggle
-    scope: patch
+    scope: patch_shared
     default: false
     smooth_ms: 0
     ui: {section: 13, group: 0}
@@ -1723,7 +1723,7 @@ params:
     # existing patches decode to the same step count. Default 9 preserves the
     # previous effective default (norm 0.5 -> 9 steps).
     type: int
-    scope: patch
+    scope: patch_shared
     range: {min: 1, max: 16, curve: lin}
     unit: ""
     default: 9
@@ -1736,7 +1736,7 @@ params:
     name: "Seq Gate"
     label: "GATE"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: 0, max: 1, curve: lin}
     unit: "norm"
     default: 0.5
@@ -1749,7 +1749,7 @@ params:
     name: "Seq Slide"
     label: "SLIDE"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: 0, max: 1, curve: lin}
     unit: "norm"
     default: 0
@@ -1762,7 +1762,7 @@ params:
     name: "Seq Dir"
     label: "DIR"
     type: select
-    scope: patch
+    scope: patch_shared
     options: seq_dir
     default: 0
     smooth_ms: 0
@@ -1774,7 +1774,7 @@ params:
     name: "Seq Dest"
     label: "DEST"
     type: select
-    scope: patch
+    scope: patch_shared
     options: seq_dest
     default: 0
     smooth_ms: 0
@@ -1786,7 +1786,7 @@ params:
     name: "Seq Depth"
     label: "DEPTH"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: -1, max: 1, curve: lin}
     unit: "norm"
     bipolar_display: true
@@ -1800,7 +1800,7 @@ params:
     name: "Seq Retrig"
     label: "RETRIG"
     type: toggle
-    scope: patch
+    scope: patch_shared
     default: false
     smooth_ms: 0
     ui: {section: 13, group: 1}
@@ -1811,7 +1811,7 @@ params:
     name: "Seq Rate"
     label: "RATE"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: 0, max: 1, curve: lin}
     unit: "norm"
     default: 0.5
@@ -1824,7 +1824,7 @@ params:
     name: "Seq Sync"
     label: "SYNC"
     type: select
-    scope: patch
+    scope: patch_shared
     options: timing_mode
     default: 0
     smooth_ms: 0
@@ -1840,7 +1840,7 @@ params:
     # exactly step 1 / index 0 on both ends.
     type: int
     widget: grid
-    scope: patch
+    scope: patch_shared
     range: {min: 1, max: 16, curve: lin}
     unit: ""
     default: 1
@@ -1854,7 +1854,7 @@ params:
     label: "VAL"
     type: continuous
     widget: grid
-    scope: patch
+    scope: patch_shared
     range: {min: 0, max: 1, curve: lin}
     unit: "norm"
     default: 0.5
@@ -1874,7 +1874,7 @@ params:
     name: "Seq Aux Dest"
     label: "AUX DEST"
     type: select
-    scope: patch
+    scope: patch_shared
     options: seq_aux_dest
     default: 0
     smooth_ms: 0
@@ -1886,7 +1886,7 @@ params:
     name: "Seq Aux Depth"
     label: "AUX DEP"
     type: continuous
-    scope: patch
+    scope: patch_shared
     range: {min: -1, max: 1, curve: lin}
     unit: "norm"
     bipolar_display: true
@@ -1902,7 +1902,7 @@ params:
     # Same 1..16 display / 0..15 internal convention as seq.step_select.
     type: int
     widget: grid
-    scope: patch
+    scope: patch_shared
     range: {min: 1, max: 16, curve: lin}
     unit: ""
     default: 1
@@ -1916,7 +1916,7 @@ params:
     label: "AUX VAL"
     type: continuous
     widget: grid
-    scope: patch
+    scope: patch_shared
     range: {min: 0, max: 1, curve: lin}
     unit: "norm"
     default: 0.5
@@ -2003,10 +2003,14 @@ params:
     juce_id: perf_balance
     name: "Layer Bal"
     label: "BALANCE"
-    type: select
+    # CONTINUOUS crossfade, 0..127 with 64 = centre.  Kept in step with the
+    # firmware params.yaml — a JP-8000 performance header carries balance as a
+    # 7-bit value, so a 3-way selector could only quantise it away.
+    type: continuous
     scope: performance
-    options: layer_balance
-    default: 1            # AB — edit both layers
+    range: {min: 0, max: 127, curve: lin}
+    unit: ""
+    default: 64           # centre — both layers at unity
     smooth_ms: 0          # a selector is never slewed (v1 seed said 5)
     ui: {section: 14, group: 1}
 

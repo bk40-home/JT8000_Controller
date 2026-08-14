@@ -169,9 +169,19 @@ void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
             // and must never reach applyIncomingCC raw.
             const int num = msg.getControllerNumber();
             const int val = msg.getControllerValue();
-            int v1cc, v7;
-            if (nrpnDecodeHost_.feed(num, val, &v1cc, &v7))
-                applyIncomingCC(v1cc, v7);
+            int v1cc, v7, layer = 0;
+            if (nrpnDecodeHost_.feed(num, val, &v1cc, &v7, &layer))
+            {
+                // APVTS holds ONE value per parameter, so a broadcast for the
+                // layer we are not editing is not ours to apply — writing it
+                // would repaint the whole UI with the other layer's patch.
+                // Unbanked params (fx.*, seq.*, perf.*, reverb, master) always
+                // arrive tagged layer A because there is only one of them, so
+                // they land whichever layer is being edited.  Correct: they
+                // ARE shared.
+                if (layer == inboundLayer())
+                    applyIncomingCC(v1cc, v7);
+            }
             else if (! NrpnLink::isClusterCC(num))
                 applyIncomingCC(num, val);   // plain hardware CC, as before
 
@@ -578,12 +588,16 @@ void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float n
     // encode here, and the identical code is asserted by the host gate.
     const int ccVal = juce::jlimit(0, 127, ccByteFromPlain(*p, newValue));
 
-    // Layer routing is GONE (flagged deviation): the v2 engine is
-    // single-layer (DEFERRALS_LEDGER "per-layer collapse"), so the layer
-    // byte has no receiver.  editTarget still exists in the UI; outbound
-    // ignores it.  isLocalOnly no longer gates the send either — the bridge
-    // carries the old 128+ ExtCC range (perf 140-146, curves 147-155) as
-    // ordinary NRPN, which is precisely what dissolves ledger item 5.
+    // Layer routing is BACK, but not the way v1 did it.  v1 carried a layer
+    // BYTE in a SysEx frame; v2 carries it as bit 13 of the NRPN address, so
+    // every edit stays a self-contained 6-CC cluster with no frame and no
+    // cached state.  sendParamNrpn reads editTarget and addresses A, B, or
+    // both — the layer is never inferred from the MIDI channel, because a
+    // Layer performance normally puts both layers on ONE channel.
+    //
+    // isLocalOnly no longer gates the send either — the bridge carries the old
+    // 128+ ExtCC range (perf 140-146, curves 147-155) as ordinary NRPN, which
+    // is precisely what dissolves ledger item 5.
     DBG("[ParamChg] " << id << " v1cc=" << p->cc << " ccVal=" << ccVal
         << " -> NRPN");
     sendParamNrpn(p->cc, ccVal);
@@ -715,18 +729,42 @@ void JT8000ControllerProcessor::queueShortMidi(const NrpnLink::Short3* msgs,
     }
 }
 
+// Which layer an inbound broadcast must carry to be applied.  EditTarget::Both
+// resolves to A: the UI shows one set of values, and A is the canonical view of
+// them — accepting B as well would mean the last cluster to arrive wins.
+int JT8000ControllerProcessor::inboundLayer() const
+{
+    return (editTarget.load() == EditTarget::LayerB) ? 1 : 0;
+}
+
 void JT8000ControllerProcessor::sendParamNrpn(int v1cc, int ccVal)
 {
-    NrpnLink::Short3 m[6];
-    const size_t n = NrpnLink::encodeParam((uint16_t)v1cc,
-                                           (uint8_t)juce::jlimit(0, 127, ccVal),
-                                           1 /*channel*/, m);
-    if (n == 0)
+    // Layer travels in the NRPN address (NrpnLink::kLayerBit), never in the
+    // channel — see the note there.  EditTarget::Both sends the edit TWICE,
+    // once per layer, rather than inventing a third address: the firmware has
+    // exactly two layers and no concept of "both", and two explicit messages
+    // degrade honestly if one is dropped.
+    const EditTarget t = editTarget.load();
+    const bool toA = (t == EditTarget::LayerA || t == EditTarget::Both);
+    const bool toB = (t == EditTarget::LayerB || t == EditTarget::Both);
+
+    const uint8_t v7 = (uint8_t)juce::jlimit(0, 127, ccVal);
+
+    for (int layer = 0; layer < 2; ++layer)
     {
-        DBG("[sendParamNrpn] v1cc " << v1cc << " unmapped — dropped");
-        return;   // stale control or v2-only slot: never guess a ParamID
+        if (layer == 0 && ! toA) continue;
+        if (layer == 1 && ! toB) continue;
+
+        NrpnLink::Short3 m[6];
+        const size_t n = NrpnLink::encodeParam((uint16_t)v1cc, v7,
+                                               1 /*channel*/, m, (uint8_t)layer);
+        if (n == 0)
+        {
+            DBG("[sendParamNrpn] v1cc " << v1cc << " unmapped — dropped");
+            return;   // stale control or v2-only slot: never guess a ParamID
+        }
+        queueShortMidi(m, n);
     }
-    queueShortMidi(m, n);
 }
 
 // Option B: address a v2-only param (seq aux lane) by ParamID directly, for
@@ -736,16 +774,20 @@ void JT8000ControllerProcessor::sendParamNrpn(int v1cc, int ccVal)
 void JT8000ControllerProcessor::sendParamNrpnById(uint16_t paramId, int ccVal)
 {
     NrpnLink::Short3 m[6];
+    // Single-layer send by design: the v2-only ids routed here are the seq aux
+    // lane, and seq.* is Scope::PatchShared — one instance, so a second copy
+    // addressed to layer B would be the same write twice.
     const size_t n = NrpnLink::encodeParamById(paramId,
                                                (uint8_t)juce::jlimit(0, 127, ccVal),
-                                               1 /*channel*/, m);
+                                               1 /*channel*/, m, 0);
     queueShortMidi(m, n);
 }
 
 void JT8000ControllerProcessor::requestResync()
 {
     NrpnLink::Short3 m[5];
-    queueShortMidi(m, NrpnLink::encodeResyncRequest(1, m));
+    queueShortMidi(m, NrpnLink::encodeResyncRequest(1, m,
+                                                    (uint8_t)inboundLayer()));
 }
 
 // =============================================================================
@@ -888,9 +930,11 @@ void JT8000ControllerProcessor::sendBankDumpRequest()
 // =============================================================================
 void JT8000ControllerProcessor::requestLayerSync()
 {
-    // Phase E: the v2 engine is single-layer — there is no per-layer cache
-    // to select.  A target switch now just pulls the (one) current state.
-    sendBankDumpRequest();
+    // The engine is dual-layer again, and APVTS holds one value per parameter,
+    // so every control on screen belongs to the layer we just left.  Pull the
+    // new target's values; the inbound filter drops the tail of any dump still
+    // in flight for the old one, because it no longer matches inboundLayer().
+    requestResync();
 }
 
 // =============================================================================
@@ -1083,7 +1127,8 @@ void JT8000ControllerProcessor::handleIncomingMidiMessage(juce::MidiInput* sourc
         {
             int v1cc, v7;
             const bool decoded =
-                nrpnDecodeDirect_.feed(cc, msg.getControllerValue(), &v1cc, &v7);
+                nrpnDecodeDirect_.feed(cc, msg.getControllerValue(), &v1cc, &v7,
+                                       nullptr);
 
             // Status feed 0x3FFF (Phase J1d) — latch before any early-out.
             // The direct stream is per-message, so a coarse-only word can be

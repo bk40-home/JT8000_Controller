@@ -60,6 +60,24 @@ namespace ArpParamId {
     inline constexpr uint16_t kStepRatchet = 0x088C;
 }
 
+// ---- Layer addressing (Performance mode) -----------------------------------
+// Bit 13 of the NRPN number means "this edit targets layer B".  ParamIDs are
+// (section << 7) | index with sections 0..17, so bits 13..11 are free by
+// construction, and a build that never sets the bit addresses layer A — the
+// correct default — with no special case at either end.
+//
+// The receive CHANNEL is deliberately NOT used for this.  The ordinary Layer
+// setup assigns both layers the same channel so one keyboard plays both, at
+// which point a channel-addressed edit could not name a layer at all.
+//
+// TRAP, and it has bitten twice already: BOTH reserved addresses have bit 13
+// set — the resync request is 126 << 7 == 0x3F00 and the status feed is
+// 0x3FFF.  They MUST be matched on the raw address before the layer bit is
+// stripped, or every one of them decodes as a layer-B write to some real
+// parameter.
+inline constexpr uint16_t kLayerBit = 0x2000;
+inline constexpr uint16_t kIdMask   = 0x1FFF;
+
 // One 3-byte channel-voice message, ready for juce::MidiMessage(d, 3).
 struct Short3 { uint8_t b[3]; };
 
@@ -73,14 +91,20 @@ inline Short3 cc(uint8_t channel1to16, uint8_t num, uint8_t val)
 // out[] (6, or 0 when v1cc has no bridge mapping — count those as drops,
 // never guess a ParamID).  out[] must hold >= 6 entries.
 inline size_t encodeParam(uint16_t v1cc, uint8_t value7,
-                          uint8_t channel, Short3* out)
+                          uint8_t channel, Short3* out, uint8_t layer = 0)
 {
     const int32_t pid = JtBridgeExt::paramIdFromV1Cc(v1cc);
     if (pid < 0) return 0;
 
+    // The firmware folds a layer-B write to a SHARED parameter (fx.*, seq.*)
+    // back onto its single slot, so this end never has to know which
+    // parameters bank — it may tag every edit with the layer being edited.
+    const uint16_t addr = (uint16_t)(((uint16_t)pid & kIdMask) |
+                                     (layer ? kLayerBit : 0u));
+
     const uint16_t v14 = (uint16_t)value7 * 129u;
-    out[0] = cc(channel, 99, (uint8_t)((pid >> 7) & 0x7F));
-    out[1] = cc(channel, 98, (uint8_t)( pid       & 0x7F));
+    out[0] = cc(channel, 99, (uint8_t)((addr >> 7) & 0x7F));
+    out[1] = cc(channel, 98, (uint8_t)( addr       & 0x7F));
     out[2] = cc(channel,  6, (uint8_t)((v14 >> 7) & 0x7F));
     out[3] = cc(channel, 38, (uint8_t)( v14       & 0x7F));
     out[4] = cc(channel, 101, 127);   // one deselect per edit: 18 bytes,
@@ -94,11 +118,13 @@ inline size_t encodeParam(uint16_t v1cc, uint8_t value7,
 // encodeParam (address + data + RPN-null park); the only difference is the
 // ParamID comes straight in instead of via paramIdFromV1Cc.  out[] >= 6.
 inline size_t encodeParamById(uint16_t paramId, uint8_t value7,
-                              uint8_t channel, Short3* out)
+                              uint8_t channel, Short3* out, uint8_t layer = 0)
 {
+    const uint16_t addr = (uint16_t)((paramId & kIdMask) |
+                                     (layer ? kLayerBit : 0u));
     const uint16_t v14 = (uint16_t)value7 * 129u;
-    out[0] = cc(channel, 99, (uint8_t)((paramId >> 7) & 0x7F));
-    out[1] = cc(channel, 98, (uint8_t)( paramId       & 0x7F));
+    out[0] = cc(channel, 99, (uint8_t)((addr >> 7) & 0x7F));
+    out[1] = cc(channel, 98, (uint8_t)( addr       & 0x7F));
     out[2] = cc(channel,  6, (uint8_t)((v14 >> 7) & 0x7F));
     out[3] = cc(channel, 38, (uint8_t)( v14       & 0x7F));
     out[4] = cc(channel, 101, 127);
@@ -108,11 +134,14 @@ inline size_t encodeParamById(uint16_t paramId, uint8_t value7,
 
 // Encode the full-state pull request (firmware replies with every param).
 // out[] must hold >= 5 entries.
-inline size_t encodeResyncRequest(uint8_t channel, Short3* out)
+inline size_t encodeResyncRequest(uint8_t channel, Short3* out, uint8_t layer = 0)
 {
     out[0] = cc(channel, 99, 126);    // 0x3F00 >> 7
     out[1] = cc(channel, 98,   0);    // 0x3F00 &  127
-    out[2] = cc(channel,  6,   0);    // data byte ignored by the firmware
+    // The address has no room for a layer, so the DATA byte names it.  It was
+    // previously ignored by the firmware, which is what makes this free: an
+    // older firmware sees 0/1 and dumps layer A either way.
+    out[2] = cc(channel,  6, (uint8_t)(layer ? 1 : 0));
     out[3] = cc(channel, 101, 127);
     out[4] = cc(channel, 100, 127);
     return 5;
@@ -138,8 +167,13 @@ public:
     // bridged v1 number, *v7Out the rounded 7-bit value.  Cluster CCs always
     // return false-or-decoded and must then be treated as CONSUMED
     // (check isClusterCC separately — the caller owns that policy).
-    bool feed(int num, int value, int* v1ccOut, int* v7Out)
+    // 'layerOut' (optional) receives 0 or 1 for a decoded parameter.  Callers
+    // that hold ONE value per parameter — every editor so far does, because a
+    // panel shows one layer at a time — must drop values for the layer they
+    // are not showing, or the display silently fills with the other patch.
+    bool feed(int num, int value, int* v1ccOut, int* v7Out, int* layerOut = nullptr)
     {
+        layerOut_ = layerOut;
         const uint8_t v = (uint8_t)(value & 0x7F);
         switch (num) {
             case 99: sel_ = Sel::Nrpn; msb_ = v; dataMsbValid_ = false; return false;
@@ -187,19 +221,29 @@ public:
 private:
     bool decode(uint16_t v14, int* v1ccOut, int* v7Out)
     {
-        const uint16_t pid = (uint16_t)(((uint16_t)msb_ << 7) | lsb_);
-        if (pid == kStatusAddr)                        // telemetry, not a param
+        const uint16_t raw = (uint16_t)(((uint16_t)msb_ << 7) | lsb_);
+
+        // RAW, before the layer bit is stripped: 0x3FFF has bit 13 set, so
+        // masking first would turn every status word into a layer-B parameter
+        // write.  See the kLayerBit note at the top of this header.
+        if (raw == kStatusAddr)                        // telemetry, not a param
         {
             statusWord_  = (uint16_t)(v14 & 0x3FFF);
             statusFresh_ = true;
             return false;
         }
+
+        const uint16_t pid = (uint16_t)(raw & kIdMask);
+        if (layerOut_ != nullptr) *layerOut_ = (raw & kLayerBit) ? 1 : 0;
+
         const int32_t v1cc = JtBridgeExt::v1CcFromParamId(pid);
         if (v1cc < 0) { ++dropped_; return false; }    // v2-only, unmapped
         *v1ccOut = (int)v1cc;
         *v7Out   = (int)(((uint32_t)v14 + 64u) / 129u);
         return true;
     }
+
+    int* layerOut_ = nullptr;   // borrowed for the duration of one feed()
 
     enum class Sel : uint8_t { None, Nrpn, Rpn };
     Sel      sel_          = Sel::None;

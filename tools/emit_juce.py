@@ -96,7 +96,20 @@ def emit_juce(doc):
     a("")
     a("enum class Widget : uint8_t { Knob, Fader, Combo, Toggle };")
     a("enum class Curve  : uint8_t { Lin, Log, Seg2 };")
-    a("enum class Scope  : uint8_t { Patch, Performance, Global };")
+    # Mirrors the firmware enum exactly, including enumerator ORDER — the two
+    # tables are compared field-by-field by parity_report.py, and Patch must
+    # stay 0.  PatchShared means "saved in the patch, but one shared instance
+    # rather than one per layer"; the plugin needs the distinction to know
+    # which edits carry a layer and which are global to the performance.
+    a("enum class Scope  : uint8_t { Patch, PatchShared, Performance, Global };")
+    a("")
+    a("// True for anything a saved patch owns, whichever way it is instanced.")
+    a("inline constexpr bool isPatchScope(Scope s) {")
+    a("    return s == Scope::Patch || s == Scope::PatchShared;")
+    a("}")
+    a("")
+    a("// One copy per layer -> the edit must say WHICH layer it targets.")
+    a("inline constexpr bool isBanked(Scope s) { return s == Scope::Patch; }")
     a("")
     a("struct Option { const char* name; };")
     a("")
@@ -145,8 +158,8 @@ def emit_juce(doc):
     a("static constexpr Param kParams[kNumParams] = {")
 
     curve_map = {"lin": "Curve::Lin", "log": "Curve::Log", "seg2": "Curve::Seg2"}
-    scope_map = {"patch": "Scope::Patch", "performance": "Scope::Performance",
-                 "global": "Scope::Global"}
+    scope_map = {"patch": "Scope::Patch", "patch_shared": "Scope::PatchShared",
+                 "performance": "Scope::Performance", "global": "Scope::Global"}
 
     for p in params:
         rng = p.get("range") or {}
@@ -170,7 +183,7 @@ def emit_juce(doc):
             cpp_str(p["name"]) + ",",
             cpp_str(p.get("label", "")) + ",",
             widget_of(p) + ",",
-            scope_map.get(p.get("scope", "patch"), "Scope::Patch") + ",",
+            scope_map[p["scope"]] + ",",   # KeyError on an unknown scope, by design
             curve_map.get(rng.get("curve", "lin"), "Curve::Lin") + ",",
             cpp_float(lo) + ",",
             cpp_float(hi) + ",",

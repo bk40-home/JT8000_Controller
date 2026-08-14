@@ -101,6 +101,10 @@ public:
     std::atomic<int>         channelB   { 1 };
     std::atomic<EditTarget>  editTarget { EditTarget::LayerA };
 
+    // Which layer an INBOUND broadcast must be tagged with to be applied.
+    // Both resolves to A — see the definition for why.
+    int inboundLayer() const;
+
     // When a BANK_DUMP_REQUEST is in flight, this records which layer's
     // values should be applied to APVTS when the reply arrives.
     // 0xFF = no sync pending. Set by requestLayerSync(), cleared by the
