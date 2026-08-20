@@ -182,6 +182,13 @@ void JtRmlComponent::setSkinDiskRoot(const juce::File& dir)
     m_files->setDiskRoot(dir.getFullPathName().toStdString());
 }
 
+void JtRmlComponent::setDocumentName(juce::String name)
+{
+    /* Empty resets to the factory default so callers can pass a cleared name
+     * alongside an empty disk-root to return to the embedded skin. */
+    m_documentName = name.isEmpty() ? juce::String("jt8000.rml") : std::move(name);
+}
+
 void JtRmlComponent::reloadDocument()
 {
     if (m_context == nullptr)

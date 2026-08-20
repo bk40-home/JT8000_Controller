@@ -55,6 +55,18 @@ private:
                                                     // ComboBox; multi-input needs
                                                     // checkable items.
 
+    /* Points the RmlUi skin loader at a folder on disk (containing an exported
+     * jt8000.rml). Files there win over the embedded skin and the document is
+     * reloaded, so a new layout appears with no rebuild. Lives in the JUCE
+     * header strip so it is always present, independent of whatever RML is
+     * currently loaded. */
+    juce::TextButton _loadSkinButton { "Skin\u2026" };
+
+    /* Clears the skin disk-root and reloads, returning to the embedded factory
+     * jt8000.rml (all controls, the pristine layout). Lets you get back to the
+     * original after trying a custom skin, without relaunching. */
+    juce::TextButton _factorySkinButton { "Factory" };
+
     // ---- Perf-Global header controls (Phase 2) ----------------------------
     // Rendered on the third header row. Bound to APVTS params (CCs 140..146)
     // via attachments so state save/restore Just Works.
@@ -84,6 +96,10 @@ private:
     void savePatchFile();
     void loadPatchFile();
     void initPatch();
+
+    /* Opens a folder chooser and, on selection, sets that folder as the skin
+     * disk-root on the panel (which reloads the document). See _loadSkinButton. */
+    void loadSkinFolder();
 
     void valueTreePropertyChanged(juce::ValueTree& tree,
                                   const juce::Identifier& property) override;

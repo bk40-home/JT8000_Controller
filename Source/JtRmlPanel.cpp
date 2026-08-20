@@ -243,6 +243,24 @@ void JtRmlPanel::setSkinDiskRoot(const juce::File& dir)
     m_panel->setSkinDiskRoot(dir);
 }
 
+void JtRmlPanel::loadSkinFile(const juce::File& rmlFile)
+{
+    /* Parent folder becomes the disk-root; the file's leaf becomes the document
+     * requested. reloadSkin() re-reads, re-syncs bindings and re-wires the step
+     * grids - without it the disk-root would be set but nothing would change,
+     * and any new controls would be inert. */
+    m_panel->setSkinDiskRoot(rmlFile.getParentDirectory());
+    m_panel->setDocumentName(rmlFile.getFileName());
+    reloadSkin();
+}
+
+void JtRmlPanel::resetSkin()
+{
+    m_panel->setSkinDiskRoot(juce::File{});
+    m_panel->setDocumentName({});          // restores jt8000.rml
+    reloadSkin();
+}
+
 void JtRmlPanel::reloadSkin()
 {
     m_panel->reloadDocument();

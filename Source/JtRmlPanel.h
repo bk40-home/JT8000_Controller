@@ -83,6 +83,16 @@ public:
     void setSkinDiskRoot(const juce::File& dir);
     void reloadSkin();
 
+    /* Loads a specific skin document by file (any name). Sets the disk-root to
+     * the file's parent folder so its sibling assets resolve there (missing
+     * ones fall back to embedded), points the document at the file's name, and
+     * reloads. This is the one call a "load skin" UI needs. */
+    void loadSkinFile(const juce::File& rmlFile);
+
+    /* Returns to the embedded factory skin: clears the disk-root, restores the
+     * default document name, and reloads. */
+    void resetSkin();
+
     void resized() override;
 
     /* Draws a diagnostic report if the inner component is missing or has no

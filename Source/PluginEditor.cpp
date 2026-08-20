@@ -157,6 +157,20 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     addAndMakeVisible(_midiInButton);
     _midiInButton.setVisible(_isStandalone);
 
+    /* Load a skin folder at runtime (an exported jt8000.rml + the existing
+     * rcss/PNGs). Always visible: it does not depend on the loaded document. */
+    _loadSkinButton.onClick = [this] { loadSkinFolder(); };
+    addAndMakeVisible(_loadSkinButton);
+
+    /* Return to the embedded factory skin: clears the disk-root and document
+     * name and reloads. */
+    _factorySkinButton.onClick = [this]
+    {
+        if (_panel != nullptr)
+            _panel->resetSkin();
+    };
+    addAndMakeVisible(_factorySkinButton);
+
     // Output list is needed in every mode (see selector comment above).
     // The input menu is built on demand, so nothing to pre-populate here.
     refreshMidiOutputList();
@@ -397,6 +411,12 @@ void JT8000ControllerEditor::resized()
     _midiOutSelector.setBounds(strip.removeFromRight(boxW));
     strip.removeFromRight(pad);
     _engineModeCombo.setBounds(strip.removeFromRight(110));
+    strip.removeFromRight(pad);
+
+    /* Runtime skin loader - small fixed-width slot, always shown. */
+    _loadSkinButton.setBounds(strip.removeFromRight(72));
+    strip.removeFromRight(pad);
+    _factorySkinButton.setBounds(strip.removeFromRight(72));
     strip.removeFromRight(pad);
 
     /* The patch name is also shown on the panel's LCD; this field is what makes
@@ -705,5 +725,39 @@ void JT8000ControllerEditor::loadPatchFile()
             // parameterChanged callbacks. Send the new state to the
             // firmware as one BANK_DUMP.
             _proc.sendBankDump();
+        });
+}
+
+// =============================================================================
+// Runtime skin loading
+//   Points the RmlUi skin loader at a folder on disk. A jt8000.rml there (as
+//   exported from the layout editor) overrides the embedded skin, and the
+//   panel reloads the document immediately - a new layout with no rebuild.
+//   The existing jt8000.rcss and PNGs can stay embedded; only positions, which
+//   live in the RML, are being changed. Folder-select (not file-select) so the
+//   loader can resolve the rml plus any sibling assets by bare name.
+// =============================================================================
+void JT8000ControllerEditor::loadSkinFolder()
+{
+    _fileChooser = std::make_unique<juce::FileChooser>(
+        "Choose a skin (.rml) file",
+        juce::File::getSpecialLocation(juce::File::userDesktopDirectory),
+        "*.rml");
+
+    _fileChooser->launchAsync(
+        juce::FileBrowserComponent::openMode
+      | juce::FileBrowserComponent::canSelectFiles,
+        [this](const juce::FileChooser& fc)
+        {
+            auto results = fc.getResults();
+            if (results.isEmpty()) return;
+
+            const juce::File rml = results.getFirst();
+            if (!rml.existsAsFile()) return;
+
+            /* Loads by file name (any name), from the file's own folder, and
+             * reloads. Sibling assets not present there fall back to embedded. */
+            if (_panel != nullptr)
+                _panel->loadSkinFile(rml);
         });
 }

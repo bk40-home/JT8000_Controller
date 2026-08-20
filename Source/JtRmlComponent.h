@@ -107,6 +107,11 @@ public:
     /* Reloads the document from scratch. Cheap enough to bind to a key. */
     void reloadDocument();
 
+    /* Changes which document leaf reloadDocument() requests (resolved through
+     * JtRmlFile: disk-root first, then embedded). Lets a custom skin file with
+     * any name be loaded, not just jt8000.rml. Caller reloads afterwards. */
+    void setDocumentName (juce::String name);
+
     /* Switches the view - "main", "shift", "reverb", "seq", "arp", "setup".
      * A view is a class on <body>; the background decorator and which controls
      * are visible both follow from it. */
