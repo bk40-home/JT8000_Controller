@@ -9,6 +9,8 @@
  */
 
 #include "PluginEditor.h"
+#include "gen/JtParamTable.h"   // JtParams::kParams — the same generated table
+                               // the processor builds its APVTS from.
 
 static const juce::Colour kBg       (0xff0b0e14);
 static const juce::Colour kHeaderBg (0xff141a28);
@@ -462,13 +464,15 @@ void JT8000ControllerEditor::initPatch()
 {
     _proc._suppressEcho.store(true);
 
-    for (int i = 0; i < kNumParams; ++i)
+    for (int i = 0; i < JtParams::kNumParams; ++i)
     {
-        const auto& p = kAllParams[i];
-        if (p.style == ControlStyle::StepGrid) continue;
-        if (p.isLocalOnly) continue;   // keep perf-global state intact
-        if (auto* param = _proc.apvts.getParameter(p.id))
-            param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(p.defVal)));
+        const auto& p = JtParams::kParams[i];
+
+        // Keep performance/global state intact on INIT (patch reset only).
+        if (!JtParams::isPatchScope(p.scope)) continue;
+
+        if (auto* param = _proc.apvts.getParameter(p.juceId))
+            param->setValueNotifyingHost(param->convertTo0to1(p.def));
     }
 
     _proc.setPatchName("INIT PATCH");

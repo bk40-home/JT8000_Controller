@@ -15,7 +15,8 @@ namespace jt
 
 namespace
 {
-    constexpr const char* kAttrParam = "param";
+    constexpr const char* kAttrParam = "key";   // APVTS id == dotted key; was
+                                                // "param" (old underscored id).
     constexpr const char* kAttrOptions = "options";
     constexpr const char* kAttrIndex = "index";
 

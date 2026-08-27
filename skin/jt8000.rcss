@@ -12,7 +12,7 @@
 body
 {
 	width: 3840dp;
-	height: 2160dp;
+	height: 2400dp;
 	font-family: JT Sans;
 	font-size: 26dp;
 	color: #FFA83A;
@@ -24,9 +24,9 @@ body { decorator: image(bg_base.png); }
 {
 	position: absolute;
 	left: 0dp;
-	top: 1744dp;
+	top: 1840dp;
 	width: 3840dp;
-	height: 388dp;
+	height: 438dp;
 }
 body.main .band { decorator: image(band_main.png); }
 body.shift .band { decorator: image(band_main.png); }

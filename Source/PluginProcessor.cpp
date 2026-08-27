@@ -18,6 +18,74 @@
 #include "ParamMapJuce.h"
 #include "SyxProtocol.h"
 #include "JT8000Log.h"
+#include "gen/JtParamTable.h"   // JtParams::kParams — generated from params.yaml;
+                                // the single source for the plugin's parameters.
+
+// -----------------------------------------------------------------------------
+// Generated-table lookups (Option 2: key-based APVTS ids, ParamID on the wire).
+//   The APVTS id IS the dotted key (osc1.wave). The wire is addressed by the
+//   14-bit ParamID. These two helpers are the only correlation needed; the old
+//   cc-keyed CCParam bridge is no longer on the parameter path (cc survives
+//   only as a curated inbound-hardware map, see applyIncomingCC).
+// -----------------------------------------------------------------------------
+namespace {
+
+const JtParams::Param* jtParamByKey(const juce::String& key)
+{
+    for (int i = 0; i < JtParams::kNumParams; ++i)
+        if (key == JtParams::kParams[i].juceId)
+            return &JtParams::kParams[i];
+    return nullptr;
+}
+
+const JtParams::Param* jtParamById(uint16_t paramId)
+{
+    for (int i = 0; i < JtParams::kNumParams; ++i)
+        if (JtParams::kParams[i].paramId == paramId)
+            return &JtParams::kParams[i];
+    return nullptr;
+}
+
+// APVTS stores 0..1; the firmware does the value law and wants a raw 7-bit
+// value (Curves::normFrom7bit on its side). One conversion, both directions.
+inline int norm01ToWire7 (float norm01) { return juce::jlimit(0, 127, juce::roundToInt(norm01 * 127.0f)); }
+
+// Build the APVTS range for a continuous param from its params.yaml curve, so
+// the plugin stores ENGINEERING units (Hz, ms, slope) and the host shows real
+// values. The three curves are reproduced exactly, matching the firmware:
+//   lin  — straight min..max.
+//   log  — exponential; skew set so the geometric centre sits at norm 0.5.
+//   seg2 — two linear segments meeting at `mid` when norm == 0.5.
+inline juce::NormalisableRange<float> jtRange (const JtParams::Param& p)
+{
+    const float lo = p.min, hi = p.max;
+
+    if (p.curve == JtParams::Curve::Seg2)
+    {
+        const float mid = p.mid;
+        return juce::NormalisableRange<float>(
+            lo, hi,
+            [lo, hi, mid](float, float, float t)            // 0..1 -> value
+            {
+                return (t <= 0.5f) ? juce::jmap(t, 0.0f, 0.5f, lo, mid)
+                                   : juce::jmap(t, 0.5f, 1.0f, mid, hi);
+            },
+            [lo, hi, mid](float, float, float v)            // value -> 0..1
+            {
+                return (v <= mid) ? juce::jmap(v, lo, mid, 0.0f, 0.5f)
+                                  : juce::jmap(v, mid, hi, 0.5f, 1.0f);
+            },
+            [](float start, float end, float v) { return juce::jlimit(start, end, v); });
+    }
+
+    juce::NormalisableRange<float> r(lo, hi);
+    if (p.curve == JtParams::Curve::Log && lo > 0.0f && hi > lo)
+        r.setSkewForCentre(std::sqrt(lo * hi));   // geometric mean at the knob centre
+    return r;
+}
+
+} // namespace
+
 
 static const juce::Identifier kPatchNameProp("patchName");
 
@@ -39,8 +107,8 @@ JT8000ControllerProcessor::JT8000ControllerProcessor()
     : AudioProcessor(makeBusLayout())
     , apvts(*this, nullptr, "JT8000State", createParameterLayout())
 {
-    for (int i = 0; i < kNumParams; ++i)
-        apvts.addParameterListener(kAllParams[i].id, this);
+    for (int i = 0; i < JtParams::kNumParams; ++i)
+        apvts.addParameterListener(JtParams::kParams[i].juceId, this);
 
     if (!apvts.state.hasProperty(kPatchNameProp))
         apvts.state.setProperty(kPatchNameProp, "Init Patch", nullptr);
@@ -80,8 +148,8 @@ void JT8000ControllerProcessor::prepareToPlay(double, int) {}
 
 JT8000ControllerProcessor::~JT8000ControllerProcessor()
 {
-    for (int i = 0; i < kNumParams; ++i)
-        apvts.removeParameterListener(kAllParams[i].id, this);
+    for (int i = 0; i < JtParams::kNumParams; ++i)
+        apvts.removeParameterListener(JtParams::kParams[i].juceId, this);
 
     closeMidiInput();
 }
@@ -94,34 +162,45 @@ juce::AudioProcessorValueTreeState::ParameterLayout
 JT8000ControllerProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
-    params.reserve(kNumParams);
+    params.reserve(JtParams::kNumParams);
 
-    for (int i = 0; i < kNumParams; ++i)
+    for (int i = 0; i < JtParams::kNumParams; ++i)
     {
-        const auto& p = kAllParams[i];
+        const auto& p = JtParams::kParams[i];
+        const juce::ParameterID pid { p.juceId, 1 };   // id == dotted key
 
-        if (isChoiceParam(p))
+        if (p.widget == JtParams::Widget::Combo)
         {
             juce::StringArray choices;
-            for (int c = 0; c < p.enumCount; ++c)
-                choices.add(p.enumNames[c]);
+            for (int c = 0; c < p.optionCount; ++c)
+                choices.add(p.options[c].name);
 
+            const int def = juce::jlimit(0, juce::jmax(0, p.optionCount - 1),
+                                         juce::roundToInt(p.def));
             params.push_back(std::make_unique<juce::AudioParameterChoice>(
-                juce::ParameterID { p.id, 1 }, p.name, choices, p.defVal));
+                pid, p.name, choices, def));
         }
-        else if (isIntLatticeParam(p))
+        else if (p.widget == JtParams::Widget::Toggle)
         {
-            // Canonical `type: int` (Phase J1 / D-J6): the parameter holds
-            // the REAL value (seq_steps 1..16), so the host lane, popup and
-            // double-click all read in steps — the 0..127 byte is wire-only
-            // (ccByteFromPlain / plainFromCCByte).
+            params.push_back(std::make_unique<juce::AudioParameterBool>(
+                pid, p.name, p.def >= 0.5f));
+        }
+        else if (p.type == JtParams::Type::Int)
+        {
+            // Int-lattice (seq steps 1..16): the value IS the real integer.
             params.push_back(std::make_unique<juce::AudioParameterInt>(
-                juce::ParameterID { p.id, 1 }, p.name, p.intMin, p.intMax, p.defVal));
+                pid, p.name, juce::roundToInt(p.min), juce::roundToInt(p.max),
+                juce::roundToInt(p.def)));
         }
         else
         {
-            params.push_back(std::make_unique<juce::AudioParameterInt>(
-                juce::ParameterID { p.id, 1 }, p.name, 0, 127, p.defVal));
+            // Continuous: engineering units, curve-shaped range, default from
+            // params.yaml. The host shows real Hz / ms / slope; the wire byte
+            // is derived on send (norm -> 7-bit), the firmware owns the law.
+            juce::NormalisableRange<float> range = jtRange(p);
+            params.push_back(std::make_unique<juce::AudioParameterFloat>(
+                pid, p.name, range, p.def,
+                juce::String(p.unit)));   // label (unit) — stable JUCE 6/7 overload
         }
     }
     return { params.begin(), params.end() };
@@ -411,18 +490,21 @@ void JT8000ControllerProcessor::applyIncomingCC(int cc, int value)
     // fall out one line later exactly as before.
     if (cc < 0) return;
 
+    // findParamByCC stays the validity gate for real hardware controllers (the
+    // curated CC set). Bridge that CC to the generated table by ParamID, since
+    // the APVTS is now keyed by dotted key, not the old CCParam id.
     const CCParam* p = findParamByCC(cc);
     if (p == nullptr) return;
 
-    if (p->style == ControlStyle::StepGrid ||
-        p->style == ControlStyle::ArpGrid) return;
+    const uint16_t pid = ParamMapJuce::paramId14ForCC(cc);
+    const JtParams::Param* jp = jtParamById(pid);
+    if (jp == nullptr) return;
 
-    auto* param = apvts.getParameter(p->id);
+    auto* param = apvts.getParameter(jp->juceId);
     if (param == nullptr) return;
 
-    // One value law for every shape (choice / int-lattice / raw) —
-    // plainFromCCByte is the same code the host gate asserts (Phase J1).
-    const float normVal = param->convertTo0to1(plainFromCCByte(*p, value));
+    // Inbound hardware CC is a raw 7-bit value; the parameter wants 0..1.
+    const float normVal = juce::jlimit(0.0f, 1.0f, (float) value / 127.0f);
 
     _suppressEcho.store(true);
     param->setValueNotifyingHost(normVal);
@@ -460,15 +542,16 @@ void JT8000ControllerProcessor::handleIncomingSysEx(const uint8_t* data, int len
             data[SyxProto::kOffsetPidHi], data[SyxProto::kOffsetPidLo]);
         const float value = SyxProto::decodeFloat(&data[SyxProto::kOffsetFloat]);
 
-        for (int i = 0; i < kNumParams; ++i)
-        {
-            const auto& p = kAllParams[i];
-            if (ParamMapJuce::paramId14ForCC(p.cc) != pid) continue;
-
-            const uint8_t cc = ParamMapJuce::nativeFloatToCCByte(pid, value);
-            applyIncomingCC(p.cc, (int)cc);
-            return;
-        }
+        // Direct ParamID -> key -> APVTS. decodeFloat is already 0..1, which is
+        // exactly what setValueNotifyingHost wants, so no value law here. Echo
+        // is suppressed by the caller path where needed.
+        if (const JtParams::Param* p = jtParamById(pid))
+            if (auto* param = apvts.getParameter(p->juceId))
+            {
+                _suppressEcho.store(true);
+                param->setValueNotifyingHost(juce::jlimit(0.0f, 1.0f, value));
+                _suppressEcho.store(false);
+            }
         return;
     }
 
@@ -509,16 +592,11 @@ void JT8000ControllerProcessor::handleIncomingSysEx(const uint8_t* data, int len
             const bool isPatchLayer = (layer == SyxProto::kLayerA || layer == SyxProto::kLayerB);
             if (isPatchLayer && layer != wantLayer) continue;
 
-            // Find the CC for this ParamID and apply to APVTS
-            for (int j = 0; j < kNumParams; ++j)
-            {
-                const auto& param = kAllParams[j];
-                if (ParamMapJuce::paramId14ForCC(param.cc) != pid) continue;
-
-                const uint8_t cc = ParamMapJuce::nativeFloatToCCByte(pid, value);
-                applyIncomingCC(param.cc, (int)cc);
-                break;
-            }
+            // Direct ParamID -> key -> APVTS (decodeFloat is 0..1). Covers all
+            // params, including those with no cc (arp / seq aux lane).
+            if (const JtParams::Param* jp = jtParamById(pid))
+                if (auto* param = apvts.getParameter(jp->juceId))
+                    param->setValueNotifyingHost(juce::jlimit(0.0f, 1.0f, value));
         }
 
         _suppressEcho.store(false);
@@ -552,19 +630,20 @@ void JT8000ControllerProcessor::handleIncomingSysEx(const uint8_t* data, int len
 // =============================================================================
 void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float newValue)
 {
-    const CCParam* p = findParamByID(id);
-    if (!p) { DBG("[ParamChg] " << id << " — no CCParam row, dropped"); return; }
+    const JtParams::Param* p = jtParamByKey(id);
+    if (!p) { DBG("[ParamChg] " << id << " — no param row, dropped"); return; }
 
     // ---- Routing-mirror updates (atomics) ----------------------------------
-    if (id == "perf_midi_ch_a")
+    // These three are AudioParameterChoice, so newValue is the choice INDEX.
+    if (id == "perf.midi_channel_a")
     {
         channelA.store(juce::jlimit(1, 16, juce::roundToInt(newValue) + 1));
     }
-    else if (id == "perf_midi_ch_b")
+    else if (id == "perf.midi_channel_b")
     {
         channelB.store(juce::jlimit(1, 16, juce::roundToInt(newValue) + 1));
     }
-    else if (id == "perf_edit_target")
+    else if (id == "perf.edit_target")
     {
         const int idx = juce::jlimit(0, 2, juce::roundToInt(newValue));
         editTarget.store(static_cast<EditTarget>(idx));
@@ -582,25 +661,23 @@ void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float n
         return;
     }
 
-    // ---- Encode APVTS value to the 7-bit wire form (Phase J1) -------------
-    // ccByteFromPlain is the single home of the value law — choice (LUT /
-    // bucket midpoint / toggle 0-127), int-lattice (seq_steps), and raw all
-    // encode here, and the identical code is asserted by the host gate.
-    const int ccVal = juce::jlimit(0, 127, ccByteFromPlain(*p, newValue));
+    // ---- APVTS value -> raw 7-bit wire value -------------------------------
+    // The firmware owns the value law (Curves::normFrom7bit on its side), so we
+    // send a RAW 7-bit value: normalise the parameter's current value through
+    // its own range (engineering units for continuous; index/0-1 for
+    // choice/toggle) and scale to 0..127. No cc, no ccByteFromPlain.
+    int wire7 = 0;
+    if (auto* rap = apvts.getParameter(id))
+        wire7 = norm01ToWire7(rap->getValue());          // getValue() is 0..1
+    else
+        wire7 = norm01ToWire7(newValue);                 // defensive fallback
 
-    // Layer routing is BACK, but not the way v1 did it.  v1 carried a layer
-    // BYTE in a SysEx frame; v2 carries it as bit 13 of the NRPN address, so
-    // every edit stays a self-contained 6-CC cluster with no frame and no
-    // cached state.  sendParamNrpn reads editTarget and addresses A, B, or
-    // both — the layer is never inferred from the MIDI channel, because a
-    // Layer performance normally puts both layers on ONE channel.
-    //
-    // isLocalOnly no longer gates the send either — the bridge carries the old
-    // 128+ ExtCC range (perf 140-146, curves 147-155) as ordinary NRPN, which
-    // is precisely what dissolves ledger item 5.
-    DBG("[ParamChg] " << id << " v1cc=" << p->cc << " ccVal=" << ccVal
-        << " -> NRPN");
-    sendParamNrpn(p->cc, ccVal);
+    // Layer routing travels as bit 13 of the NRPN address (not a SysEx frame),
+    // so every edit stays a self-contained cluster. sendParamNrpnById reads
+    // editTarget and addresses A, B, or both by the 14-bit ParamID.
+    DBG("[ParamChg] " << id << " pid=0x" << juce::String::toHexString(p->paramId)
+        << " wire7=" << wire7 << " -> NRPN");
+    sendParamNrpnById(p->paramId, wire7);
 }
 
 // =============================================================================
@@ -888,19 +965,16 @@ void JT8000ControllerProcessor::sendBankDump()
     // blob (layer bytes, 5-byte floats, count patching) has no v2 receiver;
     // the firmware assembles state param-by-param, then its own broadcast
     // mirrors the result to every other editor (live view for free).
-    for (int i = 0; i < kNumParams; ++i)
+    for (int i = 0; i < JtParams::kNumParams; ++i)
     {
-        const auto& p = kAllParams[i];
-        if (p.style == ControlStyle::StepGrid ||
-            p.style == ControlStyle::ArpGrid) continue;   // grids have their own path
+        const auto& p = JtParams::kParams[i];
 
-        auto* param = apvts.getParameter(p.id);
+        auto* param = apvts.getParameter(p.juceId);
         if (param == nullptr) continue;
 
-        // Same single value law as parameterChanged — ccByteFromPlain covers
-        // choice, int-lattice, and raw rows (Phase J1).
-        const float plain = param->convertFrom0to1(param->getValue());
-        sendParamNrpn(p.cc, juce::jlimit(0, 127, ccByteFromPlain(p, plain)));
+        // Raw 7-bit from the normalised value; firmware owns the law. Same
+        // single path as parameterChanged, addressed by 14-bit ParamID.
+        sendParamNrpnById(p.paramId, norm01ToWire7(param->getValue()));
     }
 }
 

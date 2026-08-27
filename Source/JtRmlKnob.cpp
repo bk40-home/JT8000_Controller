@@ -20,7 +20,11 @@ namespace
     constexpr const char* kPropPrefix = "spriteprefix";
 
     /* Attribute names. */
-    constexpr const char* kAttrParam   = "param";
+    constexpr const char* kAttrParam   = "key";   // APVTS id == dotted key
+                                                   // (osc1.wave). Was "param"
+                                                   // (old underscored id); the
+                                                   // plugin now registers params
+                                                   // by key, so bind by key.
     constexpr const char* kAttrDefault = "default";
 
     /* Cached property ids. Looking these up by string on every property change
