@@ -240,6 +240,14 @@ public:
     juce::String getPatchName() const;
     void         setPatchName(const juce::String& name);
 
+    /* Selected skin file path, persisted in plugin state so a reopened editor
+     * (e.g. after an Ableton track switch destroys and recreates it) restores
+     * the chosen skin instead of reverting to the embedded factory. Empty means
+     * factory. Guarded by a lock because the editor sets it from the message
+     * thread and state save reads it. */
+    juce::String getSkinPath() const;
+    void         setSkinPath(const juce::String& path);
+
     // --- MIDI input (standalone) --------------------------------------------
     // Multi-input: any number of devices may be open simultaneously. The
     // editor presents a checklist; each ticked device is opened here.

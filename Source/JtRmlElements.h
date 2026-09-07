@@ -30,6 +30,8 @@
 
 #include <functional>
 #include <vector>
+#include <string>
+#include <cstddef>
 
 namespace jt
 {
@@ -187,6 +189,18 @@ public:
     int laneCount() const { return m_lanes; }
     int stepCount() const { return m_steps; }
 
+    /* The direct per-step param key for a cell, or empty if this lane uses the
+     * select+value cursor fallback. Lets the panel read each step's own value
+     * back for display (the firmware's per-step model). */
+    Rml::String stepParam(int lane, int step) const
+    {
+        const auto li = static_cast<std::size_t>(lane);
+        if (lane < 0 || lane >= m_lanes || li >= m_stepPrefix.size()
+            || m_stepPrefix[li].empty() || step < 0 || step >= m_steps)
+            return {};
+        return m_stepPrefix[li] + std::to_string(step + 1);
+    }
+
     /* Normalised position of a step on the 1..16 Int lattice. */
     static float stepToNorm(int step) { return static_cast<float>(step) / 15.0f; }
     static int normToStep(float n) { return static_cast<int>(n * 15.0f + 0.5f); }
@@ -208,8 +222,12 @@ private:
     int m_playhead = -1;
     int m_selLane = 0;
     int m_selStep = -1;                         // -1: nothing selected yet
-    std::vector<Rml::String> m_selectParams;    // per lane
-    std::vector<Rml::String> m_valueParams;     // per lane
+    std::vector<Rml::String> m_selectParams;    // per lane (cursor fallback)
+    std::vector<Rml::String> m_valueParams;     // per lane (cursor fallback)
+    std::vector<Rml::String> m_stepPrefix;      // per lane: 'seq.step_' -> writes
+                                                // seq.step_1..N directly (the
+                                                // firmware's per-step model). Empty
+                                                // for a lane falls back to select+value.
     std::vector<std::vector<float>> m_values;   // [lane][step] — IS the pattern
 
     /* Bars build into one mesh, rebuilt only when a value, the playhead or the

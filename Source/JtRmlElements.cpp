@@ -9,14 +9,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 namespace jt
 {
 
 namespace
 {
-    constexpr const char* kAttrParam = "key";   // APVTS id == dotted key; was
-                                                // "param" (old underscored id).
+    constexpr const char* kAttrParam = "param";
     constexpr const char* kAttrDefault = "default";
     constexpr const char* kAttrLanes = "lanes";
     constexpr const char* kAttrSteps = "steps";
@@ -271,6 +271,8 @@ void JtRmlStepGrid::OnAttributeChange(const Rml::ElementAttributes& changed)
         m_selectParams = splitCsv(GetAttribute<Rml::String>("select", ""));
     if (changed.count("value"))
         m_valueParams = splitCsv(GetAttribute<Rml::String>("value", ""));
+    if (changed.count("stepprefix"))
+        m_stepPrefix = splitCsv(GetAttribute<Rml::String>("stepprefix", ""));
 
     if (shape)
     {
@@ -325,8 +327,18 @@ void JtRmlStepGrid::writeStep(const int lane, const int step, const float value)
     if (!onWrite)
         return;
 
-    /* Order matters: SELECT is the address, VALUE is the data. A value written
-     * first lands on whichever step was previously selected. */
+    /* Per-step model (matches the firmware): each step is its own param, so a
+     * tap writes prefix+(step+1) directly - one write, no cursor. This is the
+     * default when the lane declares a stepprefix. */
+    if (li < m_stepPrefix.size() && !m_stepPrefix[li].empty())
+    {
+        onWrite(Write{ m_stepPrefix[li] + std::to_string(step + 1),
+                       value, true, false });
+        return;
+    }
+
+    /* Fallback (old skins): SELECT is the address, VALUE is the data. Order
+     * matters - a value written first lands on the previously selected step. */
     if (li < m_selectParams.size() && !m_selectParams[li].empty())
         onWrite(Write{ m_selectParams[li], stepToNorm(step), false, false });
 

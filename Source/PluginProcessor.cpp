@@ -88,6 +88,7 @@ inline juce::NormalisableRange<float> jtRange (const JtParams::Param& p)
 
 
 static const juce::Identifier kPatchNameProp("patchName");
+static const juce::Identifier kSkinPathProp("skinPath");
 
 // =============================================================================
 // Bus layout — Ableton workaround (unchanged from previous phases)
@@ -1069,6 +1070,19 @@ juce::String JT8000ControllerProcessor::getPatchName() const
 void JT8000ControllerProcessor::setPatchName(const juce::String& name)
 {
     apvts.state.setProperty(kPatchNameProp, name, nullptr);
+}
+
+// Skin path rides the APVTS state tree exactly like the patch name, so it is
+// saved and restored with the session automatically - the editor reads it on
+// construction to reapply the chosen skin.
+juce::String JT8000ControllerProcessor::getSkinPath() const
+{
+    return apvts.state.getProperty(kSkinPathProp, juce::String()).toString();
+}
+
+void JT8000ControllerProcessor::setSkinPath(const juce::String& path)
+{
+    apvts.state.setProperty(kSkinPathProp, path, nullptr);
 }
 
 // =============================================================================

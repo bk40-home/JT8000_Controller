@@ -170,6 +170,7 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     {
         if (_panel != nullptr)
             _panel->resetSkin();
+        _proc.setSkinPath({});   // back to factory: clear persisted skin
     };
     addAndMakeVisible(_factorySkinButton);
 
@@ -193,6 +194,19 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     addAndMakeVisible(*_panel);
     _panel->setPatchName(_proc.getPatchName());
 
+    /* Restore the previously-chosen skin so a recreated editor (Ableton track
+     * switch, window reopen) keeps it instead of reverting to factory. Empty or
+     * a now-missing file falls back to the embedded factory. */
+    {
+        const juce::String skinPath = _proc.getSkinPath();
+        if (skinPath.isNotEmpty())
+        {
+            const juce::File rml(skinPath);
+            if (rml.existsAsFile())
+                _panel->loadSkinFile(rml);
+        }
+    }
+
     /* The skin's header buttons drive the actions this editor already
      * implements - they are routed, not reimplemented. */
     _panel->onAction = [this](const juce::String& a)
@@ -204,14 +218,28 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
         else if (a == "init")    initPatch();
     };
 
-    /* Authored at 3840x2160 and correct at half that. At the old 1080px width
-     * a knob would be 40px, too small to use. */
-    setSize(jt::JtRmlPanel::kNativeW,
-            jt::JtRmlPanel::kNativeH + kHeaderHeight);
+    /* Authored at 3840x2160, correct at half (1920x1080). But that can exceed a
+     * scaled desktop (e.g. 3840x2160 @ 250% = 1536x864 usable), which would push
+     * the resize edges off-screen. So open at native size but CLAMPED to the
+     * available screen area, keeping the panel's aspect. The user can then
+     * resize up to native within the limits below. */
     setResizable(true, true);
-    setResizeLimits(1280, 720 + kHeaderHeight, 3840, 2160 + kHeaderHeight);
-    setResizable(true, true);
-    setResizeLimits(400, 400, 1600, 2400);
+    setResizeLimits(400, 400 + kHeaderHeight,
+                    jt::JtRmlPanel::kNativeW, jt::JtRmlPanel::kNativeH + kHeaderHeight);
+
+    int wantW = jt::JtRmlPanel::kNativeW;
+    int wantH = jt::JtRmlPanel::kNativeH + kHeaderHeight;
+    if (auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+    {
+        const auto area = display->userArea;               // already in scaled units
+        const double margin = 0.92;                          // leave room for taskbar/title
+        const double sx = (area.getWidth()  * margin) / (double) wantW;
+        const double sy = (area.getHeight() * margin) / (double) wantH;
+        const double s  = juce::jmin(1.0, sx, sy);           // only shrink, never grow
+        wantW = juce::roundToInt(wantW * s);
+        wantH = juce::roundToInt(wantH * s);
+    }
+    setSize(wantW, wantH);
 
     // One timer, two cadences (Phase J1d): every tick services the engine
     // status feed (voice dots + grid playhead — cheap, change-driven), and
@@ -763,5 +791,6 @@ void JT8000ControllerEditor::loadSkinFolder()
              * reloads. Sibling assets not present there fall back to embedded. */
             if (_panel != nullptr)
                 _panel->loadSkinFile(rml);
+            _proc.setSkinPath(rml.getFullPathName());   // persist for reopen
         });
 }
