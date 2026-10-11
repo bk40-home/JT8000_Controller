@@ -20,13 +20,15 @@
 #pragma once
 
 #include "JtRmlPanel.h"
+#include "JtLcdMenu.h"
+#include "JtEncoderStrip.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "PluginProcessor.h"
 #include "JT8000LookAndFeel.h"
 #include "JP8000SyxImporter.h"
-#include "SyxPickerOverlay.h"
+#include "PatchLibraryBrowser.h"
 #include "TouchSafeViewport.h"
 
 // =============================================================================
@@ -83,15 +85,59 @@ private:
      * at runtime. */
     std::unique_ptr<jt::JtRmlPanel> _panel;
 
+    /* The panel lives inside a scrollable viewport so standalone can zoom in and
+     * pan around a larger-than-window panel (the plugin window is host-sized).
+     * At zoom 1.0 the panel is fitted to the viewport (aspect-correct, no
+     * scrollbars); zooming makes it bigger and the viewport scrolls. Declared
+     * AFTER _panel so it is destroyed first (it does not own the panel). */
+    TouchSafeViewport _viewport;
+    double            _zoom { 1.0 };                 // 1.0 == fit to window
+    juce::TextButton  _zoomInBtn  { "+" };
+    juce::TextButton  _zoomOutBtn { juce::String::fromUTF8("−") };  // minus
+
+    /* Sizes the panel inside the viewport for the current zoom (aspect-correct),
+     * then repositions the encoder strip. */
+    void layoutPanel();
+    void setZoom(double z);
+
+    /* Computer-keyboard note entry (standalone). We map keys directly to the
+     * processor's MidiKeyboardState (no MidiKeyboardComponent needed), so there
+     * is no extra GUI dependency. _kbBaseNote is the note for the leftmost key;
+     * Z / X shift it by an octave, C / V change velocity. */
+    int _kbBaseNote = 60;                 // middle C
+    juce::uint8 _kbVelocity = 100;
+    juce::SortedSet<int> _kbHeldKeys;     // key codes currently down (for release)
+
+    /* writer to the LCD; the strip floats to the left of the LCD, positioned
+     * from the skin's laid-out element rect (positionEncoderStrip). */
+    std::unique_ptr<jt::JtLcdMenu> _menu;
+    jt::JtEncoderStrip            _encoderStrip;
+
+    /* Places _encoderStrip beside the LCD. Cheap and idempotent; called from
+     * resized() and once per status tick until the skin has laid out. */
+    void positionEncoderStrip();
+    juce::Rectangle<int> _lastStripBounds;
+
+    /* Places the transparent patch-name rename editor over the LCD's top line. */
+    void positionLcdEditor();
+    juce::Rectangle<int> _lastLcdEdit;
+
     void refreshMidiOutputList();
     void showMidiInputMenu();      // pops the tickable multi-select device menu
 
-    void loadSyxFile();
-    void showBankPicker(const juce::String& fileName);
-    std::unique_ptr<juce::FileChooser> _fileChooser;
-    juce::MemoryBlock _syxBuffer;
-    JP8000SyxImporter::ParsedBank _syxBank;
-    std::unique_ptr<SyxPickerOverlay> _syxOverlay;
+    // ---- Patch library browser (non-modal) --------------------------------
+    // Replaces the single-file SyxPickerOverlay: a themed folder browser that
+    // lists .syx/.mid files and their performances/patches, then loads a
+    // selection to A / B / A+B / Current via the existing load functions.
+    // Closing it returns keyboard focus to the editor so the standalone
+    // computer-keyboard note entry keeps working.
+    void showLibrary();                 // opens/focuses the browser
+    void chooseLibraryFolder();         // FileChooser for a new folder
+    juce::File lastLibraryFolder() const;
+    void       setLastLibraryFolder(const juce::File&);
+
+    std::unique_ptr<juce::FileChooser>   _fileChooser;
+    std::unique_ptr<PatchLibraryBrowser> _libraryBrowser;
 
     void savePatchFile();
     void loadPatchFile();
@@ -100,6 +146,12 @@ private:
     /* Opens a folder chooser and, on selection, sets that folder as the skin
      * disk-root on the panel (which reloads the document). See _loadSkinButton. */
     void loadSkinFolder();
+
+    /* Forward computer-keyboard events to the typing keyboard (standalone note
+     * entry). visibilityChanged grabs focus so keys arrive without a click. */
+    bool keyPressed(const juce::KeyPress& key) override;
+    bool keyStateChanged(bool isKeyDown) override;
+    void visibilityChanged() override;
 
     void valueTreePropertyChanged(juce::ValueTree& tree,
                                   const juce::Identifier& property) override;

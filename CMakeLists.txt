@@ -134,6 +134,10 @@ set(JT_APP_SOURCES
     Source/EngineHost.h
     Source/JT8000LookAndFeel.h
     Source/JT8000LookAndFeel.cpp
+    Source/JtLcdMenu.h
+    Source/JtLcdMenu.cpp
+    Source/JtEncoderStrip.h
+    Source/JtEncoderStrip.cpp
     Source/SectionComponent.h
     Source/SectionComponent.cpp
     Source/StepSequencerGrid.h
@@ -144,6 +148,9 @@ set(JT_APP_SOURCES
     Source/Envelopedisplay.cpp
     Source/JP8000SyxImporter.h
     Source/JP8000SyxImporter.cpp
+    Source/JtTheme.h
+    Source/PatchLibraryBrowser.h
+    Source/PatchLibraryBrowser.cpp
     Source/SyxProtocol.h
     Source/ParamMapJuce.h
     Source/JT8000Log.h
@@ -200,25 +207,4 @@ endfunction()
 
 jt_wire_target(JT8000_Controller)
 
-# ---------------------------------------------------------------------------
-# JT8000_Synth (Phase J2, sign-off Q2b) — the same application built as a
-# VST3 INSTRUMENT: sits on an instrument track, receives notes, sounds via
-# the embedded engine (default mode Sound; Both still reaches the Teensy).
-# Exists only when the engine does.
-# ---------------------------------------------------------------------------
-if(JT_ENGINE_DIR)
-    juce_add_plugin(JT8000_Synth
-        COMPANY_NAME               "JT8000"
-        PLUGIN_MANUFACTURER_CODE   JT8K
-        PLUGIN_CODE                JT8S
-        FORMATS                    VST3 Standalone
-        PRODUCT_NAME               "JT-8000 Synth"
-        JUCE_GENERATE_JUCE_HEADER  TRUE
-        IS_SYNTH                   TRUE
-        NEEDS_MIDI_INPUT           TRUE
-        NEEDS_MIDI_OUTPUT          TRUE
-        IS_MIDI_EFFECT             FALSE
-    )
-    jt_wire_target(JT8000_Synth)
-    target_compile_definitions(JT8000_Synth PRIVATE JT8000_SYNTH_TARGET=1)
-endif()
+

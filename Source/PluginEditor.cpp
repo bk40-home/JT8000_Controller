@@ -36,24 +36,28 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
 
     // --- Title label --------------------------------------------------------
 
-    // --- LCD patch name display ---------------------------------------------
+    // --- Patch-name editor: a TRANSPARENT overlay on the LCD's top line ------
+    // The name used to show twice (this field AND the LCD). Now the LCD is the
+    // only place it appears: this label sits over the LCD line, invisible until
+    // you double-click it to rename, then shows a readable editor. It becomes a
+    // child of the panel below (so it scrolls/scales with the LCD) and is placed
+    // by positionLcdEditor().
     _patchNameLabel.setText(_proc.getPatchName(), juce::dontSendNotification);
-    _patchNameLabel.setColour(juce::Label::textColourId, kLcdText);
-    _patchNameLabel.setColour(juce::Label::backgroundColourId, kLcdBg);
-    _patchNameLabel.setColour(juce::Label::outlineColourId, kBorder);
-    _patchNameLabel.setFont(juce::FontOptions(14.0f, juce::Font::bold));
-    _patchNameLabel.setJustificationType(juce::Justification::centred);
-    _patchNameLabel.setEditable(true, true, false);
+    _patchNameLabel.setColour(juce::Label::textColourId,       juce::Colours::transparentBlack);
+    _patchNameLabel.setColour(juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    _patchNameLabel.setColour(juce::Label::outlineColourId,    juce::Colours::transparentBlack);
+    // Readable only while editing.
+    _patchNameLabel.setColour(juce::Label::textWhenEditingColourId,       kLcdText);
+    _patchNameLabel.setColour(juce::Label::backgroundWhenEditingColourId, kLcdBg);
+    _patchNameLabel.setJustificationType(juce::Justification::centredLeft);
+    _patchNameLabel.setEditable(false, true, false);   // double-click to rename
     _patchNameLabel.onTextChange = [this]
     {
         _proc.setPatchName(_patchNameLabel.getText());
-
-        /* The LCD shows the patch name too, and nothing else pushes it there -
-         * editing the field silently left the two disagreeing. */
         if (_panel != nullptr)
             _panel->setPatchName(_patchNameLabel.getText());
     };
-    addAndMakeVisible(_patchNameLabel);
+    // NOTE: added to the panel (not the editor) after the panel is created.
 
     _proc.apvts.state.addListener(this);
 
@@ -191,8 +195,22 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
     /* The RmlUi panel. Assets are registered and the document loaded inside
      * JtRmlPanel; the editor only shows it and gives it bounds. */
     _panel = std::make_unique<jt::JtRmlPanel>(_proc.apvts);
-    addAndMakeVisible(*_panel);
+    /* The panel goes inside a scrollable viewport (see PluginEditor.h). The
+     * viewport does NOT own the panel — the unique_ptr does — so pass false. */
+    _viewport.setViewedComponent(_panel.get(), false);
+    _viewport.setScrollBarsShown(true, true);
+    addAndMakeVisible(_viewport);
     _panel->setPatchName(_proc.getPatchName());
+
+    /* Computer-keyboard note entry (standalone). The component itself is not
+     * shown - it exists only for its built-in typing-to-note key mapping, which
+     * it applies to the processor's shared MidiKeyboardState. Only wired up when
+     * running standalone (a DAW provides its own note input). */
+    /* Computer-keyboard note entry (standalone). Keys map directly to the
+     * processor's shared MidiKeyboardState in keyPressed/keyStateChanged - no
+     * MidiKeyboardComponent, so no extra GUI module dependency. */
+    if (_isStandalone)
+        setWantsKeyboardFocus(true);
 
     /* Restore the previously-chosen skin so a recreated editor (Ableton track
      * switch, window reopen) keeps it instead of reverting to factory. Empty or
@@ -207,12 +225,57 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
         }
     }
 
+    // --- LCD parameter menu + simulated encoder -----------------------------
+    // The menu walks the same generated table the APVTS is built from and edits
+    // through the APVTS, so it cannot disagree with the panel or the engine.
+    // It is the ONLY writer to the LCD: the panel's hover/knob readout is
+    // diverted into showTransient() (shown only while the menu is idle), and
+    // the menu's own output is written back through setLcd(). One writer, no
+    // fight over the two lines.
+    _menu = std::make_unique<jt::JtLcdMenu>(_proc.apvts);
+    _menu->onLcd = [this](const juce::String& l1, const juce::String& l2)
+    {
+        if (_panel != nullptr)
+            _panel->setLcd(l1, l2);
+    };
+    _panel->onLcdText = [this](const juce::String& l1, const juce::String& l2)
+    {
+        _menu->showTransient(l1, l2);
+    };
+    _menu->setPatchName(_proc.getPatchName());   // seed the idle top line
+
+    // The simulated encoder maps 1:1 onto the menu's three primitives, so a
+    // real hardware encoder would wire in identically later.
+    _encoderStrip.onEncoder = [this](int delta, bool coarse)
+    {
+        _menu->encoder(delta, coarse);
+    };
+    _encoderStrip.onEnter = [this] { _menu->enter(); };
+    _encoderStrip.onBack  = [this] { _menu->back();  };
+    _encoderStrip.setKnobImage(_panel->knobImage());   // same art as the panel knobs
+    /* Child of the PANEL, not the editor, so it scrolls and scales with the LCD
+     * when the viewport is zoomed/panned. Added after the panel's inner RML
+     * component, so it paints on top. */
+    _panel->addAndMakeVisible(_encoderStrip);
+
+    // Patch-name rename overlay lives on the LCD (see its setup above).
+    _panel->addAndMakeVisible(_patchNameLabel);
+
+    // Standalone-only zoom controls; the plugin window is host-sized.
+    if (_isStandalone)
+    {
+        _zoomOutBtn.onClick = [this] { setZoom(_zoom / 1.15); };
+        _zoomInBtn.onClick  = [this] { setZoom(_zoom * 1.15); };
+        addAndMakeVisible(_zoomOutBtn);
+        addAndMakeVisible(_zoomInBtn);
+    }
+
     /* The skin's header buttons drive the actions this editor already
      * implements - they are routed, not reimplemented. */
     _panel->onAction = [this](const juce::String& a)
     {
         if      (a == "sendall") _proc.sendBankDump();
-        else if (a == "loadsyx") loadSyxFile();
+        else if (a == "loadsyx") showLibrary();
         else if (a == "save")    savePatchFile();
         else if (a == "load")    loadPatchFile();
         else if (a == "init")    initPatch();
@@ -252,6 +315,14 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
 JT8000ControllerEditor::~JT8000ControllerEditor()
 {
     stopTimer();
+
+    /* Break the LCD wiring before any member is torn down: the panel's binding
+     * outlives _menu (declaration order), so leaving onLcdText pointing at a
+     * destroyed menu would be a dangling call if a readout fired during
+     * teardown. */
+    if (_panel != nullptr)
+        _panel->onLcdText = nullptr;
+
     _proc.apvts.state.removeListener(this);
     setLookAndFeel(nullptr);
 }
@@ -378,6 +449,20 @@ void JT8000ControllerEditor::timerCallback()
     if (_panel != nullptr)
         _panel->setPlayhead(running ? step : -1);
 
+    /* Keep the encoder strip pinned to the LCD. Idempotent, so this settles it
+     * once the skin's first layout pass has produced real element bounds (and
+     * re-settles it after a skin reload) without costing anything when static. */
+    positionEncoderStrip();
+
+    /* Keep the menu's value line honest: while browsing/editing, the selected
+     * parameter can change from outside the menu (a panel knob, automation, an
+     * incoming NRPN). This re-reads it; no-op while idle, and the panel skips
+     * the RML write when the text has not changed, so it is free when static. */
+    if (_menu != nullptr)
+        _menu->refresh();
+
+    positionLcdEditor();   // settle the rename overlay once the skin has laid out
+
     // ---- Slow lane: MIDI device hot-plug scan (original 2 s cadence) --------
     // Only the output ComboBox needs polling — it shows a fixed list.  The
     // input checklist is a PopupMenu rebuilt each time it opens, so it always
@@ -449,14 +534,114 @@ void JT8000ControllerEditor::resized()
     _factorySkinButton.setBounds(strip.removeFromRight(72));
     strip.removeFromRight(pad);
 
-    /* The patch name is also shown on the panel's LCD; this field is what makes
-     * it editable until the LCD accepts text entry. */
-    _patchNameLabel.setBounds(strip);
+    /* Standalone zoom controls, far left of the strip (the plugin window is
+     * host-sized, so zoom is standalone-only). */
+    if (_isStandalone)
+    {
+        _zoomOutBtn.setBounds(strip.removeFromLeft(30));
+        strip.removeFromLeft(4);
+        _zoomInBtn.setBounds(strip.removeFromLeft(30));
+        strip.removeFromLeft(pad);
+    }
 
-    _panel->setBounds(area);
+    /* The patch name now lives on the LCD (a transparent double-click editor,
+     * positioned by positionLcdEditor); nothing occupies the header filler. */
 
-    if (_syxOverlay != nullptr)
-        _syxOverlay->setBounds(getLocalBounds());
+    area.removeFromTop(8);       // small gap so the panel top doesn't touch the header
+    _viewport.setBounds(area);
+    layoutPanel();               // sizes the panel for the zoom, repositions overlays
+
+    if (_libraryBrowser != nullptr)
+        _libraryBrowser->setBounds(getLocalBounds());
+}
+
+// =============================================================================
+// Panel sizing inside the viewport.
+//   zoom 1.0 = fitted to the viewport, aspect-correct (no scrollbars, no
+//   letterbox inside the panel since its bounds keep the design aspect).
+//   zoom > 1 = larger than the viewport, which then scrolls.
+// =============================================================================
+void JT8000ControllerEditor::layoutPanel()
+{
+    if (_panel == nullptr)
+        return;
+
+    const int vw = juce::jmax(1, _viewport.getWidth());
+    const int vh = juce::jmax(1, _viewport.getHeight());
+
+    // Base fit preserves the design aspect so the RML never distorts.
+    const double aspect = (double) jt::JtRmlPanel::kDesignW
+                        / (double) jt::JtRmlPanel::kDesignH;
+    double baseW = juce::jmin((double) vw, (double) vh * aspect);
+    double baseH = baseW / aspect;
+
+    const int w = juce::roundToInt(baseW * _zoom);
+    const int h = juce::roundToInt(baseH * _zoom);
+    _panel->setSize(w, h);       // triggers JtRmlPanel::resized -> RML relayout
+
+    positionEncoderStrip();      // panel-local, so they track the new size
+    positionLcdEditor();
+}
+
+// Float the transparent rename editor over the LCD's top line (panel-local, so
+// it scrolls/scales with the LCD). Font tracks the line height so the editor
+// text matches the LCD when active.
+void JT8000ControllerEditor::positionLcdEditor()
+{
+    if (_panel == nullptr)
+        return;
+    const auto r = _panel->lcdLine1Bounds();
+    if (r.isEmpty())
+        return;
+    if (r != _lastLcdEdit)
+    {
+        _lastLcdEdit = r;
+        _patchNameLabel.setBounds(r);
+        _patchNameLabel.setFont(juce::FontOptions((float) juce::jmax(12, r.getHeight() - 8),
+                                                  juce::Font::bold));
+    }
+}
+
+void JT8000ControllerEditor::setZoom(double z)
+{
+    const double clamped = juce::jlimit(1.0, 4.0, z);
+    if (juce::approximatelyEqual(clamped, _zoom))
+        return;
+    _zoom = clamped;
+    layoutPanel();
+}
+// =============================================================================
+// Float the encoder strip to the LEFT of the LCD. The LCD rect comes from the
+// skin's laid-out element, so this tracks any window scaling or skin swap
+// instead of a hard-coded position. Idempotent: it only calls setBounds when
+// the target actually moved, so it is safe to poll every status tick until the
+// skin has finished its first layout pass (element bounds are empty until then).
+// =============================================================================
+void JT8000ControllerEditor::positionEncoderStrip()
+{
+    if (_panel == nullptr)
+        return;
+
+    // The strip is a child of the panel, so lcdBounds() (panel-local, already
+    // scaled by zoom) is exactly the coordinate space we place it in — no origin
+    // offset. Size it from the LCD height so it stays proportional as the panel
+    // scales/zooms rather than being a fixed 84px that shrinks next to a big LCD.
+    const auto lcd = _panel->lcdBounds();
+    if (lcd.isEmpty())
+        return;                                     // skin not laid out yet
+
+    const int h      = juce::jmax(48, lcd.getHeight());
+    const int stripW = juce::jmax(48, juce::roundToInt(h * 1.8));   // larger nav dial
+    const int gap    = juce::jmax(6,  h / 6);
+    const int x      = lcd.getX() - stripW - gap;
+    const int y      = lcd.getY();
+
+    const juce::Rectangle<int> target { juce::jmax(0, x), y, stripW, h };
+    if (target != _lastStripBounds)
+    {
+        _lastStripBounds = target;
+        _encoderStrip.setBounds(target);
+    }
 }
 
 // =============================================================================
@@ -517,171 +702,117 @@ void JT8000ControllerEditor::initPatch()
 }
 
 // =============================================================================
-// SYX import — non-modal overlay (safe in all VST3 hosts)
+// Patch library browser — non-modal, themed folder browser (VST3-safe)
 //
-// Two-phase flow:
-//   1. loadSyxFile() — opens a file chooser, parses the file into a
-//      ParsedBank containing performances (with upper/lower patches) and
-//      orphan patches (those without a performance header).
-//   2. showBankPicker() — displays the SyxPickerOverlay with performance-
-//      aware load options (Perf→A+B, Upper→A, Lower→B, etc.)
+// Replaces the old two-phase loadSyxFile()/showBankPicker() single-file flow.
+// showLibrary() opens the browser at the last-used folder (persisted globally
+// so it survives across sessions and instances — a library folder is a user
+// preference, not per-project state).  The browser lists .syx/.mid files and
+// their performances/patches; its callbacks feed the SAME loadPatchToLayer /
+// loadPerformance functions the picker used, so load logic is unchanged.
+//
+// KEYBOARD: closing the browser returns keyboard focus to the editor, so the
+// standalone computer-keyboard note entry (keyPressed/keyStateChanged) keeps
+// working after the browser's list/buttons held focus.
 // =============================================================================
-void JT8000ControllerEditor::loadSyxFile()
+
+juce::File JT8000ControllerEditor::lastLibraryFolder() const
+{
+    juce::PropertiesFile::Options o;
+    o.applicationName     = "JT8000";
+    o.filenameSuffix      = "settings";
+    o.osxLibrarySubFolder = "Application Support";
+    o.folderName          = "JT8000";
+    juce::PropertiesFile props(o);
+
+    const juce::String saved = props.getValue("libraryFolder");
+    juce::File f(saved);
+    if (saved.isNotEmpty() && f.isDirectory())
+        return f;
+
+    return juce::File::getSpecialLocation(juce::File::userDesktopDirectory);
+}
+
+void JT8000ControllerEditor::setLastLibraryFolder(const juce::File& folder)
+{
+    if (!folder.isDirectory()) return;
+    juce::PropertiesFile::Options o;
+    o.applicationName     = "JT8000";
+    o.filenameSuffix      = "settings";
+    o.osxLibrarySubFolder = "Application Support";
+    o.folderName          = "JT8000";
+    juce::PropertiesFile props(o);
+    props.setValue("libraryFolder", folder.getFullPathName());
+    props.saveIfNeeded();
+}
+
+void JT8000ControllerEditor::showLibrary()
+{
+    // Already open — just bring it forward.
+    if (_libraryBrowser != nullptr)
+    {
+        _libraryBrowser->toFront(true);
+        return;
+    }
+
+    _libraryBrowser = std::make_unique<PatchLibraryBrowser>();
+    _libraryBrowser->setBounds(getLocalBounds());
+
+    // Load a patch to a layer (A / B / Current) — unchanged load path.
+    _libraryBrowser->onLoadPatch =
+        [this](const JP8000SyxImporter::Patch& patch, JP8000SyxImporter::LoadTarget target)
+        {
+            JP8000SyxImporter::loadPatchToLayer(_proc, patch, target);
+            if (_panel != nullptr)
+                _panel->setPatchName(patch.name);
+        };
+
+    // Load a full performance (upper->A, lower->B, sets mode).
+    _libraryBrowser->onLoadPerformance =
+        [this](const JP8000SyxImporter::Performance& perf)
+        {
+            JP8000SyxImporter::loadPerformance(_proc, perf);
+        };
+
+    // Non-modal close.  Return keyboard focus to the editor so standalone
+    // computer-keyboard note entry works again (the browser's widgets held it).
+    _libraryBrowser->onCloseRequested =
+        [this]
+        {
+            _libraryBrowser.reset();
+            if (_isStandalone)
+                grabKeyboardFocus();
+        };
+
+    // Change folder — keep FileChooser lifetime here (matches existing pattern).
+    _libraryBrowser->onChangeFolderRequested =
+        [this] { chooseLibraryFolder(); };
+
+    addAndMakeVisible(_libraryBrowser.get());
+    _libraryBrowser->setFolder(lastLibraryFolder());
+}
+
+void JT8000ControllerEditor::chooseLibraryFolder()
 {
     _fileChooser = std::make_unique<juce::FileChooser>(
-        "Load JP-8000 SysEx",
-        juce::File::getSpecialLocation(juce::File::userDesktopDirectory),
-        "*.syx;*.mid;*.SYX;*.MID");
+        "Choose patch library folder",
+        lastLibraryFolder());
 
     _fileChooser->launchAsync(
-        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        juce::FileBrowserComponent::openMode
+            | juce::FileBrowserComponent::canSelectDirectories,
         [this](const juce::FileChooser& fc)
         {
             auto results = fc.getResults();
             if (results.isEmpty()) return;
 
-            auto file = results.getFirst();
-            juce::MemoryBlock mb;
-            if (!file.loadFileAsData(mb) || mb.getSize() == 0) return;
+            auto folder = results.getFirst();
+            if (!folder.isDirectory()) return;
 
-            _syxBuffer = std::move(mb);
-            _syxBank = JP8000SyxImporter::parseFile(
-                static_cast<const uint8_t*>(_syxBuffer.getData()),
-                _syxBuffer.getSize(),
-                file.getFileExtension().toLowerCase() == ".mid");
-
-            if (_syxBank.performances.empty() && _syxBank.orphanPatches.empty())
-            {
-                juce::AlertWindow::showMessageBoxAsync(
-                    juce::MessageBoxIconType::WarningIcon,
-                    "No Patches Found",
-                    "No JP-8000 patches found in " + file.getFileName());
-                return;
-            }
-            showBankPicker(file.getFileName());
+            setLastLibraryFolder(folder);
+            if (_libraryBrowser != nullptr)
+                _libraryBrowser->setFolder(folder);
         });
-}
-
-void JT8000ControllerEditor::showBankPicker(const juce::String& fileName)
-{
-    const int nPerfs   = static_cast<int>(_syxBank.performances.size());
-    const int nOrphans = static_cast<int>(_syxBank.orphanPatches.size());
-
-    juce::String title = "Load SysEx -- " + fileName + " -- ";
-    if (nPerfs > 0)
-        title += juce::String(nPerfs) + " perf" + (nPerfs > 1 ? "s" : "");
-    if (nPerfs > 0 && nOrphans > 0)
-        title += ", ";
-    if (nOrphans > 0)
-        title += juce::String(nOrphans) + " patch" + (nOrphans > 1 ? "es" : "");
-
-    _syxOverlay = std::make_unique<SyxPickerOverlay>(title, _syxBank);
-    _syxOverlay->setBounds(getLocalBounds());
-
-    _syxOverlay->onResult = [this](PickAction action, int perfIdx, int patchIdx)
-    {
-        using namespace JP8000SyxImporter;
-
-        switch (action)
-        {
-            // ---- Performance actions ----
-            case PickAction::PerfToAB:
-            {
-                if (perfIdx >= 0 && perfIdx < static_cast<int>(_syxBank.performances.size()))
-                {
-                    const auto& perf = _syxBank.performances[static_cast<size_t>(perfIdx)];
-                    loadPerformance(_proc, perf);
-                }
-                break;
-            }
-            case PickAction::UpperToA:
-            {
-                if (perfIdx >= 0 && perfIdx < static_cast<int>(_syxBank.performances.size()))
-                {
-                    const auto& perf = _syxBank.performances[static_cast<size_t>(perfIdx)];
-                    loadPatchToLayer(_proc, perf.upper, LoadTarget::LayerA);
-                }
-                break;
-            }
-            case PickAction::UpperToB:
-            {
-                if (perfIdx >= 0 && perfIdx < static_cast<int>(_syxBank.performances.size()))
-                {
-                    const auto& perf = _syxBank.performances[static_cast<size_t>(perfIdx)];
-                    loadPatchToLayer(_proc, perf.upper, LoadTarget::LayerB);
-                }
-                break;
-            }
-            case PickAction::LowerToA:
-            {
-                if (perfIdx >= 0 && perfIdx < static_cast<int>(_syxBank.performances.size()))
-                {
-                    const auto& perf = _syxBank.performances[static_cast<size_t>(perfIdx)];
-                    loadPatchToLayer(_proc, perf.lower, LoadTarget::LayerA);
-                }
-                break;
-            }
-            case PickAction::LowerToB:
-            {
-                if (perfIdx >= 0 && perfIdx < static_cast<int>(_syxBank.performances.size()))
-                {
-                    const auto& perf = _syxBank.performances[static_cast<size_t>(perfIdx)];
-                    loadPatchToLayer(_proc, perf.lower, LoadTarget::LayerB);
-                }
-                break;
-            }
-
-            // ---- Orphan patch actions ----
-            case PickAction::PatchToA:
-            {
-                if (patchIdx >= 0 && patchIdx < static_cast<int>(_syxBank.orphanPatches.size()))
-                {
-                    const auto& patch = _syxBank.orphanPatches[static_cast<size_t>(patchIdx)];
-                    loadPatchToLayer(_proc, patch, LoadTarget::LayerA);
-                }
-                break;
-            }
-            case PickAction::PatchToB:
-            {
-                if (patchIdx >= 0 && patchIdx < static_cast<int>(_syxBank.orphanPatches.size()))
-                {
-                    const auto& patch = _syxBank.orphanPatches[static_cast<size_t>(patchIdx)];
-                    loadPatchToLayer(_proc, patch, LoadTarget::LayerB);
-                }
-                break;
-            }
-            case PickAction::PatchSend:
-            {
-                if (patchIdx >= 0 && patchIdx < static_cast<int>(_syxBank.orphanPatches.size()))
-                {
-                    const auto& patch = _syxBank.orphanPatches[static_cast<size_t>(patchIdx)];
-                    loadPatchToLayer(_proc, patch, LoadTarget::Current);
-                }
-                break;
-            }
-            case PickAction::PatchOnly:
-            {
-                if (patchIdx >= 0 && patchIdx < static_cast<int>(_syxBank.orphanPatches.size()))
-                {
-                    const auto& patch = _syxBank.orphanPatches[static_cast<size_t>(patchIdx)];
-                    loadPatch(_proc.apvts, patch);
-                    _proc.setPatchName(patch.name);
-                    if (_panel != nullptr)
-                        _panel->setPatchName(patch.name);
-                    // No send — user explicitly chose "Load Only"
-                }
-                break;
-            }
-
-            case PickAction::Cancel:
-            default:
-                break;
-        }
-
-        _syxOverlay.reset();
-    };
-
-    addAndMakeVisible(_syxOverlay.get());
 }
 
 // =============================================================================
@@ -769,6 +900,96 @@ void JT8000ControllerEditor::loadPatchFile()
 //   live in the RML, are being changed. Folder-select (not file-select) so the
 //   loader can resolve the rml plus any sibling assets by bare name.
 // =============================================================================
+// =============================================================================
+// Computer-keyboard note entry (standalone)
+//   Maps keys to notes on the processor's shared MidiKeyboardState using JUCE's
+//   standard typing layout: A S D F G H J K = white keys (C D E F G A B C),
+//   W E   T Y U = black keys, Z / X = octave down / up, C / V = velocity.
+//   keyStateChanged handles note-off by diffing the set of held keys.
+// =============================================================================
+namespace {
+    // Offset in semitones from the base note for each typing key, or -1 if the
+    // key is not a note. Covers the standard two-row layout.
+    int semitoneForKey(int keyCode)
+    {
+        switch (juce::CharacterFunctions::toLowerCase((juce::juce_wchar) keyCode))
+        {
+            case 'a': return 0;   // C
+            case 'w': return 1;   // C#
+            case 's': return 2;   // D
+            case 'e': return 3;   // D#
+            case 'd': return 4;   // E
+            case 'f': return 5;   // F
+            case 't': return 6;   // F#
+            case 'g': return 7;   // G
+            case 'y': return 8;   // G#
+            case 'h': return 9;   // A
+            case 'u': return 10;  // A#
+            case 'j': return 11;  // B
+            case 'k': return 12;  // C (next octave)
+            case 'o': return 13;
+            case 'l': return 14;
+            default:  return -1;
+        }
+    }
+}
+
+bool JT8000ControllerEditor::keyPressed(const juce::KeyPress& key)
+{
+    if (!_isStandalone) return false;
+
+    const int code = key.getKeyCode();
+    const juce::juce_wchar ch = juce::CharacterFunctions::toLowerCase((juce::juce_wchar) code);
+
+    // Octave / velocity controls.
+    if (ch == 'z') { _kbBaseNote = juce::jmax(0,   _kbBaseNote - 12); return true; }
+    if (ch == 'x') { _kbBaseNote = juce::jmin(108, _kbBaseNote + 12); return true; }
+    if (ch == 'c') { _kbVelocity = (juce::uint8) juce::jmax(1,   _kbVelocity - 10); return true; }
+    if (ch == 'v') { _kbVelocity = (juce::uint8) juce::jmin(127, _kbVelocity + 10); return true; }
+
+    const int semi = semitoneForKey(code);
+    if (semi < 0) return false;
+
+    const int note = juce::jlimit(0, 127, _kbBaseNote + semi);
+    if (!_kbHeldKeys.contains(code))
+    {
+        _kbHeldKeys.add(code);
+        _proc.getKeyboardState().noteOn(1, note, _kbVelocity / 127.0f);
+    }
+    return true;
+}
+
+bool JT8000ControllerEditor::keyStateChanged(bool /*isKeyDown*/)
+{
+    if (!_isStandalone) return false;
+
+    // Release any held note whose key is no longer down.
+    bool handled = false;
+    for (int i = _kbHeldKeys.size(); --i >= 0;)
+    {
+        const int code = _kbHeldKeys[i];
+        if (!juce::KeyPress::isKeyCurrentlyDown(code))
+        {
+            const int semi = semitoneForKey(code);
+            if (semi >= 0)
+            {
+                const int note = juce::jlimit(0, 127, _kbBaseNote + semi);
+                _proc.getKeyboardState().noteOff(1, note, 0.0f);
+            }
+            _kbHeldKeys.remove(i);
+            handled = true;
+        }
+    }
+    return handled;
+}
+
+void JT8000ControllerEditor::visibilityChanged()
+{
+    // Grab focus when shown so typed notes work without clicking first.
+    if (_isStandalone && isVisible())
+        grabKeyboardFocus();
+}
+
 void JT8000ControllerEditor::loadSkinFolder()
 {
     _fileChooser = std::make_unique<juce::FileChooser>(

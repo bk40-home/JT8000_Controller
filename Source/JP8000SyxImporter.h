@@ -157,9 +157,16 @@ void loadPerformance(JT8000ControllerProcessor& proc,
 // =========================================================================
 
 /** Set a single APVTS parameter by CC number.
- *  Handles AudioParameterChoice vs AudioParameterInt dispatch.
+ *  Resolves the CC to the genuine APVTS row via the CC -> ParamID bridge
+ *  (ParamMapJuce::paramId14ForCC -> JtParams::kParams), then writes `value`
+ *  in that row's own domain:
+ *    - Continuous : 0..127 wire byte (linear norm = byte/127)
+ *    - Select     : choice index (0..optionCount-1)   [decision A]
+ *    - Toggle     : 0 = off, >=64 = on
+ *    - Int        : the real integer (e.g. seq steps 1..16)
+ *  No-ops for any CC with no ParamID mapping.
  */
 void setParamByCC(juce::AudioProcessorValueTreeState& apvts,
                   int cc, int value);
 
-} // namespace JP8000SyxImporter
+} // namespace JP8000SyxImporter

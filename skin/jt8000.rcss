@@ -18,7 +18,7 @@ body
 	color: #FFA83A;
 }
 
-body { decorator: image(bg_base.png); }
+body { decorator: image(bg_min.png); }   /* header only; knob area flat */
 
 .band
 {
@@ -28,12 +28,6 @@ body { decorator: image(bg_base.png); }
 	width: 3840dp;
 	height: 438dp;
 }
-body.main .band { decorator: image(band_main.png); }
-body.shift .band { decorator: image(band_main.png); }
-body.reverb .band { decorator: image(band_reverb.png); }
-body.seq .band { decorator: image(band_step.png); }
-body.arp .band { decorator: image(band_arpeggiator.png); }
-body.setup .band { decorator: image(band_setup.png); }
 
 /* Lettering, live rather than baked: one cached texture each,
  * crisp at any size, and the shift swap becomes a class change
@@ -45,10 +39,27 @@ body.setup .band { decorator: image(band_setup.png); }
 	display: none;
 }
 
-.sectitle   { font-size: 41dp; font-weight: bold; color: #eef0f4ff; }
+.sectitle   { font-size: 44dp; font-weight: bold; color: #f4f6faff; }
 .grouplabel { font-size: 23dp; font-weight: bold; color: #969eacff; }
-.legend     { font-size: 25dp; color: #c6ccd6ff; }
+/* Sublabels dropped for a cleaner panel: the view classes were stripped from
+ * the grouplabel divs in the RML, so this base rule keeps them hidden. */
+.legend     { font-size: 29dp; color: #e0e6f2ff; }
 .shiftalt   { color: #e86054ff; }
+
+/* Section outlines: coloured rounded borders + a faint raised fill, replacing
+ * the panel wells/rules that used to be baked into the backgrounds. Each box
+ * carries the view classes of the controls it wraps, so the shared top sections
+ * (osc/filter/env/LFO) keep their borders in every view while the bottom strip
+ * swaps per view (fx in main, REVERB/SEQ/ARP/SETUP elsewhere). Colour, weight
+ * and radius are one line each. */
+.secbox
+{
+	position: absolute;
+	display: none;
+	background-color: #12161eff;
+	border: 2dp #9a6b30ff;
+	border-radius: 16dp;
+}
 
 /* Header lettering. The LCD lines are set from C++ - patch name and
  * the value under the pointer - so they must be elements. */

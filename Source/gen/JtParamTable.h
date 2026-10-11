@@ -73,6 +73,10 @@ static constexpr Option kOpt_clock_source[] = {
     { "Internal" },
     { "Ext MIDI" },
 };
+static constexpr Option kOpt_delay_engine[] = {
+    { "Digital" },
+    { "Tape" },
+};
 static constexpr Option kOpt_drive[] = {
     { "OFF" },
     { "Soft" },
@@ -116,6 +120,11 @@ static constexpr Option kOpt_filter_mode[] = {
     { "2P Push" },
     { "Xpander" },
     { "Xpander M" },
+};
+static constexpr Option kOpt_glide_mode[] = {
+    { "Cascade" },
+    { "Parallel" },
+    { "Positional" },
 };
 static constexpr Option kOpt_l_f_o_dest[] = {
     { "None" },
@@ -169,6 +178,8 @@ static constexpr Option kOpt_osc_wave[] = {
     { "BLvSAW" },
     { "vTRI" },
     { "BLvTRI" },
+    { "JvSAW" },
+    { "JvTRI" },
 };
 static constexpr Option kOpt_perf_mode[] = {
     { "Single" },
@@ -191,6 +202,11 @@ static constexpr Option kOpt_poly_mode[] = {
     { "Poly" },
     { "Mono" },
     { "Unison" },
+};
+static constexpr Option kOpt_reverb_algo[] = {
+    { "Plate" },
+    { "Shimmer" },
+    { "Hall" },
 };
 static constexpr Option kOpt_seq_aux_dest[] = {
     { "None" },
@@ -226,6 +242,9 @@ static constexpr Option kOpt_timing_mode[] = {
     { "1/4T" },
     { "1/8T" },
     { "1/16T" },
+    { "1/4D" },
+    { "1/8D" },
+    { "1/16D" },
 };
 static constexpr Option kOpt_v_a_filter[] = {
     { "SVF LP2" },
@@ -274,12 +293,12 @@ static constexpr Option kOpt_xpander_mode[] = {
 };
 
 // ---------------------------------------------------------------------------
-// Parameters (243)
+// Parameters (252)
 // ---------------------------------------------------------------------------
-static constexpr int kNumParams = 243;
+static constexpr int kNumParams = 252;
 
 static constexpr Param kParams[kNumParams] = {
-    { 0x0000, "osc1.wave",               "osc1.wave",               "Osc1 Wave",             "WAVE",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      17.0f,     0.0f,      0.0f,      "",      false,  kOpt_osc_wave,         18,  0 },
+    { 0x0000, "osc1.wave",               "osc1.wave",               "Osc1 Wave",             "WAVE",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      19.0f,     0.0f,      0.0f,      "",      false,  kOpt_osc_wave,         20,  0 },
     { 0x0001, "osc1.pitch_offset",       "osc1.pitch_offset",       "Osc1 Pitch",            "PITCH",     Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      4.0f,      0.0f,      2.0f,      "",      false,  kOpt_pitch_offset,      5,  0 },
     { 0x0002, "osc1.fine_tune",          "osc1.fine_tune",          "Osc1 Fine",             "FINE",      Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, -1.0f,     1.0f,      0.0f,      0.0f,      "norm",  true,   nullptr,                0,  0 },
     { 0x0003, "osc1.detune",             "osc1.detune",             "Osc1 Detune",           "DETUNE",    Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, -1.0f,     1.0f,      0.0f,      0.0f,      "norm",  true,   nullptr,                0,  0 },
@@ -293,7 +312,7 @@ static constexpr Param kParams[kNumParams] = {
     { 0x000B, "osc1.arb_bank",           "osc1.arb_bank",           "Osc1 Arb Bank",         "BANK",      Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  0 },
     { 0x000C, "osc1.arb_index",          "osc1.arb_index",          "Osc1 Arb Idx",          "IDX",       Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  0 },
     { 0x000D, "osc1.pwm_lfo1_depth",     "osc1.pwm_lfo1_depth",     "Osc1 PWM Amt",          "PWM AMT",   Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      1.0f,      "norm",  false,  nullptr,                0,  0 },
-    { 0x0080, "osc2.wave",               "osc2.wave",               "Osc2 Wave",             "WAVE",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      17.0f,     0.0f,      0.0f,      "",      false,  kOpt_osc_wave,         18,  1 },
+    { 0x0080, "osc2.wave",               "osc2.wave",               "Osc2 Wave",             "WAVE",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      19.0f,     0.0f,      0.0f,      "",      false,  kOpt_osc_wave,         20,  1 },
     { 0x0081, "osc2.pitch_offset",       "osc2.pitch_offset",       "Osc2 Pitch",            "PITCH",     Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      4.0f,      0.0f,      2.0f,      "",      false,  kOpt_pitch_offset,      5,  1 },
     { 0x0082, "osc2.fine_tune",          "osc2.fine_tune",          "Osc2 Fine",             "FINE",      Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, -1.0f,     1.0f,      0.0f,      0.0f,      "norm",  true,   nullptr,                0,  1 },
     { 0x0083, "osc2.detune",             "osc2.detune",             "Osc2 Detune",           "DETUNE",    Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, -1.0f,     1.0f,      0.0f,      0.0f,      "norm",  true,   nullptr,                0,  1 },
@@ -352,7 +371,7 @@ static constexpr Param kParams[kNumParams] = {
     { 0x0380, "lfo1.waveform",           "lfo1.waveform",           "LFO1 Wave",             "WAVE",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      5.0f,      0.0f,      0.0f,      "",      false,  kOpt_l_f_o_wave,        6,  7 },
     { 0x0381, "lfo1.freq",               "lfo1.freq",               "LFO1 Rate",             "RATE",      Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Log, 0.03f,     39.0f,     0.0f,      0.03f,     "Hz",    false,  nullptr,                0,  7 },
     { 0x0382, "lfo1.depth",              "lfo1.depth",              "LFO1 Depth",            "DEPTH",     Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  7 },
-    { 0x0383, "lfo1.sync",               "lfo1.sync",               "LFO1 Sync",             "SYNC",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      11.0f,     0.0f,      0.0f,      "",      false,  kOpt_timing_mode,      12,  7 },
+    { 0x0383, "lfo1.sync",               "lfo1.sync",               "LFO1 Sync",             "SYNC",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      14.0f,     0.0f,      0.0f,      "",      false,  kOpt_timing_mode,      15,  7 },
     { 0x0384, "lfo1.pitch_depth",        "lfo1.pitch_depth",        "LFO1 Pitch",            "PITCH",     Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  7 },
     { 0x0385, "lfo1.filter_depth",       "lfo1.filter_depth",       "LFO1 Filter",           "FILTER",    Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  7 },
     { 0x0386, "lfo1.pwm_depth",          "lfo1.pwm_depth",          "LFO1 PWM",              "PWM",       Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  7 },
@@ -362,13 +381,14 @@ static constexpr Param kParams[kNumParams] = {
     { 0x0400, "lfo2.waveform",           "lfo2.waveform",           "LFO2 Wave",             "WAVE",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      5.0f,      0.0f,      0.0f,      "",      false,  kOpt_l_f_o_wave,        6,  8 },
     { 0x0401, "lfo2.freq",               "lfo2.freq",               "LFO2 Rate",             "RATE",      Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Log, 0.03f,     39.0f,     0.0f,      0.03f,     "Hz",    false,  nullptr,                0,  8 },
     { 0x0402, "lfo2.depth",              "lfo2.depth",              "LFO2 Depth",            "DEPTH",     Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  8 },
-    { 0x0403, "lfo2.sync",               "lfo2.sync",               "LFO2 Sync",             "SYNC",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      11.0f,     0.0f,      0.0f,      "",      false,  kOpt_timing_mode,      12,  8 },
+    { 0x0403, "lfo2.sync",               "lfo2.sync",               "LFO2 Sync",             "SYNC",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      14.0f,     0.0f,      0.0f,      "",      false,  kOpt_timing_mode,      15,  8 },
     { 0x0404, "lfo2.pitch_depth",        "lfo2.pitch_depth",        "LFO2 Pitch",            "PITCH",     Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  8 },
     { 0x0405, "lfo2.filter_depth",       "lfo2.filter_depth",       "LFO2 Filter",           "FILTER",    Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  8 },
     { 0x0406, "lfo2.pwm_depth",          "lfo2.pwm_depth",          "LFO2 PWM",              "PWM",       Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  8 },
     { 0x0407, "lfo2.amp_depth",          "lfo2.amp_depth",          "LFO2 Amp",              "AMP",       Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  8 },
     { 0x0408, "lfo2.destination",        "lfo2.destination",        "LFO2 Dest",             "DEST",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      4.0f,      0.0f,      0.0f,      "",      false,  kOpt_l_f_o_dest,        5,  8 },
     { 0x0409, "lfo2.delay",              "lfo2.delay",              "LFO2 Delay",            "DELAY",     Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  8 },
+    { 0x040A, "lfo2.mod_wheel",          "lfo2.mod_wheel",          "LFO2 ModWhl",           "MOD WHL",   Widget::Toggle, Type::Toggle,      Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      1.0f,      "",      false,  nullptr,                0,  8 },
     { 0x0480, "fx.bass_gain",            "fx.bass_gain",            "Bass",                  "BASS",      Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, -1.0f,     1.0f,      0.0f,      0.0f,      "norm",  true,   nullptr,                0,  9 },
     { 0x0481, "fx.treble_gain",          "fx.treble_gain",          "Treble",                "TREBLE",    Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, -1.0f,     1.0f,      0.0f,      0.0f,      "norm",  true,   nullptr,                0,  9 },
     { 0x0482, "fx.drive",                "fx.drive",                "Drive",                 "DRIVE",     Widget::Combo, Type::Select,      Scope::PatchShared,  Curve::Lin, 0.0f,      2.0f,      0.0f,      0.0f,      "",      false,  kOpt_drive,             3,  9 },
@@ -377,12 +397,18 @@ static constexpr Param kParams[kNumParams] = {
     { 0x0485, "fx.mod_rate",             "fx.mod_rate",             "Mod Rate",              "MOD RATE",  Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.5f,      "norm",  false,  nullptr,                0,  9 },
     { 0x0486, "fx.mod_feedback",         "fx.mod_feedback",         "Mod FB",                "MOD FB",    Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  9 },
     { 0x0487, "fx.delay_effect",         "fx.delay_effect",         "Delay FX",              "DLY TYPE",  Widget::Combo, Type::Select,      Scope::PatchShared,  Curve::Lin, 0.0f,      5.0f,      0.0f,      0.0f,      "",      false,  kOpt_f_x_delay_effect,  6,  9 },
-    { 0x0488, "fx.delay_time",           "fx.delay_time",           "Delay Time",            "DLY TIME",  Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.5f,      "norm",  false,  nullptr,                0,  9 },
+    { 0x0488, "fx.delay_time",           "fx.delay_time",           "Delay Time",            "DLY TIME",  Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Log, 10.0f,     10000.0f,  0.0f,      750.0f,    "ms",    false,  nullptr,                0,  9 },
     { 0x0489, "fx.delay_mix",            "fx.delay_mix",            "Delay Mix",             "DLY MIX",   Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  9 },
     { 0x048A, "fx.delay_feedback",       "fx.delay_feedback",       "Delay FB",              "DLY FB",    Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  9 },
-    { 0x048B, "fx.delay_sync",           "fx.delay_sync",           "Delay Sync",            "DLY SYNC",  Widget::Combo, Type::Select,      Scope::PatchShared,  Curve::Lin, 0.0f,      11.0f,     0.0f,      0.0f,      "",      false,  kOpt_timing_mode,      12,  9 },
+    { 0x048B, "fx.delay_sync",           "fx.delay_sync",           "Delay Sync",            "DLY SYNC",  Widget::Combo, Type::Select,      Scope::PatchShared,  Curve::Lin, 0.0f,      14.0f,     0.0f,      0.0f,      "",      false,  kOpt_timing_mode,      15,  9 },
     { 0x048C, "fx.dry_mix",              "fx.dry_mix",              "Dry Mix",               "DRY",       Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      1.0f,      "norm",  false,  nullptr,                0,  9 },
     { 0x048D, "fx.jpfx_mix",             "fx.jpfx_mix",             "JPFX Mix",              "JPFX",      Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      1.0f,      "norm",  false,  nullptr,                0,  9 },
+    { 0x048E, "fx.delay_engine",         "fx.delay_engine",         "Delay Engine",          "DLY ENG",   Widget::Combo, Type::Select,      Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "",      false,  kOpt_delay_engine,      2,  9 },
+    { 0x048F, "fx.delay_tone",           "fx.delay_tone",           "Delay Tone",            "DLY TONE",  Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Log, 500.0f,    12000.0f,  0.0f,      12000.0f,  "Hz",    false,  nullptr,                0,  9 },
+    { 0x0490, "fx.delay_sat",            "fx.delay_sat",            "Delay Saturation",      "DLY SAT",   Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  9 },
+    { 0x0491, "fx.delay_wow",            "fx.delay_wow",            "Delay Wow",             "DLY WOW",   Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  9 },
+    { 0x0492, "fx.delay_flutter",        "fx.delay_flutter",        "Delay Flutter",         "DLY FLUT",  Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  9 },
+    { 0x0493, "fx.delay_wow_rate",       "fx.delay_wow_rate",       "Delay Wow Rate",        "DLY WOWR",  Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Log, 0.2f,      3.0f,      0.0f,      0.7f,      "Hz",    false,  nullptr,                0,  9 },
     { 0x0500, "velocity.amp_sens",       "velocity.amp_sens",       "Vel Amp",               "AMP",       Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0, 10 },
     { 0x0501, "velocity.filter_sens",    "velocity.filter_sens",    "Vel Filter",            "FILTER",    Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0, 10 },
     { 0x0502, "velocity.env_sens",       "velocity.env_sens",       "Vel Env",               "ENV",       Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0, 10 },
@@ -392,6 +418,7 @@ static constexpr Param kParams[kNumParams] = {
     { 0x0583, "voice.unison_detune",     "voice.unison_detune",     "Unison Det",            "UNI DET",   Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0, 11 },
     { 0x0584, "voice.bend_range",        "voice.bend_range",        "Bend Range",            "BEND",      Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      24.0f,     0.0f,      2.0f,      "st",    false,  nullptr,                0, 11 },
     { 0x0585, "voice.amp_level",         "voice.amp_level",         "Amp Level",             "AMP LVL",   Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      1.0f,      "norm",  false,  nullptr,                0, 11 },
+    { 0x0586, "glide.mode",              "glide.mode",              "Glide Mode",            "GLIDE",     Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      2.0f,      0.0f,      0.0f,      "",      false,  kOpt_glide_mode,        3, 11 },
     { 0x0600, "clock.clock_source",      "clock.clock_source",      "Clock Src",             "SRC",       Widget::Combo, Type::Select,      Scope::Performance,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "",      false,  kOpt_clock_source,      2, 12 },
     { 0x0601, "clock.tempo",             "clock.tempo",             "BPM",                   "BPM",       Widget::Knob,  Type::Continuous,  Scope::Performance,  Curve::Lin, 40.0f,     300.0f,    0.0f,      170.0f,    "BPM",   false,  nullptr,                0, 12 },
     { 0x0680, "seq.enable",              "seq.enable",              "Seq Enable",            "ON",        Widget::Toggle, Type::Toggle,      Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "",      false,  nullptr,                0, 13 },
@@ -403,7 +430,7 @@ static constexpr Param kParams[kNumParams] = {
     { 0x0686, "seq.depth",               "seq.depth",               "Seq Depth",             "DEPTH",     Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, -1.0f,     1.0f,      0.0f,      0.0f,      "norm",  true,   nullptr,                0, 13 },
     { 0x0687, "seq.retrigger",           "seq.retrigger",           "Seq Retrig",            "RETRIG",    Widget::Toggle, Type::Toggle,      Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "",      false,  nullptr,                0, 13 },
     { 0x0688, "seq.rate",                "seq.rate",                "Seq Rate",              "RATE",      Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.5f,      "norm",  false,  nullptr,                0, 13 },
-    { 0x0689, "seq.timing_mode",         "seq.timing_mode",         "Seq Sync",              "SYNC",      Widget::Combo, Type::Select,      Scope::PatchShared,  Curve::Lin, 0.0f,      11.0f,     0.0f,      0.0f,      "",      false,  kOpt_timing_mode,      12, 13 },
+    { 0x0689, "seq.timing_mode",         "seq.timing_mode",         "Seq Sync",              "SYNC",      Widget::Combo, Type::Select,      Scope::PatchShared,  Curve::Lin, 0.0f,      14.0f,     0.0f,      0.0f,      "",      false,  kOpt_timing_mode,      15, 13 },
     { 0x068A, "seq.step_select",         "seq.step_select",         "Step Select",           "SEL",       Widget::Knob,  Type::Int,         Scope::PatchShared,  Curve::Lin, 1.0f,      16.0f,     0.0f,      1.0f,      "",      false,  nullptr,                0, 13 },
     { 0x068B, "seq.step_value",          "seq.step_value",          "Step Value",            "VAL",       Widget::Knob,  Type::Continuous,  Scope::PatchShared,  Curve::Lin, 0.0f,      1.0f,      0.0f,      0.5f,      "norm",  false,  nullptr,                0, 13 },
     { 0x068C, "seq.aux_destination",     "seq.aux_destination",     "Seq Aux Dest",          "AUX DEST",  Widget::Combo, Type::Select,      Scope::PatchShared,  Curve::Lin, 0.0f,      5.0f,      0.0f,      0.0f,      "",      false,  kOpt_seq_aux_dest,      6, 13 },
@@ -460,12 +487,13 @@ static constexpr Param kParams[kNumParams] = {
     { 0x0786, "reverb.freeze",           "reverb.freeze",           "Rev Freeze",            "FREEZE",    Widget::Toggle, Type::Toggle,      Scope::Global,       Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "",      false,  nullptr,                0, 15 },
     { 0x0787, "reverb.lowpass",          "reverb.lowpass",          "Rev Lo Pass",           "LO PASS",   Widget::Knob,  Type::Continuous,  Scope::Global,       Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0, 15 },
     { 0x0788, "reverb.hipass",           "reverb.hipass",           "Rev Hi Pass",           "HI PASS",   Widget::Knob,  Type::Continuous,  Scope::Global,       Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0, 15 },
+    { 0x0789, "reverb.algorithm",        "reverb.algorithm",        "Reverb Algorithm",      "REV ALGO",  Widget::Combo, Type::Select,      Scope::Global,       Curve::Lin, 0.0f,      2.0f,      0.0f,      0.0f,      "",      false,  kOpt_reverb_algo,       3, 15 },
     { 0x0800, "master.volume",           "master.volume",           "Master Volume",         "VOLUME",    Widget::Knob,  Type::Continuous,  Scope::Global,       Curve::Lin, 0.0f,      1.0f,      0.0f,      0.8f,      "norm",  false,  nullptr,                0, 16 },
     { 0x0880, "arp.enable",              "arp.enable",              "Arp Enable",            "ON",        Widget::Toggle, Type::Toggle,      Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "",      false,  nullptr,                0, 17 },
     { 0x0881, "arp.mode",                "arp.mode",                "Arp Mode",              "MODE",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      6.0f,      0.0f,      0.0f,      "",      false,  kOpt_arp_mode,          7, 17 },
     { 0x0882, "arp.octaves",             "arp.octaves",             "Arp Octaves",           "OCT",       Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      3.0f,      0.0f,      0.0f,      "",      false,  kOpt_arp_octaves,       4, 17 },
     { 0x0883, "arp.latch",               "arp.latch",               "Arp Latch",             "LATCH",     Widget::Toggle, Type::Toggle,      Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "",      false,  nullptr,                0, 17 },
-    { 0x0884, "arp.rate",                "arp.rate",                "Arp Rate",              "RATE",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      11.0f,     0.0f,      7.0f,      "",      false,  kOpt_timing_mode,      12, 17 },
+    { 0x0884, "arp.rate",                "arp.rate",                "Arp Rate",              "RATE",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      14.0f,     0.0f,      7.0f,      "",      false,  kOpt_timing_mode,      15, 17 },
     { 0x0885, "arp.free_hz",             "arp.free_hz",             "Arp Free Rate",         "FREE",      Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.5f,      "norm",  false,  nullptr,                0, 17 },
     { 0x0886, "arp.gate_length",         "arp.gate_length",         "Arp Gate",              "GATE",      Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.5f,      "norm",  false,  nullptr,                0, 17 },
     { 0x0887, "arp.swing",               "arp.swing",               "Arp Swing",             "SWING",     Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.5f,      "norm",  false,  nullptr,                0, 17 },

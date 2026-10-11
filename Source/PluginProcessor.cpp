@@ -96,9 +96,27 @@ static const juce::Identifier kSkinPathProp("skinPath");
 juce::AudioProcessor::BusesProperties
 JT8000ControllerProcessor::makeBusLayout()
 {
-    return BusesProperties()
-        .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
+    // VST3 keeps a dummy stereo INPUT + OUTPUT: Ableton refuses to load a VST3
+    // with no audio buses (ABLDEV-00057). Standalone needs no input at all —
+    // declaring one makes JUCE's StandaloneFilterWindow open the microphone and
+    // show the yellow "Audio input is muted to avoid feedback loop" banner. So
+    // in standalone we declare OUTPUT only: no input bus, no feedback risk, no
+    // banner, and nothing else changes (processBlock never reads input).
+    //
+    // wrapperType isn't set on the object yet (this runs in the ctor initialiser
+    // list), but the wrapper sets the global PluginHostType before constructing
+    // the processor, so getPluginLoadedAs() is already correct here.
+    const bool standalone =
+        juce::PluginHostType::getPluginLoadedAs()
+            == juce::AudioProcessor::wrapperType_Standalone;
+
+    auto props = BusesProperties()
         .withOutput("Output", juce::AudioChannelSet::stereo(), true);
+
+    if (! standalone)
+        props = props.withInput("Input", juce::AudioChannelSet::stereo(), true);
+
+    return props;
 }
 
 // =============================================================================
@@ -113,6 +131,10 @@ JT8000ControllerProcessor::JT8000ControllerProcessor()
 
     if (!apvts.state.hasProperty(kPatchNameProp))
         apvts.state.setProperty(kPatchNameProp, "Init Patch", nullptr);
+
+    // Typed-keyboard notes: the state forwards note on/off to the collector,
+    // which the audio thread drains in processBlock.
+    _kbState.addListener(&_kbCollector);
 
 #if JT8000_HAS_ENGINE
     // Eager construction (~700 KB heap + table setup) so the unique_ptr never
@@ -133,6 +155,7 @@ void JT8000ControllerProcessor::prepareToPlay(double sampleRate, int)
     // The collector must know the rate before addMessageToQueue is legal;
     // reset also discards stale cross-thread MIDI from before the restart.
     _engineInbox.reset(sampleRate);
+    _kbCollector.reset(sampleRate);
     _inboxReady.store(true);
 }
 
@@ -144,7 +167,7 @@ void JT8000ControllerProcessor::setEngineMode(int m)
     // (message thread) would break the single-caller contract.
 }
 #else
-void JT8000ControllerProcessor::prepareToPlay(double, int) {}
+void JT8000ControllerProcessor::prepareToPlay(double sampleRate, int) { _kbCollector.reset(sampleRate); }
 #endif
 
 JT8000ControllerProcessor::~JT8000ControllerProcessor()
@@ -233,6 +256,12 @@ void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midiMessages)
 {
     buffer.clear();
+
+    /* Merge computer-keyboard notes into the incoming MIDI so they follow the
+     * exact same path as hardware MIDI - reaching the engine (Sound/Both) and
+     * the MIDI output (Controller/Both). Drained per block, timestamped by the
+     * collector. */
+    _kbCollector.removeNextBlockOfMessages(midiMessages, buffer.getNumSamples());
 
     juce::MidiBuffer filtered;
 

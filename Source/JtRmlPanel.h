@@ -47,15 +47,48 @@ class JtRmlPanel : public juce::Component
 public:
     /* Authoring size. The editor should size itself from these. */
     static constexpr int kDesignW = 3840;
-    static constexpr int kDesignH = 2160;
+    static constexpr int kDesignH = 2400;            // matches jt8000.rcss body
+                                                     // (was 2160 — the mismatch
+                                                     // letterboxed the panel and
+                                                     // wasted vertical space)
     static constexpr int kNativeW = kDesignW / 2;    // 1920
-    static constexpr int kNativeH = kDesignH / 2;    // 1080
+    static constexpr int kNativeH = kDesignH / 2;    // 1200
 
     explicit JtRmlPanel(juce::AudioProcessorValueTreeState& state);
     ~JtRmlPanel() override;
 
     /* Shown on the LCD's top line. Call from wherever the patch name changes. */
     void setPatchName(const juce::String& name);
+
+    /* Writes the LCD's two lines directly (skin elements "lcd1"/"lcd2"). This
+     * is the single-writer entry the menu drives; the internal hover/knob
+     * readout is diverted through onLcdText so it can no longer write the LCD
+     * behind the menu's back. */
+    void setLcd(const juce::String& line1, const juce::String& line2);
+
+    /* When set, the binding's hover/knob readout is delivered HERE instead of
+     * being written to the LCD. The editor points this at the menu's
+     * showTransient(), making the menu the only thing that touches the LCD.
+     * Left null, the readout writes the LCD directly (original behaviour). */
+    std::function<void(const juce::String& line1,
+                       const juce::String& line2)> onLcdText;
+
+    /* The LCD's on-screen rectangle in this panel's coordinates (the union of
+     * the two line elements). Empty until the skin has laid out. Used to float
+     * the encoder strip beside it. */
+    juce::Rectangle<int> lcdBounds() const;
+
+    /* A neutral (mid-arc) frame of the knob sprite strip, decoded as an image,
+     * so the encoder can rotate the SAME artwork the panel knobs use. The frame
+     * is discovered by pattern from the embedded assets (no hard-coded name),
+     * and an invalid image is returned if no knob sprite is found — the caller
+     * then keeps its procedural fallback. */
+    juce::Image knobImage() const;
+
+    /* The top LCD line's rectangle in this panel's coordinates. The editor
+     * floats a transparent, double-click-to-edit label here so the patch name
+     * is renamed on the LCD itself instead of a duplicate header field. */
+    juce::Rectangle<int> lcdLine1Bounds() const;
 
     /* "main", "reverb", "seq", "arp", "setup". Also driven by the skin's own
      * layer buttons once those are emitted as elements. */

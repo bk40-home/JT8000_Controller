@@ -5,6 +5,26 @@
 </head>
 <body class="main">
 
+	<!-- Section outlines: coloured rounded borders, per-view -->
+	<div class="secbox v-main v-shift v-reverb v-seq v-arp v-setup" style="left:26dp; top:280dp; width:1242dp; height:943dp;"/>
+	<div class="secbox v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1279dp; top:280dp; width:1168dp; height:840dp;"/>
+	<div class="secbox v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2533dp; top:280dp; width:854dp; height:352dp;"/>
+	<div class="secbox v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2533dp; top:694dp; width:1168dp; height:507dp;"/>
+	<div class="secbox v-main v-shift v-reverb v-seq v-arp v-setup" style="left:26dp; top:1246dp; width:351dp; height:442dp;"/>
+	<div class="secbox v-main v-shift v-reverb v-seq v-arp v-setup" style="left:496dp; top:1246dp; width:351dp; height:442dp;"/>
+	<div class="secbox v-main v-shift v-reverb v-seq v-arp v-setup" style="left:966dp; top:1246dp; width:507dp; height:442dp;"/>
+	<div class="secbox v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1593dp; top:1246dp; width:1050dp; height:570dp;"/>
+	<div class="secbox v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2689dp; top:1246dp; width:1050dp; height:570dp;"/>
+	<div class="secbox v-main v-shift" style="left:26dp; top:1844dp; width:537dp; height:352dp;"/>
+	<div class="secbox v-main v-shift" style="left:809dp; top:1844dp; width:773dp; height:352dp;"/>
+	<div class="secbox v-main v-shift" style="left:1749dp; top:1844dp; width:929dp; height:352dp;"/>
+	<div class="secbox v-main v-shift" style="left:2846dp; top:1844dp; width:541dp; height:352dp;"/>
+	<div class="secbox v-reverb" style="left:26dp; top:1844dp; width:1428dp; height:352dp;"/>
+	<div class="secbox v-seq" style="left:26dp; top:1844dp; width:3631dp; height:382dp;"/>
+	<div class="secbox v-arp" style="left:26dp; top:1844dp; width:3631dp; height:392dp;"/>
+	<div class="secbox v-setup" style="left:26dp; top:1844dp; width:3048dp; height:352dp;"/>
+
+
 	<div class="band"/>
 
 	<!-- Header lettering -->
@@ -23,13 +43,13 @@
 	<div class="btncap shiftcap" style="left:2928dp; top:134dp; width:300dp; text-align:center;">SHIFT</div>
 
 	<!-- Lettering -->
-	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:48dp; top:302dp; width:1237dp; text-align:center;">OSCILLATOR 1</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:72.0dp; top:368.0dp; width:460dp; text-align:left;">WAVE</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:385.0dp; top:368.0dp; width:460dp; text-align:left;">TUNING &amp; PWM</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:855.0dp; top:368.0dp; width:460dp; text-align:left;">SUPERSAW</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:72.0dp; top:638.0dp; width:460dp; text-align:left;">FEEDBACK</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:424.0dp; top:638.0dp; width:460dp; text-align:left;">DC &amp; RING</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1051.0dp; top:638.0dp; width:460dp; text-align:left;">ARBITRARY</div>
+	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:48dp; top:302dp; width:1237dp; text-align:left;">OSCILLATOR 1</div>
+	<div class="grouplabel" style="left:72.0dp; top:368.0dp; width:460dp; text-align:left;">WAVE</div>
+	<div class="grouplabel" style="left:385.0dp; top:368.0dp; width:460dp; text-align:left;">TUNING &amp; PWM</div>
+	<div class="grouplabel" style="left:855.0dp; top:368.0dp; width:460dp; text-align:left;">SUPERSAW</div>
+	<div class="grouplabel" style="left:72.0dp; top:638.0dp; width:460dp; text-align:left;">FEEDBACK</div>
+	<div class="grouplabel" style="left:424.0dp; top:638.0dp; width:460dp; text-align:left;">DC &amp; RING</div>
+	<div class="grouplabel" style="left:1051.0dp; top:638.0dp; width:460dp; text-align:left;">ARBITRARY</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:72.0dp; top:416.0dp; width:156dp; text-align:left;">WAVE</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:228.0dp; top:416.0dp; width:117dp; text-align:left;">OCTAVE</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:385.0dp; top:416.0dp; width:156dp; text-align:center;">FINE</div>
@@ -46,13 +66,13 @@
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1051.0dp; top:686.0dp; width:156dp; text-align:center;">ARB BANK</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1051.0dp; top:904.0dp; width:156dp; text-align:center;">ARB INDEX</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1051.0dp; top:1122.0dp; width:195dp; text-align:left;">MOD DEST</div>
-	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1301dp; top:302dp; width:1237dp; text-align:center;">OSCILLATOR 2</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1325.0dp; top:368.0dp; width:460dp; text-align:left;">WAVE</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1638.0dp; top:368.0dp; width:460dp; text-align:left;">TUNING &amp; PWM</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2108.0dp; top:368.0dp; width:460dp; text-align:left;">SUPERSAW</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1325.0dp; top:638.0dp; width:460dp; text-align:left;">FEEDBACK</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1677.0dp; top:638.0dp; width:460dp; text-align:left;">DC &amp; RING</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2265.0dp; top:638.0dp; width:460dp; text-align:left;">ARBITRARY</div>
+	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1301dp; top:302dp; width:1237dp; text-align:left;">OSCILLATOR 2</div>
+	<div class="grouplabel" style="left:1325.0dp; top:368.0dp; width:460dp; text-align:left;">WAVE</div>
+	<div class="grouplabel" style="left:1638.0dp; top:368.0dp; width:460dp; text-align:left;">TUNING &amp; PWM</div>
+	<div class="grouplabel" style="left:2108.0dp; top:368.0dp; width:460dp; text-align:left;">SUPERSAW</div>
+	<div class="grouplabel" style="left:1325.0dp; top:638.0dp; width:460dp; text-align:left;">FEEDBACK</div>
+	<div class="grouplabel" style="left:1677.0dp; top:638.0dp; width:460dp; text-align:left;">DC &amp; RING</div>
+	<div class="grouplabel" style="left:2265.0dp; top:638.0dp; width:460dp; text-align:left;">ARBITRARY</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1325.0dp; top:416.0dp; width:156dp; text-align:left;">WAVE</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1481.0dp; top:416.0dp; width:117dp; text-align:left;">OCTAVE</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1638.0dp; top:416.0dp; width:156dp; text-align:center;">FINE</div>
@@ -68,16 +88,16 @@
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2147.0dp; top:686.0dp; width:117dp; text-align:left;">OSC SYNC</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2265.0dp; top:686.0dp; width:156dp; text-align:center;">ARB BANK</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2265.0dp; top:904.0dp; width:156dp; text-align:center;">ARB INDEX</div>
-	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2555dp; top:302dp; width:1237dp; text-align:center;">MIXER</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2579.0dp; top:368.0dp; width:460dp; text-align:left;">LEVELS</div>
+	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2555dp; top:302dp; width:1237dp; text-align:left;">MIXER</div>
+	<div class="grouplabel" style="left:2579.0dp; top:368.0dp; width:460dp; text-align:left;">LEVELS</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2579.0dp; top:416.0dp; width:156dp; text-align:center;">BALANCE</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2735.0dp; top:416.0dp; width:156dp; text-align:center;">OSC1</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2892.0dp; top:416.0dp; width:156dp; text-align:center;">OSC2</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:3049.0dp; top:416.0dp; width:156dp; text-align:center;">SUB</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:3205.0dp; top:416.0dp; width:156dp; text-align:center;">NOISE</div>
-	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2555dp; top:716dp; width:1237dp; text-align:center;">FILTER</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2579.0dp; top:782.0dp; width:460dp; text-align:left;">CORE</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2579.0dp; top:1052.0dp; width:460dp; text-align:left;">ENGINE</div>
+	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2555dp; top:716dp; width:1237dp; text-align:left;">FILTER</div>
+	<div class="grouplabel" style="left:2579.0dp; top:782.0dp; width:460dp; text-align:left;">CORE</div>
+	<div class="grouplabel" style="left:2579.0dp; top:1052.0dp; width:460dp; text-align:left;">ENGINE</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2579.0dp; top:830.0dp; width:156dp; text-align:center;">CUTOFF</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2735.0dp; top:830.0dp; width:156dp; text-align:center;">RESO</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2892.0dp; top:830.0dp; width:156dp; text-align:center;">ENV AMT</div>
@@ -89,8 +109,8 @@
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2735.0dp; top:1100.0dp; width:195dp; text-align:left;">MODE</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2931.0dp; top:1100.0dp; width:235dp; text-align:left;">VA TYPE</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:3166.0dp; top:1100.0dp; width:195dp; text-align:left;">XPANDER</div>
-	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:48dp; top:1268dp; width:454dp; text-align:center;">AMP ENVELOPE</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:72.0dp; top:1334.0dp; width:460dp; text-align:left;">MAIN</div>
+	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:48dp; top:1268dp; width:454dp; text-align:left;">AMP ENVELOPE</div>
+	<div class="grouplabel" style="left:72.0dp; top:1334.0dp; width:460dp; text-align:left;">MAIN</div>
 	<div class="legend shiftalt v-shift" style="left:72.0dp; top:1674.0dp; width:78dp; text-align:center;">A CRV</div>
 	<div class="legend v-main v-reverb v-seq v-arp v-setup" style="left:72.0dp; top:1674.0dp; width:78dp; text-align:center;">ATT</div>
 	<div class="legend shiftalt v-shift" style="left:150.0dp; top:1674.0dp; width:78dp; text-align:center;">D CRV</div>
@@ -98,8 +118,8 @@
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:228.0dp; top:1674.0dp; width:78dp; text-align:center;">SUS</div>
 	<div class="legend shiftalt v-shift" style="left:307.0dp; top:1674.0dp; width:78dp; text-align:center;">R CRV</div>
 	<div class="legend v-main v-reverb v-seq v-arp v-setup" style="left:307.0dp; top:1674.0dp; width:78dp; text-align:center;">REL</div>
-	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:518dp; top:1268dp; width:454dp; text-align:center;">FILTER ENVELOPE</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:542.0dp; top:1334.0dp; width:460dp; text-align:left;">MAIN</div>
+	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:518dp; top:1268dp; width:454dp; text-align:left;">FILTER ENVELOPE</div>
+	<div class="grouplabel" style="left:542.0dp; top:1334.0dp; width:460dp; text-align:left;">MAIN</div>
 	<div class="legend shiftalt v-shift" style="left:542.0dp; top:1674.0dp; width:78dp; text-align:center;">A CRV</div>
 	<div class="legend v-main v-reverb v-seq v-arp v-setup" style="left:542.0dp; top:1674.0dp; width:78dp; text-align:center;">ATT</div>
 	<div class="legend shiftalt v-shift" style="left:620.0dp; top:1674.0dp; width:78dp; text-align:center;">D CRV</div>
@@ -107,8 +127,8 @@
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:698.0dp; top:1674.0dp; width:78dp; text-align:center;">SUS</div>
 	<div class="legend shiftalt v-shift" style="left:777.0dp; top:1674.0dp; width:78dp; text-align:center;">R CRV</div>
 	<div class="legend v-main v-reverb v-seq v-arp v-setup" style="left:777.0dp; top:1674.0dp; width:78dp; text-align:center;">REL</div>
-	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:988dp; top:1268dp; width:611dp; text-align:center;">PITCH ENVELOPE</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1012.0dp; top:1334.0dp; width:460dp; text-align:left;">MAIN</div>
+	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:988dp; top:1268dp; width:611dp; text-align:left;">PITCH ENVELOPE</div>
+	<div class="grouplabel" style="left:1012.0dp; top:1334.0dp; width:460dp; text-align:left;">MAIN</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1012.0dp; top:1382.0dp; width:156dp; text-align:center;">DEPTH</div>
 	<div class="legend shiftalt v-shift" style="left:1168.0dp; top:1674.0dp; width:78dp; text-align:center;">A CRV</div>
 	<div class="legend v-main v-reverb v-seq v-arp v-setup" style="left:1168.0dp; top:1674.0dp; width:78dp; text-align:center;">ATT</div>
@@ -117,9 +137,9 @@
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1325.0dp; top:1674.0dp; width:78dp; text-align:center;">SUS</div>
 	<div class="legend shiftalt v-shift" style="left:1403.0dp; top:1674.0dp; width:78dp; text-align:center;">R CRV</div>
 	<div class="legend v-main v-reverb v-seq v-arp v-setup" style="left:1403.0dp; top:1674.0dp; width:78dp; text-align:center;">REL</div>
-	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1615dp; top:1268dp; width:1081dp; text-align:center;">LFO 1</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1639.0dp; top:1334.0dp; width:460dp; text-align:left;">CORE</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2148.0dp; top:1334.0dp; width:460dp; text-align:left;">PER-DESTINATION</div>
+	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:1615dp; top:1268dp; width:1081dp; text-align:left;">LFO 1</div>
+	<div class="grouplabel" style="left:1639.0dp; top:1334.0dp; width:460dp; text-align:left;">CORE</div>
+	<div class="grouplabel" style="left:2148.0dp; top:1334.0dp; width:460dp; text-align:left;">PER-DESTINATION</div>
 	<div class="legend shiftalt v-shift" style="left:1639.0dp; top:1382.0dp; width:156dp; text-align:center;">DEPTH</div>
 	<div class="legend v-main v-reverb v-seq v-arp v-setup" style="left:1639.0dp; top:1382.0dp; width:156dp; text-align:center;">FREQ</div>
 	<div class="legend shiftalt v-shift" style="left:1795.0dp; top:1382.0dp; width:156dp; text-align:left;">DESTINATION</div>
@@ -130,9 +150,9 @@
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2461.0dp; top:1382.0dp; width:156dp; text-align:center;">PWM</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2148.0dp; top:1600.0dp; width:156dp; text-align:center;">AMP</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2304.0dp; top:1600.0dp; width:156dp; text-align:center;">DELAY</div>
-	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2711dp; top:1268dp; width:1081dp; text-align:center;">LFO 2</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2735.0dp; top:1334.0dp; width:460dp; text-align:left;">CORE</div>
-	<div class="grouplabel v-main v-shift v-reverb v-seq v-arp v-setup" style="left:3244.0dp; top:1334.0dp; width:460dp; text-align:left;">PER-DESTINATION</div>
+	<div class="sectitle v-main v-shift v-reverb v-seq v-arp v-setup" style="left:2711dp; top:1268dp; width:1081dp; text-align:left;">LFO 2</div>
+	<div class="grouplabel" style="left:2735.0dp; top:1334.0dp; width:460dp; text-align:left;">CORE</div>
+	<div class="grouplabel" style="left:3244.0dp; top:1334.0dp; width:460dp; text-align:left;">PER-DESTINATION</div>
 	<div class="legend shiftalt v-shift" style="left:2735.0dp; top:1382.0dp; width:156dp; text-align:center;">DEPTH</div>
 	<div class="legend v-main v-reverb v-seq v-arp v-setup" style="left:2735.0dp; top:1382.0dp; width:156dp; text-align:center;">FREQ</div>
 	<div class="legend shiftalt v-shift" style="left:2891.0dp; top:1382.0dp; width:156dp; text-align:left;">DESTINATION</div>
@@ -143,32 +163,32 @@
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:3557.0dp; top:1382.0dp; width:156dp; text-align:center;">PWM</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:3244.0dp; top:1600.0dp; width:156dp; text-align:center;">AMP</div>
 	<div class="legend v-main v-shift v-reverb v-seq v-arp v-setup" style="left:3400.0dp; top:1600.0dp; width:156dp; text-align:center;">DELAY</div>
-	<div class="sectitle v-main v-shift" style="left:48dp; top:1866dp; width:767dp; text-align:center;">EQ &amp; DRIVE</div>
-	<div class="grouplabel v-main v-shift" style="left:72.0dp; top:1932.0dp; width:460dp; text-align:left;">EQ &amp; DRIVE</div>
+	<div class="sectitle v-main v-shift" style="left:48dp; top:1866dp; width:767dp; text-align:left;">EQ &amp; DRIVE</div>
+	<div class="grouplabel" style="left:72.0dp; top:1932.0dp; width:460dp; text-align:left;">EQ &amp; DRIVE</div>
 	<div class="legend v-main v-shift" style="left:72.0dp; top:1980.0dp; width:156dp; text-align:center;">BASS</div>
 	<div class="legend v-main v-shift" style="left:228.0dp; top:1980.0dp; width:156dp; text-align:center;">TREBLE</div>
 	<div class="legend v-main v-shift" style="left:385.0dp; top:1980.0dp; width:156dp; text-align:left;">DRIVE</div>
-	<div class="sectitle v-main v-shift" style="left:831dp; top:1866dp; width:924dp; text-align:center;">MOD FX</div>
-	<div class="grouplabel v-main v-shift" style="left:855.0dp; top:1932.0dp; width:460dp; text-align:left;">MODULATION</div>
+	<div class="sectitle v-main v-shift" style="left:831dp; top:1866dp; width:924dp; text-align:left;">MOD FX</div>
+	<div class="grouplabel" style="left:855.0dp; top:1932.0dp; width:460dp; text-align:left;">MODULATION</div>
 	<div class="legend v-main v-shift" style="left:855.0dp; top:1980.0dp; width:156dp; text-align:center;">MIX</div>
 	<div class="legend v-main v-shift" style="left:1011.0dp; top:1980.0dp; width:156dp; text-align:center;">RATE</div>
 	<div class="legend v-main v-shift" style="left:1168.0dp; top:1980.0dp; width:156dp; text-align:center;">FEEDBACK</div>
 	<div class="legend v-main v-shift" style="left:1325.0dp; top:1980.0dp; width:235dp; text-align:left;">TYPE</div>
-	<div class="sectitle v-main v-shift" style="left:1771dp; top:1866dp; width:1081dp; text-align:center;">DELAY</div>
-	<div class="grouplabel v-main v-shift" style="left:1795.0dp; top:1932.0dp; width:460dp; text-align:left;">DELAY</div>
+	<div class="sectitle v-main v-shift" style="left:1771dp; top:1866dp; width:1081dp; text-align:left;">DELAY</div>
+	<div class="grouplabel" style="left:1795.0dp; top:1932.0dp; width:460dp; text-align:left;">DELAY</div>
 	<div class="legend v-main v-shift" style="left:1795.0dp; top:1980.0dp; width:156dp; text-align:center;">TIME</div>
 	<div class="legend v-main v-shift" style="left:1951.0dp; top:1980.0dp; width:156dp; text-align:center;">MIX</div>
 	<div class="legend v-main v-shift" style="left:2108.0dp; top:1980.0dp; width:156dp; text-align:center;">FEEDBACK</div>
 	<div class="legend v-main v-shift" style="left:2265.0dp; top:1980.0dp; width:235dp; text-align:left;">TYPE</div>
 	<div class="legend v-main v-shift" style="left:2500.0dp; top:1980.0dp; width:156dp; text-align:left;">SYNC</div>
-	<div class="sectitle v-main v-shift" style="left:2868dp; top:1866dp; width:924dp; text-align:center;">OUTPUT MIX</div>
-	<div class="grouplabel v-main v-shift" style="left:2892.0dp; top:1932.0dp; width:460dp; text-align:left;">OUTPUT</div>
+	<div class="sectitle v-main v-shift" style="left:2868dp; top:1866dp; width:924dp; text-align:left;">OUTPUT MIX</div>
+	<div class="grouplabel" style="left:2892.0dp; top:1932.0dp; width:460dp; text-align:left;">OUTPUT</div>
 	<div class="legend v-main v-shift" style="left:2892.0dp; top:1980.0dp; width:156dp; text-align:center;">DRY MIX</div>
 	<div class="legend v-main v-shift" style="left:3048.0dp; top:1980.0dp; width:156dp; text-align:center;">JPFX MIX</div>
 	<div class="legend v-main v-shift" style="left:3205.0dp; top:1980.0dp; width:156dp; text-align:center;">VOLUME</div>
-	<div class="sectitle v-reverb" style="left:48dp; top:1866dp; width:3744dp; text-align:center;">REVERB</div>
-	<div class="grouplabel v-reverb" style="left:72.0dp; top:1932.0dp; width:460dp; text-align:left;">TANK</div>
-	<div class="grouplabel v-reverb" style="left:855.0dp; top:1932.0dp; width:460dp; text-align:left;">EXTENDED</div>
+	<div class="sectitle v-reverb" style="left:48dp; top:1866dp; width:3744dp; text-align:left;">REVERB</div>
+	<div class="grouplabel" style="left:72.0dp; top:1932.0dp; width:460dp; text-align:left;">TANK</div>
+	<div class="grouplabel" style="left:855.0dp; top:1932.0dp; width:460dp; text-align:left;">EXTENDED</div>
 	<div class="legend v-reverb" style="left:72.0dp; top:1980.0dp; width:156dp; text-align:center;">SIZE</div>
 	<div class="legend v-reverb" style="left:228.0dp; top:1980.0dp; width:156dp; text-align:center;">DAMP</div>
 	<div class="legend v-reverb" style="left:385.0dp; top:1980.0dp; width:156dp; text-align:center;">LODAMP</div>
@@ -178,12 +198,12 @@
 	<div class="legend v-reverb" style="left:1012.0dp; top:1980.0dp; width:156dp; text-align:center;">LOWPASS</div>
 	<div class="legend v-reverb" style="left:1168.0dp; top:1980.0dp; width:156dp; text-align:center;">HIPASS</div>
 	<div class="legend v-reverb" style="left:1325.0dp; top:1980.0dp; width:117dp; text-align:left;">FREEZE</div>
-	<div class="sectitle v-seq" style="left:48dp; top:1866dp; width:3744dp; text-align:center;">STEP SEQUENCER</div>
-	<div class="grouplabel v-seq" style="left:72.0dp; top:1932.0dp; width:460dp; text-align:left;">CONTROL</div>
-	<div class="grouplabel v-seq" style="left:698.0dp; top:1932.0dp; width:460dp; text-align:left;">ROUTING</div>
-	<div class="grouplabel v-seq" style="left:1325.0dp; top:1932.0dp; width:460dp; text-align:left;">TIMING</div>
-	<div class="grouplabel v-seq" style="left:1677.0dp; top:1932.0dp; width:460dp; text-align:left;">AUX LANE</div>
-	<div class="grouplabel v-seq" style="left:2030.0dp; top:1932.0dp; width:460dp; text-align:left;">STEPS</div>
+	<div class="sectitle v-seq" style="left:48dp; top:1866dp; width:3744dp; text-align:left;">STEP SEQUENCER</div>
+	<div class="grouplabel" style="left:72.0dp; top:1932.0dp; width:460dp; text-align:left;">CONTROL</div>
+	<div class="grouplabel" style="left:698.0dp; top:1932.0dp; width:460dp; text-align:left;">ROUTING</div>
+	<div class="grouplabel" style="left:1325.0dp; top:1932.0dp; width:460dp; text-align:left;">TIMING</div>
+	<div class="grouplabel" style="left:1677.0dp; top:1932.0dp; width:460dp; text-align:left;">AUX LANE</div>
+	<div class="grouplabel" style="left:2030.0dp; top:1932.0dp; width:460dp; text-align:left;">STEPS</div>
 	<div class="legend v-seq" style="left:72.0dp; top:1980.0dp; width:156dp; text-align:center;">STEPS</div>
 	<div class="legend v-seq" style="left:228.0dp; top:1980.0dp; width:156dp; text-align:center;">GATE LENGTH</div>
 	<div class="legend v-seq" style="left:385.0dp; top:1980.0dp; width:156dp; text-align:center;">SLIDE</div>
@@ -197,10 +217,10 @@
 	<div class="legend v-seq" style="left:1677.0dp; top:1980.0dp; width:156dp; text-align:center;">AUX DEPTH</div>
 	<div class="legend v-seq" style="left:1834.0dp; top:1980.0dp; width:195dp; text-align:left;">AUX DESTINATION</div>
 	<div class="legend v-seq" style="left:2030.0dp; top:1980.0dp; width:1605dp; text-align:left;">PATTERN</div>
-	<div class="sectitle v-arp" style="left:48dp; top:1866dp; width:3744dp; text-align:center;">ARPEGGIATOR</div>
-	<div class="grouplabel v-arp" style="left:72.0dp; top:1932.0dp; width:460dp; text-align:left;">CONTROL</div>
-	<div class="grouplabel v-arp" style="left:659.0dp; top:1932.0dp; width:460dp; text-align:left;">TIMING</div>
-	<div class="grouplabel v-arp" style="left:1442.0dp; top:1932.0dp; width:460dp; text-align:left;">STEPS</div>
+	<div class="sectitle v-arp" style="left:48dp; top:1866dp; width:3744dp; text-align:left;">ARPEGGIATOR</div>
+	<div class="grouplabel" style="left:72.0dp; top:1932.0dp; width:460dp; text-align:left;">CONTROL</div>
+	<div class="grouplabel" style="left:659.0dp; top:1932.0dp; width:460dp; text-align:left;">TIMING</div>
+	<div class="grouplabel" style="left:1442.0dp; top:1932.0dp; width:460dp; text-align:left;">STEPS</div>
 	<div class="legend v-arp" style="left:72.0dp; top:1980.0dp; width:117dp; text-align:left;">ENABLE</div>
 	<div class="legend v-arp" style="left:189.0dp; top:1980.0dp; width:117dp; text-align:left;">LATCH</div>
 	<div class="legend v-arp" style="left:307.0dp; top:1980.0dp; width:195dp; text-align:left;">MODE</div>
@@ -211,14 +231,14 @@
 	<div class="legend v-arp" style="left:1129.0dp; top:1980.0dp; width:156dp; text-align:left;">RATE</div>
 	<div class="legend v-arp" style="left:1286.0dp; top:1980.0dp; width:156dp; text-align:center;">STEP COUNT</div>
 	<div class="legend v-arp" style="left:1442.0dp; top:1980.0dp; width:2193dp; text-align:left;">PATTERN</div>
-	<div class="sectitle v-setup" style="left:48dp; top:1866dp; width:3744dp; text-align:center;">SETUP</div>
-	<div class="grouplabel v-setup" style="left:72.0dp; top:1932.0dp; width:460dp; text-align:left;">LAYER MODE</div>
-	<div class="grouplabel v-setup" style="left:816.0dp; top:1932.0dp; width:460dp; text-align:left;">VOICE SPLIT</div>
-	<div class="grouplabel v-setup" style="left:1207.0dp; top:1932.0dp; width:460dp; text-align:left;">GLIDE</div>
-	<div class="grouplabel v-setup" style="left:1521.0dp; top:1932.0dp; width:460dp; text-align:left;">VOICE</div>
-	<div class="grouplabel v-setup" style="left:1834.0dp; top:1932.0dp; width:460dp; text-align:left;">BEND &amp; LEVEL</div>
-	<div class="grouplabel v-setup" style="left:2187.0dp; top:1932.0dp; width:460dp; text-align:left;">CLOCK</div>
-	<div class="grouplabel v-setup" style="left:2578.0dp; top:1932.0dp; width:460dp; text-align:left;">SENSITIVITY</div>
+	<div class="sectitle v-setup" style="left:48dp; top:1866dp; width:3744dp; text-align:left;">SETUP</div>
+	<div class="grouplabel" style="left:72.0dp; top:1932.0dp; width:460dp; text-align:left;">LAYER MODE</div>
+	<div class="grouplabel" style="left:816.0dp; top:1932.0dp; width:460dp; text-align:left;">VOICE SPLIT</div>
+	<div class="grouplabel" style="left:1207.0dp; top:1932.0dp; width:460dp; text-align:left;">GLIDE</div>
+	<div class="grouplabel" style="left:1521.0dp; top:1932.0dp; width:460dp; text-align:left;">VOICE</div>
+	<div class="grouplabel" style="left:1834.0dp; top:1932.0dp; width:460dp; text-align:left;">BEND &amp; LEVEL</div>
+	<div class="grouplabel" style="left:2187.0dp; top:1932.0dp; width:460dp; text-align:left;">CLOCK</div>
+	<div class="grouplabel" style="left:2578.0dp; top:1932.0dp; width:460dp; text-align:left;">SENSITIVITY</div>
 	<div class="legend v-setup" style="left:72.0dp; top:1980.0dp; width:156dp; text-align:left;">MODE</div>
 	<div class="legend v-setup" style="left:228.0dp; top:1980.0dp; width:156dp; text-align:left;">EDIT TARGET</div>
 	<div class="legend v-setup" style="left:385.0dp; top:1980.0dp; width:195dp; text-align:left;">MIDI CHANNEL A</div>

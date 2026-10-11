@@ -168,6 +168,12 @@ private:
     juce::MidiMessageCollector  _engineInbox;   // cross-thread MIDI funnel —
                                                 // audio thread is the ONLY
                                                 // caller into _engine itself
+
+    /* Computer-keyboard note entry (standalone). _kbState is toggled by the
+     * editor on the message thread; _kbCollector timestamps those events for
+     * the audio thread, which merges them into the MIDI stream in processBlock. */
+    juce::MidiKeyboardState     _kbState;
+    juce::MidiMessageCollector  _kbCollector;
     std::atomic<int> _engineMode {
     #if JT8000_SYNTH_TARGET
         kModeSound                              // the Synth target exists to sound
@@ -247,6 +253,12 @@ public:
      * thread and state save reads it. */
     juce::String getSkinPath() const;
     void         setSkinPath(const juce::String& path);
+
+    /* Computer-keyboard note entry (standalone). The editor drives this
+     * MidiKeyboardState from key presses; processBlock merges the resulting
+     * note messages into the MIDI stream, so typed notes reach BOTH the engine
+     * and the MIDI output (Controller, Sound and Both modes alike). */
+    juce::MidiKeyboardState& getKeyboardState() { return _kbState; }
 
     // --- MIDI input (standalone) --------------------------------------------
     // Multi-input: any number of devices may be open simultaneously. The

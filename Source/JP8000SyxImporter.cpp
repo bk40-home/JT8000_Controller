@@ -23,22 +23,207 @@
 
 #include "JP8000SyxImporter.h"
 #include "PluginProcessor.h"
+#include "JtBridgeTable.h"     // JtBridge::paramIdFromV1Cc — CURRENT generated
+                               // v1-CC -> 14-bit ParamID bridge (CI-checked)
+#include "gen/JtParamTable.h"  // JtParams::kParams — the REAL APVTS rows (dotted juceId)
 
 namespace JP8000SyxImporter
 {
 
 // =========================================================================
-// Waveform / enum remap tables — mirrors JP-8000 SysEx value encoding
+// CC -> real APVTS parameter bridge  (Phase J1 rename fix)
 //
-// The JP-8000 uses its own enum values for waveforms, filter types, etc.
-// These tables map from JP-8000 SysEx byte → JT-8000 CC value.
+// The APVTS is built from JtParams::kParams (gen/JtParamTable.h), keyed by
+// DOTTED juceId ("osc1.wave").  The importer's slot/default tables are keyed
+// by MIDI CC number.  The old setParamByCC looked the CC up in CCDefinitions.h
+// and called apvts.getParameter(underscore_id) — but no such id exists in the
+// APVTS after the underscore->dot rename, so every write silently no-op'd and
+// nothing loaded.
+//
+// The bridge MUST be JtBridgeTable.h (generated from params.yaml, CI-checked):
+//   - ParamMapJuce::paramId14ForCC carries the OLD Phase-0 ParamID scheme and
+//     resolves only 22/79 importer CCs against today's table — it is stale.
+//   - JtBridge::paramIdFromV1Cc is the current seam and resolves 77/79.
+//     (The two it doesn't map — CC 72/73 — are not real params in any table;
+//      they were vestigial reverb defaults and correctly no-op.)
+//
+// Returns nullptr for any CC with no mapping OR no matching JtParams row, so
+// the caller skips it silently — never writes to a wrong parameter.
 // =========================================================================
-static constexpr uint8_t kOsc1WaveMap[]   = { 123, 77, 13, 68, 113, 86, 31 };
-static constexpr uint8_t kOsc2WaveMap[]   = { 113, 31, 86, 68 };
-static constexpr uint8_t kLfo1WaveMap[]   = { 0, 1, 2, 3 };
-static constexpr uint8_t kFilterTypeMap[] = { 2, 1, 0 };
-static constexpr uint8_t kMfxTypeMap[]    = { 10, 10, 0, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0 };
-static constexpr uint8_t kDelayTypeMap[]  = { 2, 0, 3, 1, 1 };
+static const JtParams::Param* jtParamForCC(int cc)
+{
+    const int32_t pid = JtBridge::paramIdFromV1Cc(static_cast<uint16_t>(cc));
+    if (pid < 0) return nullptr;                   // -1 = unmapped v1 CC
+
+    for (int i = 0; i < JtParams::kNumParams; ++i)
+        if (JtParams::kParams[i].paramId == static_cast<uint16_t>(pid))
+            return &JtParams::kParams[i];
+
+    return nullptr;
+}
+
+// =========================================================================
+// Reset-to-init helpers  (Delivery 3 — safe defaults)
+//
+// A JP-8000 import only writes ~77 params; the other ~147 patch-scope params
+// keep whatever the PREVIOUS patch left in the APVTS (arp running, sequencer
+// playing, stale envelope curves, LFO2, etc.), and sendBankDump then ships
+// those stale values to the engine.  The fix: before applying a patch, reset
+// the relevant params to their generated default (JtParams::Param::def — the
+// single source of truth from params.yaml, same values a fresh plugin uses).
+//
+// Split by scope so the two-pass performance load stays correct (decision 2,
+// signed off 2026-09-14):
+//   - Patch scope   : per-layer — reset on EVERY loadPatch pass.
+//   - PatchShared    : reverb/FX/seq singletons — reset ONCE before both
+//                      passes, or pass 2 (lower) would wipe the upper's
+//                      shared FX out of its own bank dump.
+// Performance and Global scope are never reset here (master vol, USB/MIDI
+// channels, perf mode/split stay put).
+//
+// The write is type-correct, mirroring setParamByCC: Select/Int/Toggle set
+// via convertTo0to1(def); Continuous stores engineering units, and def is in
+// engineering units, so convertTo0to1(def) is correct for every type.
+// =========================================================================
+static void resetScopeToDefaults(juce::AudioProcessorValueTreeState& apvts,
+                                 bool patchScope, bool sharedScope)
+{
+    for (int i = 0; i < JtParams::kNumParams; ++i)
+    {
+        const JtParams::Param& p = JtParams::kParams[i];
+
+        const bool isPatch  = (p.scope == JtParams::Scope::Patch);
+        const bool isShared = (p.scope == JtParams::Scope::PatchShared);
+        if (!((patchScope && isPatch) || (sharedScope && isShared)))
+            continue;
+
+        if (auto* pi = apvts.getParameter(p.juceId))
+            pi->setValueNotifyingHost(pi->convertTo0to1(p.def));
+    }
+}
+
+/** Reset per-layer (Patch scope) params to their generated defaults. */
+static void resetLayerToDefaults(juce::AudioProcessorValueTreeState& apvts)
+{
+    resetScopeToDefaults(apvts, /*patchScope=*/true, /*sharedScope=*/false);
+}
+
+/** Reset singleton (PatchShared scope) params — reverb/FX/seq — to defaults. */
+static void resetSharedToDefaults(juce::AudioProcessorValueTreeState& apvts)
+{
+    resetScopeToDefaults(apvts, /*patchScope=*/false, /*sharedScope=*/true);
+}
+
+// =========================================================================
+// Waveform / enum remap tables — JP-8000 SysEx enum byte → JT-8000 CHOICE
+// INDEX (decision A, Delivery 2b, 2026-09-14).
+//
+// setParamByCC writes Select params by choice index into the row's option
+// list (gen/JtParamTable.h), so every value here is a 0-based INDEX, not a
+// CC byte.  Index columns are annotated with the JT option they select so a
+// future edit is a one-line change.  JP source order is per the JP-8000 spec;
+// any entry marked (?) needs confirming against a real .syx dump.
+// =========================================================================
+
+// OSC1 wave — JP order: 0 SuperSaw, 1 Tri-mod, 2 Noise, 3 Feedback,
+//                       4 Square,   5 Saw,     6 Triangle
+// JT osc1.wave options: 0 SIN,1 SAW,2 SQR,3 TRI,4 ARB,5 PLS,6 rSAW,7 S&H,
+//   8 vTRI,9 BLS,10 rBLS,11 BLSQ,12 BLP,13 SSAW,14 vSAW,15 BLvSAW,16 vTRI,17 BLvTRI
+static constexpr uint8_t kOsc1WaveMap[] = {
+    13,   // 0 SuperSaw   -> SSAW
+    17,   // 1 Tri-mod    -> BLvTRI
+     1,   // 2 Noise      -> SAW (neutral; mix.noise raised separately, M9)
+     1,   // 3 Feedback   -> SAW (osc1.feedback_* set separately, M10)
+     5,   // 4 Square     -> PLS
+    15,   // 5 Saw        -> BLvSAW
+     3,   // 6 Triangle   -> TRI
+};
+
+// OSC2 wave — JP order: 0 Square, 1 Saw, 2 Triangle, 3 S&H (M12)
+static constexpr uint8_t kOsc2WaveMap[] = {
+     5,   // 0 Square   -> PLS
+    15,   // 1 Saw      -> BLvSAW
+     3,   // 2 Triangle -> TRI
+     7,   // 3 S&H      -> S&H   (M12 — edit here if the JP order differs)
+};
+
+// LFO1 wave — JP order (M13): 0 triangle, 1 saw, 2 pulse, 3 S&H
+// JT lfo1.waveform options: 0 SIN,1 TRI,2 SAW,3 SQR,4 S&H,5 NOISE
+static constexpr uint8_t kLfo1WaveMap[] = {
+     1,   // 0 triangle -> TRI
+     2,   // 1 saw      -> SAW
+     3,   // 2 pulse    -> SQR (pulse ~= square)
+     4,   // 3 S&H      -> S&H
+};
+
+// Filter type — JP order: 0 LPF, 1 HPF, 2 BPF (?)  M15:
+//   12 dB HP/BP -> SVF;  24 dB LP -> Diode.  Slope byte ignored for now.
+// JT filter.va_type: 0 SVF LP2,1 SVF HP2,2 SVF BP2,...,8 Diode LP4,...
+static constexpr uint8_t kFilterTypeMap[] = {
+     8,   // 0 LPF -> Diode LP4  (24 dB LP per M15)
+     1,   // 1 HPF -> SVF HP2    (12 dB HP)
+     2,   // 2 BPF -> SVF BP2    (12 dB BP)
+};
+
+// Multi-FX type: JP-8000 chorus-type byte -> JT fx.mod_effect enum index.
+//
+// The JP-8000 has 12 "Chorus Type" variants (manual order below); the JT
+// FxChain has 11 mod presets grouped by family (Chorus 1-3, Flanger 1-3,
+// Phaser 1-4, Super Chorus), and fx.mod_effect enum index = preset index + 1
+// (0 = OFF).  The JT presets were designed to reproduce the JP set, so this
+// maps each JP type to the JT preset that models it, matched by the FxChain
+// preset DSP (rate / depth / feedback / taps).  Confirmed anchor: JP byte 0
+// (Super Chorus SLW) -> JT Super Chorus (11), the 3-tap preset.
+//
+//   JP byte  JP-8000 type          -> JT enum  (JT preset)
+//   0        Super Chorus SLW         11        SUPER_CHORUS (3-tap, slow)  [confirmed]
+//   1        Super Chorus MID          3        CHORUS3 (deep, rate 0.30)
+//   2        Super Chorus FST          1        CHORUS1 (shallow, rate 0.80)
+//   3        Super Chorus CLR          2        CHORUS2 (medium)
+//   4        Flanger Slow              4        FLANGER1 (rate 0.30)
+//   5        Flanger Deep              6        DEEP_FLANGER (fb 0.85)
+//   6        Flanger Fast              5        FLANGER2
+//   7        Deep Phasing SLW          9        PHASER3 (slow, rate 0.10)
+//   8        Jet Phasing               8        PHASER2 (rate 0.50)
+//   9        Twisting                 10        PHASER4 (fast, rate 1.20)
+//   10       Freeze Phase 1            7        PHASER1 (metallic short)
+//   11       Freeze Phase 2            7        PHASER1 (JT has 4 phasers; shares)
+//
+// Families are exact; within-family variant is a best sonic match and may be
+// fine-tuned by ear later.  MFX level 0 is silent regardless of type (JP
+// behaviour), so no OFF-gating is needed.  Any byte > 11 clamps to Super
+// Chorus in applyTransform.
+static constexpr uint8_t kMfxTypeMap[] = {
+    11,   // 0  Super Chorus SLW -> Super Chorus  (confirmed)
+     3,   // 1  Super Chorus MID -> Chorus 3
+     1,   // 2  Super Chorus FST -> Chorus 1
+     2,   // 3  Super Chorus CLR -> Chorus 2
+     4,   // 4  Flanger Slow     -> Flanger 1
+     6,   // 5  Flanger Deep     -> Flanger 3 (Deep Flanger)
+     5,   // 6  Flanger Fast     -> Flanger 2
+     9,   // 7  Deep Phasing SLW -> Phaser 3
+     8,   // 8  Jet Phasing      -> Phaser 2
+    10,   // 9  Twisting         -> Phaser 4
+     7,   // 10 Freeze Phase 1   -> Phaser 1
+     7,   // 11 Freeze Phase 2   -> Phaser 1
+};
+
+// Delay type -> JT fx.delay_effect index.
+// JT fx.delay_effect table order: 0 OFF, 1 Mono Short, 2 Mono Long,
+//                                 3 Pan L>R, 4 Pan R>L, 5 Pan Stereo.
+//
+// Verified against the JE-8086 reference bank (2026-09-19):
+//   JP delay byte 0 -> Pan L>R (3)   [AirwavePadHigh, confirmed by Kris]
+// The whole bank uses byte 0, so only that entry is confirmed; the others are
+// FIXME placeholders in JP order.  A patch with delay MIX 0 is silent
+// regardless of type (JP behaviour), so no OFF-gating is needed.
+static constexpr uint8_t kDelayTypeMap[] = {
+     3,   // 0 -> Pan L>R      (confirmed)
+     4,   // 1 -> Pan R>L      (FIXME: unconfirmed)
+     5,   // 2 -> Pan Stereo   (FIXME: unconfirmed)
+     1,   // 3 -> Mono Short   (FIXME: unconfirmed)
+     2,   // 4 -> Mono Long    (FIXME: unconfirmed)
+};
 
 // =========================================================================
 // Safe defaults for JT-8000-exclusive parameters
@@ -49,20 +234,23 @@ static constexpr uint8_t kDelayTypeMap[]  = { 2, 0, 3, 1, 1 };
 // =========================================================================
 struct DefaultCC { int cc; int val; };
 static constexpr DefaultCC kDefaults[] = {
-    // Filter engine & topology — default to OBXa mode
-    // J3c import policy (signed off 2026-07-20): every JP-8000 import
-    // lands on the DIODE ladder — engine VA Bank (cc113 -> idx 1) with
-    // va_type Diode LP4 (cc115 -> 64 = bucket midpoint of idx 8/17).
-    // Q2c: the JP's -12/-24 dB slope byte (0x28) is deliberately ignored;
-    // both slopes map to Diode LP4.
-    {113, 96}, {115, 64}, {111, 0}, {114, 0}, {117, 0}, {84, 64},
+    // Filter engine & topology — J3c import policy (signed off 2026-07-20):
+    // every JP-8000 import lands on the DIODE ladder — engine VA Bank +
+    // va_type Diode LP4.  Q2c: the JP's -12/-24 dB slope byte (0x28) is
+    // ignored (M15 revisits this).  Decision A: these Select defaults are
+    // CHOICE INDICES now, not table-A bucket-midpoint bytes:
+    //   cc113 filter.engine  -> 1 (VA Bank)      [was 96, clamped]
+    //   cc115 filter.va_type -> 8 (Diode LP4)    [was 64 -> MoogDV BP, WRONG]
+    //   cc114 filter.obxa_xpander_mode -> 0 (LP4)
+    // cc111/117 (obxa multimode / res-mod depth) and cc84 (octave) are
+    // Continuous — 0 and 64 stay as raw bytes.
+    {113, 1}, {115, 8}, {111, 0}, {114, 0}, {117, 0}, {84, 64},
     // Cross-mod & sync — JP-8000 has no cross-mod
     {19, 0}, {20, 0},
-    // Drive — bypass
-    // J3c: saturation defaults SOFT ("eq soft with mid settings") — 32 is
-    // kDriveLUT's idx-1 value.  Bass/treble pre-set to 64 (flat) before the
-    // slot walk; the dump's own tone bytes (0x3B/0x3C) then overwrite.
-    {16, 32}, {99, 64}, {100, 64},
+    // Drive — J3c: saturation defaults SOFT.  Decision A: fx.drive is a Select,
+    // so this is the choice INDEX 1 (Soft) [was 32 -> Hard, WRONG].  Bass/treble
+    // (Continuous) pre-set to 64 (flat); the dump's tone bytes overwrite later.
+    {16, 1}, {99, 64}, {100, 64},
     // Reverb — all JT-8000-exclusive
     {72, 0}, {73, 0}, {94, 127},
     {95, 64}, {96, 36}, {97, 0}, {98, 64},
@@ -70,10 +258,12 @@ static constexpr DefaultCC kDefaults[] = {
     // J3c: the audition path runs entirely through the JPFX chain — dry
     // mix hard 0, JPFX mix full.
     {74, 0}, {76, 127},
-    // Oscillator mix — CRITICAL: SuperSaw (wave 0) maps Ctrl1 to CC 77
-    // (SUPERSAW_DETUNE), not CC 60 (OSC1_MIX). If CC 60 isn't explicitly
-    // set, it stays at 0 = silence. Default both mix levels here.
-    {60, 127}, {61, 0},
+    // Oscillator mix — the JP-8000 has no separate osc level knobs: both
+    // oscillators run at FULL and OSC BALANCE (0x17 -> mix.balance) crossfades
+    // between them.  So both JT levels must be full on import, or moving the
+    // balance toward OSC2 produces silence (osc2 level was 0).  mix.balance
+    // then carries the JP balance byte via slot 0x17.
+    {60, 127}, {61, 127},
     // Sub / noise
     {59, 0}, {58, 0},
     // Unison detune
@@ -82,8 +272,12 @@ static constexpr DefaultCC kDefaults[] = {
     {67, 0}, {68, 0},
     // LFO PWM depths — not in JP-8000 SysEx
     {35, 0}, {40, 0},
-    // LFO master depths — bipolar centre
-    {55, 64}, {52, 64},
+    // LFO master depths (lfo1.depth CC55 / lfo2.depth CC52): NOT defaulted
+    // here.  These are Continuous 0..1 (def 0.0), and the old {55,64},{52,64}
+    // ("bipolar centre") pinned both to 0.5 under decision A — pinning every
+    // import to half-depth and bleeding LFO2 mod.  resetLayerToDefaults leaves
+    // them at 0.0; the engine owns LFO2 depth (per-destination amount, common
+    // rate, linked to mod-wheel).
     // LFO2 dest — none
     {53, 0},
     // Step sequencer — off
@@ -170,7 +364,10 @@ static constexpr Slot kSlots[] = {
     {0x3D, 103, Xform::MfxType},          // Multi-FX type
     {0x3E, 104, Xform::Direct},           // Multi-FX level / mix
     {0x3F, 107, Xform::DelayType},        // Delay type
-    {0x40, 110, Xform::Direct},           // Delay time
+    // 0x40 Delay time is NOT a simple slot: fx.delay_time is a Log 10..10000 ms
+    // param, and the JP time byte scales to a per-type maximum (manual: Pan
+    // 625 ms, Short 156 ms, Mono Long 1250 ms).  Sending the raw byte through
+    // the log curve gave ~1900 ms for a JP 472 ms echo.  Handled in Step 5.
     {0x41, 109, Xform::Direct},           // Delay feedback
     {0x42, 108, Xform::Direct},           // Delay mix
 
@@ -200,12 +397,12 @@ static int applyTransform(Xform xf, uint8_t raw)
         case Xform::Bool127:       return (raw != 0) ? 127 : 0;
         case Xform::Signed64:      return raw;
         case Xform::Signed64ToUni: return clamp7(std::abs(static_cast<int>(raw) - 64) * 2);
-        case Xform::Osc1Wave:      return (raw < 7)  ? kOsc1WaveMap[raw]   : 86;
-        case Xform::Osc2Wave:      return (raw < 4)  ? kOsc2WaveMap[raw]   : 86;
-        case Xform::Lfo1Wave:      return (raw < 4)  ? kLfo1WaveMap[raw]   : 0;
-        case Xform::FilterType:    return (raw < 3)  ? kFilterTypeMap[raw]  : 0;
-        case Xform::MfxType:       return (raw < 13) ? kMfxTypeMap[raw]     : 0;
-        case Xform::DelayType:     return (raw < 5)  ? kDelayTypeMap[raw]   : 0;
+        case Xform::Osc1Wave:      return (raw < 7)  ? kOsc1WaveMap[raw]   : 1;  // fallback SAW
+        case Xform::Osc2Wave:      return (raw < 4)  ? kOsc2WaveMap[raw]   : 1;  // fallback SAW
+        case Xform::Lfo1Wave:      return (raw < 4)  ? kLfo1WaveMap[raw]   : 1;  // fallback TRI
+        case Xform::FilterType:    return (raw < 3)  ? kFilterTypeMap[raw] : 8;  // fallback Diode LP4
+        case Xform::MfxType:       return (raw < 12) ? kMfxTypeMap[raw]    : 11; // >11 -> Super Chorus (Kris)
+        case Xform::DelayType:     return (raw < 5)  ? kDelayTypeMap[raw]  : 3;  // fallback Pan L>R
         case Xform::Osc2Range:     return clamp7((static_cast<int>(raw) * 127 + 25) / 50);
         case Xform::Osc2Fine:      return clamp7((static_cast<int>(raw) * 127 + 50) / 100);
         case Xform::MonoMode:      return (raw == 0) ? 0 : 64;
@@ -213,36 +410,45 @@ static int applyTransform(Xform xf, uint8_t raw)
     return raw;
 }
 
-/** Map JP-8000 OSC1 waveform index → which CC carries Ctrl1. */
+/** Map JP-8000 OSC1 waveform index → which CC carries Ctrl1.
+ *  M8/M18: on the JP-8000 Ctrl1 is the waveSHAPE control for most waves, so it
+ *  maps to osc1.shape_dc (CC 87 = shape/PWM DC offset).  SuperSaw is the
+ *  exception — its Ctrl1 is detune (CC 77).  JP OSC1 order:
+ *  0 SuperSaw, 1 Tri-mod, 2 Noise, 3 Feedback, 4 Square, 5 Saw, 6 Triangle. */
 static int osc1Ctrl1CC(uint8_t wave)
 {
     switch (wave)
     {
-        case 0:              return 77;   // SuperSaw → SS Detune
-        case 1: case 2:
-        case 4: case 6:      return 60;   // PW/Square/etc → OSC1 Level
-        default:              return 0;    // no Ctrl1
+        case 0:              return 77;   // SuperSaw   → SS Detune
+        case 1:                           // Tri-mod    → shape/PWM DC
+        case 4:                           // Square     → shape/PWM DC
+        case 5: case 6:      return 87;   // Saw/Triangle → shape/PWM DC (osc1.shape_dc)
+        default:              return 0;    // Noise/Feedback: no Ctrl1 shape
     }
 }
 
-/** Map JP-8000 OSC1 waveform index → which CC carries Ctrl2. */
+/** Map JP-8000 OSC1 waveform index → which CC carries Ctrl2.
+ *  JP OSC1 order: 0 SuperSaw, 1 Tri-mod, 2 Noise, 3 Feedback, 4 Square,
+ *  5 Saw, 6 Triangle.  SuperSaw Ctrl2 = SS Mix (CC 78). */
 static int osc1Ctrl2CC(uint8_t wave)
 {
     switch (wave)
     {
         case 0:              return 78;   // SuperSaw → SS Mix
-        case 1: case 2:      return 123;  // PW/Square → FB Amount
-        default:              return 0;
+        default:              return 0;    // other waves: Ctrl2 handled elsewhere
     }
 }
 
-/** Map JP-8000 OSC2 waveform index → which CC carries Ctrl1. */
+/** Map JP-8000 OSC2 waveform index → which CC carries Ctrl1.
+ *  M18: Ctrl1 → osc2.shape_dc (CC 89 = shape/PWM DC offset).
+ *  JP OSC2 order: 0 Square, 1 Saw, 2 Triangle, 3 S&H. */
 static int osc2Ctrl1CC(uint8_t wave)
 {
     switch (wave)
     {
-        case 0: case 1:      return 61;   // Pulse/Triangle → OSC2 Level
-        default:              return 0;
+        case 0: case 1:
+        case 2:              return 89;   // Square/Saw/Triangle → shape/PWM DC (osc2.shape_dc)
+        default:              return 0;    // S&H: no Ctrl1 shape
     }
 }
 
@@ -583,23 +789,68 @@ ParsedBank parseFile(const uint8_t* buf, size_t len, bool isMidi)
 // =========================================================================
 // Public: setParamByCC
 //
-// The value is a v1 CC byte; plainFromCCByte (CCDefinitions.h) converts it
-// for whatever shape the row has — choice, int-lattice, or raw.
+// Writes one imported value into the genuine APVTS row for `cc`.  The value's
+// DOMAIN depends on the target row's type (decision A, 2026-09-14):
+//
+//   Continuous (Knob/Fader) : `value` is a 0..127 wire byte.  The plugin's
+//                             value law is linear (norm = byte/127) — the
+//                             firmware owns any curve — so this mirrors
+//                             sendBankDump()/parameterChanged() exactly.
+//   Select   (Combo)        : `value` is a CHOICE INDEX (0..optionCount-1).
+//                             Clamped into range, then normalised by the
+//                             AudioParameterChoice's own law.
+//   Toggle   (Bool)         : `value` is 0/off or nonzero(>=64)/on.
+//   Int      (seq steps …)  : `value` is the REAL integer (e.g. 1..16).
+//
+// The per-enum remap tables (kOsc1WaveMap, kOsc2WaveMap, kLfo1WaveMap,
+// kFilterTypeMap, kMfxTypeMap, kDelayTypeMap) now hold JT choice INDICES
+// (Delivery 2b), so Select rows land on the intended option directly.  Any
+// entry still marked (?) in those tables' comments needs the JP byte order
+// confirmed against a real .syx dump.
 // =========================================================================
 
 void setParamByCC(juce::AudioProcessorValueTreeState& apvts, int cc, int value)
 {
-    const CCParam* p = findParamByCC(cc);
-    if (p == nullptr) return;
+    const JtParams::Param* jp = jtParamForCC(cc);
+    if (jp == nullptr) return;                 // CC has no ParamID -> skip
 
-    auto* pi = apvts.getParameter(p->id);
-    if (pi == nullptr) return;
+    auto* pi = apvts.getParameter(jp->juceId);
+    if (pi == nullptr) return;                 // defensive; should not happen
 
-    // Shared value law (Phase J1) — the JP-8000 bytes are v1 CC bytes, so
-    // plainFromCCByte lands them on the right choice index / int lattice /
-    // raw value for whatever shape the row has TODAY (osc pitch became a
-    // 5-way select in J1; this call site needed no change to follow).
-    const float normVal = pi->convertTo0to1(plainFromCCByte(*p, juce::jlimit(0, 127, value)));
+    float normVal = 0.0f;
+
+    switch (jp->type)
+    {
+        case JtParams::Type::Select:
+        {
+            // Decision A: `value` is a choice index. Clamp into the option
+            // list so a stale remap byte still lands on a real option.
+            const int maxIdx = juce::jmax(0, (int)jp->optionCount - 1);
+            normVal = pi->convertTo0to1((float)juce::jlimit(0, maxIdx, value));
+            break;
+        }
+        case JtParams::Type::Toggle:
+        {
+            // Accept either 0/127 (wire byte) or 0/1 (index): >=64 -> on.
+            normVal = pi->convertTo0to1(value >= 64 ? 1.0f : 0.0f);
+            break;
+        }
+        case JtParams::Type::Int:
+        {
+            // Int-lattice (e.g. seq steps 1..16): value is the real integer.
+            // convertTo0to1 clamps to the AudioParameterInt's own range.
+            normVal = pi->convertTo0to1((float)value);
+            break;
+        }
+        case JtParams::Type::Continuous:
+        default:
+        {
+            // Linear 7-bit law: 0..127 wire byte -> 0..1 normalised. Same
+            // conversion the whole plugin uses (norm01ToWire7 inverse).
+            normVal = (float)juce::jlimit(0, 127, value) / 127.0f;
+            break;
+        }
+    }
 
     pi->beginChangeGesture();
     pi->setValueNotifyingHost(normVal);
@@ -630,7 +881,16 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
              ? buf[idx] : 0;
     };
 
-    // Step 1: set JT-8000-exclusive defaults
+    // Step 0: reset per-layer (Patch scope) params to their generated
+    // defaults so anything this JP patch does NOT set returns to init
+    // instead of keeping the previous patch's value (arp/seq/curves/LFO2
+    // etc.).  PatchShared (reverb/FX/seq singletons) is reset separately by
+    // the caller — once, before any layer pass — so a performance's two
+    // passes don't wipe each other's shared FX.
+    resetLayerToDefaults(apvts);
+
+    // Step 1: set JT-8000-exclusive defaults (JP-import overrides applied
+    // ON TOP of the init reset — VA Bank + Diode LP4, JPFX routing, etc.).
     for (const auto& def : kDefaults)
         setParamByCC(apvts, def.cc, def.val);
 
@@ -667,13 +927,55 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
         auto latticeIdx = [](int semis)
         { return juce::jlimit(0, 4, juce::roundToInt((float)semis / 12.0f) + 2); };
 
-        setParamByCC(apvts, 41, choiceIndexToCC(latticeIdx(shiftSemis), 5, nullptr));
-        setParamByCC(apvts, 42, choiceIndexToCC(latticeIdx(shiftSemis + rangeSemis), 5, nullptr));
+        // osc[12].pitch_offset are 5-option Selects.  Decision A: setParamByCC
+        // wants the CHOICE INDEX (0..4) directly — the old choiceIndexToCC()
+        // wrapper produced a CC byte for the retired table-A value law.
+        setParamByCC(apvts, 41, latticeIdx(shiftSemis));
+        setParamByCC(apvts, 42, latticeIdx(shiftSemis + rangeSemis));
     }
 
     if (int cc = osc1Ctrl1CC(osc1Wave)) setParamByCC(apvts, cc, d(0x1F));
     if (int cc = osc1Ctrl2CC(osc1Wave)) setParamByCC(apvts, cc, d(0x20));
     if (int cc = osc2Ctrl1CC(osc2Wave)) setParamByCC(apvts, cc, d(0x25));
+
+    // Step 3b: JP OSC1 waves with no direct JT wave equivalent (Delivery 2b).
+    //   M9  — JP Noise osc: the wave map lands osc1.wave on SAW (neutral); the
+    //         noise character comes from the JT mixer noise source instead.
+    //   M10 — JP Feedback osc: wave map lands SAW; the feedback character comes
+    //         from the JT osc feedback path.  0x1F (Ctrl1) is the JP feedback
+    //         amount for this wave.
+    // CC 59 = mix.noise, CC 123 = osc1.feedback_amount (both resolve via JtBridge).
+    if (osc1Wave == 2)                       // Noise
+    {
+        setParamByCC(apvts, 59, 127);        // mix.noise full
+        setParamByCC(apvts, 60, 0);          // mix.osc1 off — noise replaces it
+    }
+    else if (osc1Wave == 3)                  // Feedback
+    {
+        setParamByCC(apvts, 123, d(0x1F));   // osc1.feedback_amount from Ctrl1
+    }
+
+    // M14: LFO2 waveform is not carried in the JP-8000 patch, so import it as
+    // triangle.  Set via CC 63 (lfo2.waveform, index 1 = TRI).  Without this,
+    // resetLayerToDefaults leaves lfo2.waveform at def 0 = SIN.
+    setParamByCC(apvts, 63, 1);              // lfo2.waveform -> TRI
+
+    // M19: LFO1 → pitch modulation destination.  The JP routes LFO1 pitch to
+    // OSC1+2 / OSC2 / X-MOD; mix.pitch_mod_dest (0x0107) carries that on the
+    // JT.  LFO2 pitch is ALWAYS both, so it needs no destination write.
+    // mix.pitch_mod_dest is UNMAPPED in JtBridge (no v1 CC), so it is set
+    // directly by juceId, not via setParamByCC.
+    //   Option indices: [0] OSC1+2  [1] OSC2  [2] X-MOD
+    // TODO(JP dest byte): replace `0` below with the decoded JP destination.
+    //   The JP "LFO1 pitch destination" byte offset/encoding is not yet known;
+    //   until then every import defaults to OSC1+2 (index 0), matching the JP
+    //   power-on default.  One-line change once the offset is confirmed, e.g.
+    //     const int jpDest = /* map d(0xNN) -> 0/1/2 */;
+    {
+        const int pitchModDestIdx = 0;       // TODO(JP dest byte): 0=OSC1+2 default
+        if (auto* p = apvts.getParameter("mix.pitch_mod_dest"))
+            p->setValueNotifyingHost(p->convertTo0to1((float)pitchModDestIdx));
+    }
 
     // Step 4: JP-8000 MFX type overrides
     // MFX types 8-12 are distortion variants — map to JT-8000 drive CC
@@ -689,9 +991,48 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
         setParamByCC(apvts, 108, d(0x3E));    // delay mix from MFX level
         setParamByCC(apvts, 103, 0);          // mod FX off
     }
-    // MFX type 1 (Chorus with fixed rate) — set a sensible default rate
-    if (mfxType == 1)
-        setParamByCC(apvts, 105, 100);
+
+    // Step 5: import-time fixups (2026-09-19)
+    //
+    // fx.mod_rate (CC 105): the JT uses a PRESET mod type, so the modulator's
+    // own rate is not driven from the JP patch.  Its default is 0.5 (mid),
+    // which audibly fights the preset — force it to 0 on import.  (This also
+    // supersedes the old "MFX type 1 -> CC 105 = 100" line, which was the
+    // source of the mod rate sitting at mid.)
+    setParamByCC(apvts, 105, 0);
+
+    // lfo2.mod_wheel (0x040A, Toggle): added in firmware to mimic the JP-8000
+    // LFO2 behaviour (LFO2 amount follows the mod wheel).  Every JP import must
+    // enable it.  UNMAPPED in JtBridge (no v1 CC), so set directly by juceId.
+    if (auto* p = apvts.getParameter("lfo2.mod_wheel"))
+        p->setValueNotifyingHost(p->convertTo0to1(1.0f));   // index 1 = On
+
+    // fx.delay_time: AUTHENTIC JP-8000 delay time (import authenticity, signed
+    // off 2026-09-19).  The JP TIME knob scales 0..max where max depends on the
+    // delay TYPE (manual "Changing the type of delay"):
+    //   Pan L>R / Pan R>L          625 ms
+    //   Panning Short / Mono Short 156 ms
+    //   Mono Long                 1250 ms
+    // JP ms = (timeByte / 127) * typeMax.  fx.delay_time is a Log 10..10000 ms
+    // param, so we set it BY ENGINEERING VALUE (ms) via convertTo0to1 — the raw
+    // 0x40 byte through the log curve gave a wildly wrong time (~1900 ms for a
+    // 472 ms echo), which is why 0x40 is no longer a plain slot.
+    {
+        const uint8_t dType = d(0x3F);          // JP delay-type byte (0..4)
+        const uint8_t dTime = d(0x40);          // JP delay-time byte (0..127)
+        float typeMaxMs;
+        switch (dType)
+        {
+            case 2: typeMaxMs = 156.0f;  break;   // Panning Short
+            case 3: typeMaxMs = 156.0f;  break;   // Mono Short
+            case 4: typeMaxMs = 1250.0f; break;   // Mono Long
+            default: typeMaxMs = 625.0f; break;   // Panning L>R / R>L
+        }
+        const float ms = juce::jlimit(10.0f, 10000.0f,
+                                      (float) dTime / 127.0f * typeMaxMs);
+        if (auto* p = apvts.getParameter("fx.delay_time"))
+            p->setValueNotifyingHost(p->convertTo0to1(ms));
+    }
 }
 
 // =========================================================================
@@ -724,6 +1065,9 @@ void loadPatchToLayer(JT8000ControllerProcessor& proc,
     // The 90+ parameterChanged callbacks that fire from loadPatch() will
     // skip their SysEx send because of this flag.
     proc._suppressEcho.store(true);
+    // Reset shared (reverb/FX/seq) params to defaults ONCE before the patch;
+    // loadPatch() resets the per-layer params itself.
+    resetSharedToDefaults(proc.apvts);
     loadPatch(proc.apvts, patch);
     proc.setPatchName(patch.name);
     proc._suppressEcho.store(false);
@@ -755,20 +1099,35 @@ void loadPerformance(JT8000ControllerProcessor& proc,
                      const Performance& perf)
 {
     // ---- Set performance-global params via APVTS ----
-    // These are perf-scope CCs (140-146). With _suppressEcho they don't
-    // fire SET_PARAMs individually; they're picked up in the BANK_DUMP.
+    // Keyed by the REAL dotted juceIds (Phase J1 rename fix); the old
+    // underscore ids resolved to nullptr and silently dropped every perf
+    // write.  With _suppressEcho these don't fire SET_PARAMs individually;
+    // they're picked up in the BANK_DUMP.
+    //
+    // Value law per row TYPE (gen/JtParamTable.h):
+    //   perf.mode       (0x0700) Select  3 opt -> choice INDEX (0/1/2)
+    //   perf.split_note (0x0705) Continuous 0..127 -> raw MIDI note
+    //   perf.balance    (0x0706) Continuous 0..127 -> raw balance byte
+    // (The perf CCs 140/142/143 in ParamMapJuce map to stale 0x100x ParamIDs
+    //  with no JtParams row, so these are set by juceId directly, not via CC.)
 
     proc._suppressEcho.store(true);
 
-    if (auto* param = proc.apvts.getParameter("perf_mode"))
+    // Reset shared (reverb/FX/seq) params to defaults ONCE, before either
+    // layer pass.  loadPatch() resets per-layer params on each pass, but the
+    // PatchShared singletons must NOT be reset between passes or pass 2
+    // (lower) would drop the values pass 1 (upper) put in its bank dump.
+    resetSharedToDefaults(proc.apvts);
+
+    if (auto* param = proc.apvts.getParameter("perf.mode"))
         param->setValueNotifyingHost(param->convertTo0to1(
             static_cast<float>(static_cast<int>(perf.mode))));
 
-    if (auto* param = proc.apvts.getParameter("perf_split_note"))
+    if (auto* param = proc.apvts.getParameter("perf.split_note"))
         param->setValueNotifyingHost(param->convertTo0to1(
             static_cast<float>(perf.splitPoint)));
 
-    if (auto* param = proc.apvts.getParameter("perf_balance"))
+    if (auto* param = proc.apvts.getParameter("perf.balance"))
         param->setValueNotifyingHost(param->convertTo0to1(
             static_cast<float>(perf.balance)));
 

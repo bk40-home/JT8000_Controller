@@ -95,6 +95,14 @@ public:
      * elements rather than baked artwork because they change constantly. */
     void setElementText(const juce::String& id, const juce::String& text);
 
+    /* An element's on-screen rectangle in THIS component's pixel coordinates
+     * (RmlUi resolves dp through the density ratio, so the offset/size it
+     * reports are already component pixels). Empty if the document is not
+     * loaded or the id is unknown, or before the first layout pass has run.
+     * Used to float the encoder strip beside the LCD without hard-coding a
+     * position that the skin's scaling would break. */
+    juce::Rectangle<int> getElementBounds(const juce::String& id) const;
+
     /* Adds or removes a class on an element by id. Used for the voice dots and
      * the lit layer button, both of which are state rather than text. */
     void setElementClass(const juce::String& id, const juce::String& cls,

@@ -348,6 +348,25 @@ void JtRmlComponent::setElementText(const juce::String& id,
     }
 }
 
+juce::Rectangle<int> JtRmlComponent::getElementBounds(const juce::String& id) const
+{
+    if (m_document == nullptr)
+        return {};
+
+    Rml::Element* e = m_document->GetElementById(id.toStdString());
+    if (e == nullptr)
+        return {};
+
+    /* GetAbsoluteOffset()/GetOffset{Width,Height}() report pixels within the
+     * context, and the context is sized to this component (see resized()), so
+     * these ARE component coordinates. Same accessors JtRmlCombo uses to place
+     * its dropdown. */
+    const Rml::Vector2f pos = e->GetAbsoluteOffset();
+    const int w = (int) e->GetOffsetWidth();
+    const int h = (int) e->GetOffsetHeight();
+    return { (int) pos.x, (int) pos.y, w, h };
+}
+
 void JtRmlComponent::setElementClass(const juce::String& id,
                                      const juce::String& cls, const bool on)
 {

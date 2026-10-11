@@ -12,6 +12,9 @@
 
 #include "BinaryData.h"
 
+#include <map>
+#include <vector>
+
 namespace jt
 {
 
@@ -67,12 +70,17 @@ JtRmlPanel::JtRmlPanel(juce::AudioProcessorValueTreeState& state)
     m_binding = std::make_unique<JtRmlBinding>(m_state, *m_panel);
 
     /* The LCD's two lines are elements in the document, so the binding's
-     * readout lands on the panel instead of nowhere. */
+     * readout lands on the panel instead of nowhere. When a menu has claimed
+     * onLcdText, the readout is handed to it (shown only while the menu is
+     * idle) rather than written straight to the LCD — that is what stops the
+     * hover readout and the menu fighting over the two lines. */
     m_binding->onLcdChanged = [this](const juce::String& l1,
                                      const juce::String& l2)
     {
-        m_panel->setElementText("lcd1", l1);
-        m_panel->setElementText("lcd2", l2);
+        if (onLcdText)
+            onLcdText(l1, l2);
+        else
+            setLcd(l1, l2);
     };
 
     m_binding->syncAll();
@@ -198,6 +206,79 @@ void JtRmlPanel::setPatchName(const juce::String& name)
 {
     if (m_binding != nullptr)
         m_binding->setPatchName(name);
+}
+
+void JtRmlPanel::setLcd(const juce::String& line1, const juce::String& line2)
+{
+    if (m_panel == nullptr)
+        return;
+    m_panel->setElementText("lcd1", line1);
+    m_panel->setElementText("lcd2", line2);
+}
+
+juce::Rectangle<int> JtRmlPanel::lcdBounds() const
+{
+    if (m_panel == nullptr)
+        return {};
+
+    /* m_panel fills this component (see resized()), so its element coordinates
+     * are already this panel's coordinates. */
+    const auto r1 = m_panel->getElementBounds("lcd1");
+    const auto r2 = m_panel->getElementBounds("lcd2");
+    if (r1.isEmpty()) return r2;
+    if (r2.isEmpty()) return r1;
+    return r1.getUnion(r2);
+}
+
+juce::Rectangle<int> JtRmlPanel::lcdLine1Bounds() const
+{
+    return (m_panel != nullptr) ? m_panel->getElementBounds("lcd1")
+                                : juce::Rectangle<int>();
+}
+
+juce::Image JtRmlPanel::knobImage() const
+{
+    /* The knob art is ONE sprite sheet (knob_silver.png): 128 frames in a
+     * 16 x 8 grid, sliced by the RCSS @spritesheet — not separate files. So we
+     * find the sheet among the embedded assets (a PNG whose name mentions
+     * "knob"), decode it, and return a single mid-arc frame (index 64, which is
+     * row 4 / col 0 = pointer roughly upright) for the encoder to rotate. The
+     * grid is read from the image size (width/16 x height/8), so it survives a
+     * re-rendered sheet as long as it stays 16 x 8. */
+    const char* sheetMangled = nullptr;
+    for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
+    {
+        const char* mangled = BinaryData::namedResourceList[i];
+        const char* orig    = BinaryData::getNamedResourceOriginalFilename(mangled);
+        const juce::String name (orig != nullptr ? orig : mangled);
+        if (name.containsIgnoreCase("knob") && name.endsWithIgnoreCase(".png"))
+        {
+            sheetMangled = mangled;
+            break;
+        }
+    }
+    if (sheetMangled == nullptr)
+        return {};
+
+    int size = 0;
+    const char* data = BinaryData::getNamedResource(sheetMangled, size);
+    if (data == nullptr)
+        return {};
+
+    const juce::Image sheet = juce::ImageFileFormat::loadFrom(data, (size_t) size);
+    if (! sheet.isValid())
+        return {};
+
+    // 128 frames, 16 across x 8 down; frame 64 = row 4, col 0.
+    constexpr int cols = 16, rows = 8, frame = 64;
+    const int fw = sheet.getWidth()  / cols;
+    const int fh = sheet.getHeight() / rows;
+    if (fw <= 0 || fh <= 0)
+        return sheet;                                   // unexpected: use whole
+
+    const int col = frame % cols;
+    const int row = frame / cols;
+    return sheet.getClippedImage({ col * fw, row * fh, fw, fh });
 }
 
 void JtRmlPanel::setView(const juce::String& view)
