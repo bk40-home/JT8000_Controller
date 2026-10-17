@@ -64,6 +64,12 @@ public:
     void setPatchName(juce::String name);
     const juce::String& patchName() const { return m_patchName; }
 
+    /* Raised on the MESSAGE thread every time a parameter's value has been
+     * applied to the panel (the timer drain and syncAll): (param id, 0..1).
+     * Lets the owner derive panel STATE from a parameter — e.g. the bass/arp
+     * page flip from bass.enable — without a second APVTS listener. */
+    std::function<void(const juce::String& id, float normalised)> onValueApplied;
+
 private:
     void parameterChanged(const juce::String& id, float newValue) override;
     void timerCallback() override;

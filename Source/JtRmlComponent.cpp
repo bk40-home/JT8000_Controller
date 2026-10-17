@@ -9,6 +9,7 @@
 #include "JtRmlFont.h"
 #include "JtRmlCombo.h"
 #include "JtRmlElements.h"
+#include "JtRmlBassGrid.h"
 #include "JtRmlKnob.h"
 #include "JtRmlRenderer.h"
 #include "JtRmlSystem.h"
@@ -227,7 +228,23 @@ void JtRmlComponent::setView(const juce::String& viewName)
     Rml::Element* body = m_document;
     for (const char* v : { "main", "shift", "reverb", "seq", "arp", "setup" })
         body->SetClass(v, m_view == v);
+    // State flags ride along, so a reloaded document gets them back.
+    for (const auto& f : m_bodyFlags)
+        body->SetClass(f.first.toStdString(), f.second);
 
+    m_dirty = true;
+    repaint();
+}
+
+void JtRmlComponent::setBodyFlag(const juce::String& cls, bool on)
+{
+    const auto it = m_bodyFlags.find(cls);
+    if (it != m_bodyFlags.end() && it->second == on)
+        return;                                    // unchanged: no restyle
+    m_bodyFlags[cls] = on;
+    if (m_document == nullptr)
+        return;                                    // applied on the next load
+    m_document->SetClass(cls.toStdString(), on);
     m_dirty = true;
     repaint();
 }
@@ -317,6 +334,19 @@ void JtRmlComponent::forEachStepGrid(
     m_document->GetElementsByTagName(grids, "stepgrid");
     for (Rml::Element* e : grids)
         if (auto* g = dynamic_cast<JtRmlStepGrid*>(e))
+            fn(*g);
+}
+
+void JtRmlComponent::forEachBassGrid(
+    const std::function<void(JtRmlBassGrid&)>& fn)
+{
+    if (m_document == nullptr)
+        return;
+
+    Rml::ElementList grids;
+    m_document->GetElementsByTagName(grids, "bassgrid");
+    for (Rml::Element* e : grids)
+        if (auto* g = dynamic_cast<JtRmlBassGrid*>(e))
             fn(*g);
 }
 
@@ -500,6 +530,15 @@ void JtRmlComponent::paint(juce::Graphics& g)
                          juce::Justification::topLeft, 12);
         return;
     }
+
+    /* Text is rasterised at the PHYSICAL pixel scale of this surface (250%
+     * desktop scaling, zoom), not at logical size - otherwise each string
+     * texture is stretched up when drawn and small glyphs blur (S read as 8).
+     * The font engine is the process-wide one RmlUi was initialised with,
+     * which may belong to another instance, so it is fetched from RmlUi rather
+     * than using m_font. Unchanged scale costs one compare. */
+    if (auto* font = dynamic_cast<JtRmlFont*>(Rml::GetFontEngineInterface()))
+        font->setRasterScale(g.getInternalContext().getPhysicalPixelScaleFactor());
 
     m_renderer->beginFrame(g);
     m_context->Render();

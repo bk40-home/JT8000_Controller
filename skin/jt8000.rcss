@@ -123,7 +123,7 @@ body.shift .shiftcap   { color: #ffd8d4ff; }
 .voice.on { display: block; }
 
 /* A control appears only in the views it belongs to. */
-knob, fader, combo, toggle, stepgrid
+knob, fader, combo, toggle, stepgrid, bassgrid
 {
 	position: absolute;
 	display: none;
@@ -134,6 +134,30 @@ body.reverb .v-reverb { display: block; }
 body.seq .v-seq { display: block; }
 body.arp .v-arp { display: block; }
 body.setup .v-setup { display: block; }
+
+/* Bass sequencer (bass-seq P2, decision 2a).  It SHARES the ARP page: while
+ * bass.enable is On, JtRmlPanel puts "bass-on" on <body>, which hides every
+ * arp element and shows the bass-sequencer panel in the same rectangle.
+ * bass.enable itself carries v-arp AND v-bass, so the switch stays on screen
+ * either way.  Same specificity for the two rules below, so ORDER MATTERS:
+ * the v-bass rule must come after the v-arp one. */
+body.arp.bass-on .v-arp  { display: none; }
+body.arp.bass-on .v-bass { display: block; }
+/* The ARP header plate is also a v-arp element - keep it lit. */
+body.arp.bass-on .layerlit.v-arp { display: block; }
+/* In-panel action buttons are .actionbtn (so clicks route to onAction), and
+ * .actionbtn is display:block everywhere for the header.  These are hidden
+ * unless their page is showing; the bass-on rule above shows them. */
+.actionbtn.v-bass { display: none; }
+.bassbtn
+{
+	background-color: #1e232bff;
+	border: 2dp #e8761aff;
+	border-radius: 10dp;
+	font-size: 30dp;
+	font-weight: bold;
+	color: #f4f6faff;
+}
 
 /* Knob frames: 128 sprites, 16 x 8 at 210px. The knob element
  * concatenates spriteprefix with a three digit index. */
@@ -347,6 +371,15 @@ body.setup .v-setup { display: block; }
 /* The grid draws bars only, so its frame has to come from here -
  * otherwise an empty pattern is invisible. */
 .stepgrid
+{
+	drag: drag;
+	background-color: #0a0c0fff;
+	border: 2dp #3a424fff;
+}
+
+/* Bass pattern grid: same frame as the step grids.  drag: drag is required
+ * for a note to be dragged up and down (JtRmlBassGrid gestures). */
+.bassgrid
 {
 	drag: drag;
 	background-color: #0a0c0fff;

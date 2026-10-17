@@ -44,6 +44,7 @@
 
 #include <atomic>
 #include <functional>
+#include <map>
 #include <string>
 #include <memory>
 
@@ -58,7 +59,7 @@ namespace jt
 
 class JtRmlRenderer;
 class JtRmlSystem;
-class JtRmlFile;class JtRmlFont;
+class JtRmlFile;class JtRmlFont;
 
 class JtRmlComponent : public juce::Component,
                        private juce::Timer
@@ -84,6 +85,8 @@ public:
      * protocol and to push the playhead, without the caller needing to know how
      * the document is structured. */
     void forEachStepGrid(const std::function<void(class JtRmlStepGrid&)>& fn);
+    /* Same, for the bass-sequencer pattern grid(s). */
+    void forEachBassGrid(const std::function<void(class JtRmlBassGrid&)>& fn);
 
     /* Raised when a header hit area is clicked: the layer name, or "shift".
      * The header artwork is painted into the background, so these are
@@ -125,6 +128,12 @@ public:
      * are visible both follow from it. */
     void setView(const juce::String& view);
     const juce::String& view() const { return m_view; }
+
+    /* A STATE class on <body>, independent of the view — e.g. "bass-on", which
+     * the RCSS uses to swap the arp controls for the bass-sequencer controls on
+     * the ARP page.  Remembered here and re-applied by setView(), so it
+     * survives a skin reload.  No-op (and no repaint) when unchanged. */
+    void setBodyFlag(const juce::String& cls, bool on);
 
     /* Raised when a control moves: (param key, normalised value). The editor
      * hooks this to the APVTS. */
@@ -190,6 +199,8 @@ private:
     Rml::String m_contextName;      // unique per instance
     juce::String m_documentName;
     juce::String m_view { "main" };
+    // Body state flags (setBodyFlag).  A handful at most, so a small map.
+    std::map<juce::String, bool> m_bodyFlags;
     int m_designW = 3840;
     int m_designH = 2160;
     bool m_dirty = true;

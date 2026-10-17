@@ -114,8 +114,13 @@ void JtRmlBinding::timerCallback()
         if (!slot.dirty.exchange(false, std::memory_order_acq_rel))
             continue;
 
-        const juce::ScopedValueSetter<bool> guard(m_pushing, true);
-        m_panel.setParameterValue(id, slot.value.load(std::memory_order_relaxed));
+        const float v = slot.value.load(std::memory_order_relaxed);
+        {
+            const juce::ScopedValueSetter<bool> guard(m_pushing, true);
+            m_panel.setParameterValue(id, v);
+        }
+        if (onValueApplied)
+            onValueApplied(id, v);
     }
 }
 
@@ -124,7 +129,12 @@ void JtRmlBinding::syncAll()
     const juce::ScopedValueSetter<bool> guard(m_pushing, true);
     for (const auto& id : m_ids)
         if (auto* p = m_state.getParameter(id))
-            m_panel.setParameterValue(id, p->getValue());
+        {
+            const float v = p->getValue();
+            m_panel.setParameterValue(id, v);
+            if (onValueApplied)
+                onValueApplied(id, v);
+        }
 }
 
 // =============================================================================

@@ -166,6 +166,7 @@ set(JT_APP_SOURCES
     Source/JtRmlKnob.h        Source/JtRmlKnob.cpp
     Source/JtRmlCombo.h       Source/JtRmlCombo.cpp
     Source/JtRmlElements.h    Source/JtRmlElements.cpp
+    Source/JtRmlBassGrid.h    Source/JtRmlBassGrid.cpp
     Source/JtRmlComponent.h   Source/JtRmlComponent.cpp
     Source/JtRmlBinding.h     Source/JtRmlBinding.cpp
     Source/JtRmlPanel.h       Source/JtRmlPanel.cpp

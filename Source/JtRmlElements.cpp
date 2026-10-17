@@ -6,6 +6,7 @@
 #include "JtRmlElements.h"
 
 #include "JtRmlCombo.h"
+#include "JtRmlBassGrid.h"
 
 #include <algorithm>
 #include <cmath>
@@ -504,6 +505,7 @@ void registerJtElements()
     JtRmlToggle::registerElement();
     JtRmlStepGrid::registerElement();
     JtRmlCombo::registerElement();
+    JtRmlBassGrid::registerElement();    // <bassgrid> (bass-seq pattern)
 }
 
 } // namespace jt

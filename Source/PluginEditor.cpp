@@ -279,6 +279,13 @@ JT8000ControllerEditor::JT8000ControllerEditor(JT8000ControllerProcessor& p)
         else if (a == "save")    savePatchFile();
         else if (a == "load")    loadPatchFile();
         else if (a == "init")    initPatch();
+        // Bass sequencer (ARP page while bass.enable is On).
+        else if (a == "bass_new")    _proc.bassNewSeed();
+        else if (a == "bass_mutate") _proc.bassMutate();
+        else if (a == "bass_undo")   _proc.bassUndo();
+        // Pattern edits (CLEAR / FREEZE / REVERT) live in the panel, which
+        // owns the resolved pattern the FREEZE copies.
+        else if (a.startsWith("bass_")) _panel->bassPatternAction(a);
     };
 
     /* Authored at 3840x2160, correct at half (1920x1080). But that can exceed a
@@ -448,6 +455,14 @@ void JT8000ControllerEditor::timerCallback()
     /* One call: the panel forwards the playhead to every step grid it owns. */
     if (_panel != nullptr)
         _panel->setPlayhead(running ? step : -1);
+
+    /* Bass grid playhead: from the embedded engine only (decision 7b), so it
+     * is -1 in Controller mode.  Word: [5..1] step, [0] running. */
+    if (_panel != nullptr)
+    {
+        const uint16_t bw = _proc.bassStatusWord();
+        _panel->setBassPlayhead((bw & 1u) ? (int) ((bw >> 1) & 0x1Fu) : -1);
+    }
 
     /* Keep the encoder strip pinned to the LCD. Idempotent, so this settles it
      * once the skin's first layout pass has produced real element bounds (and
@@ -751,6 +766,8 @@ void JT8000ControllerEditor::showLibrary()
     // Already open — just bring it forward.
     if (_libraryBrowser != nullptr)
     {
+        /* May be hidden but not yet destroyed (see onCloseRequested). */
+        _libraryBrowser->setVisible(true);
         _libraryBrowser->toFront(true);
         return;
     }
@@ -779,9 +796,22 @@ void JT8000ControllerEditor::showLibrary()
     _libraryBrowser->onCloseRequested =
         [this]
         {
-            _libraryBrowser.reset();
-            if (_isStandalone)
-                grabKeyboardFocus();
+            /* Runs INSIDE the browser's Close-button click. Destroying the
+             * browser here would delete this std::function and the button's
+             * onClick while both are still executing (use-after-free: the
+             * crash on Close). So hide now, destroy next message-loop turn. */
+            if (_libraryBrowser != nullptr)
+                _libraryBrowser->setVisible(false);
+
+            juce::Component::SafePointer<JT8000ControllerEditor> safe(this);
+            juce::MessageManager::callAsync([safe]
+            {
+                if (safe == nullptr)
+                    return;                         // editor closed meanwhile
+                safe->_libraryBrowser.reset();
+                if (safe->_isStandalone)
+                    safe->grabKeyboardFocus();
+            });
         };
 
     // Change folder — keep FileChooser lifetime here (matches existing pattern).

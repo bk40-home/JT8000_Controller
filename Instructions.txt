@@ -1,10 +1,17 @@
 :: After CMakeLists.txt changes (from the project root):
-cd C:\Users\pcsadmin\Documents\JT8000_Controller
+cd C:/Users/bisho/OneDrive/Documents/GitHub/JT8000_Controller
 rmdir /s /q build
 mkdir build && cd build
-cmake .. -DJUCE_DIR="C:/Users/pcsadmin/Documents/JUCE" -DJT_ENGINE_DIR="C:\Users\pcsadmin\Documents\Arduino\Jteensy8000\Jteensy8000\Jteensy8000"
+cmake .. -DJUCE_DIR="C:/Users/bisho/OneDrive/Documents/JUCE" -DJT_ENGINE_DIR=" C:\Users\bisho\OneDrive\Documents\GitHub\Jteensy8000"
 cmake --build . --config Release
 
 :: Day-to-day rebuild (no CMake changes) — just:
-cd C:\Users\pcsadmin\Documents\JT8000_Controller\build
+cd C:/Users/bisho/OneDrive/Documents/GitHub/JT8000_Controller/build
+cmake --build . --config Release
+
+cd /d C:\Users\bisho\OneDrive\Documents\GitHub\JT8000_Controller
+rmdir /s /q build
+mkdir build
+cd build
+cmake .. -G "Visual Studio 18 2026" -A x64 -DJUCE_DIR="C:/Users/bisho/OneDrive/Documents/JUCE" -DJT_ENGINE_DIR="C:/Users/bisho/OneDrive/Documents/GitHub/Jteensy8000"
 cmake --build . --config Release

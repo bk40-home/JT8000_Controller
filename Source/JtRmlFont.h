@@ -24,8 +24,19 @@
  *       ours;
  *     - the cache is keyed by face and string, and is bounded - see kMaxCache.
  *
- *   Textures are rendered WHITE and tinted by the vertex colour RmlUi supplies,
- *   so the same texture serves a legend in any colour.
+ *   Textures are rendered IN THEIR FINAL COLOUR (colour is part of the cache
+ *   key) and emitted with a white vertex colour. JtRmlRenderer only applies
+ *   the alpha of a vertex colour, so tinting a white texture lost the RGB and
+ *   every string drew white regardless of the RCSS.
+ *
+ * PHYSICAL-PIXEL RASTERISATION
+ *   RmlUi lays text out in LOGICAL pixels (dp x window ratio). On a scaled
+ *   desktop (e.g. Windows at 250%) one logical pixel is several physical ones,
+ *   so a string rasterised at logical size was stretched 2.5x when drawn -
+ *   blurry, and small bold glyphs closed up (S read as 8). The owner now
+ *   reports the physical scale via setRasterScale(); strings are rasterised at
+ *   logical size x scale and drawn into a quad of the original logical size,
+ *   so each texel lands on one physical pixel.
  *
  * FACE HANDLES
  *   RmlUi asks for a face by family, style, weight and size, and expects an
@@ -42,6 +53,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace jt
@@ -88,6 +100,13 @@ public:
     int GetVersion(Rml::FontFaceHandle handle) override;
     void ReleaseFontResources() override;
 
+    // --- Host interface -------------------------------------------------------
+    /* Physical pixels per logical pixel for the surface being painted. Call
+     * before each Render(). A change drops the cached textures and bumps the
+     * face version, which makes RmlUi regenerate its text geometry. Cheap when
+     * unchanged (one compare), so it is safe to call every paint. */
+    void setRasterScale(float physicalPerLogical);
+
 private:
     struct Face
     {
@@ -101,14 +120,19 @@ private:
     struct Entry;                                   // one cached string texture
 
     Face* face(Rml::FontFaceHandle handle);
+    /* Cache key: face, final straight-alpha colour (ARGB), string. */
+    using Key = std::tuple<std::uintptr_t, std::uint32_t, std::string>;
+
     Entry* lookup(Rml::RenderManager& rm, Rml::FontFaceHandle handle,
-                  const std::string& text);
+                  std::uint32_t argb, const std::string& text);
     void trimCache();
 
     std::vector<std::unique_ptr<Face>> m_faces;
-    std::map<std::pair<std::uintptr_t, std::string>,
-             std::unique_ptr<Entry>> m_cache;
+    std::map<Key, std::unique_ptr<Entry>> m_cache;
     std::uint64_t m_clock = 0;                      // for least-recently-used
+
+    float m_rasterScale = 1.0f;                     // physical px per logical px
+    int m_version = 0;                              // bumped on scale change
 
     Rml::FontMetrics m_fallbackMetrics{};
 };

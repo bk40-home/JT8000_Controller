@@ -21,9 +21,10 @@ namespace jt
 struct JtRmlFont::Entry
 {
     Rml::CallbackTexture texture;
-    int width = 0;
-    int height = 0;
-    float ascent = 0.0f;
+    float width = 0.0f;     // quad size in LOGICAL px (texture is width x scale)
+    float height = 0.0f;
+    float ascent = 0.0f;    // logical px from quad top to baseline
+    float advance = 0.0f;   // logical advance width returned to RmlUi
     std::uint64_t used = 0;
 };
 
@@ -137,9 +138,24 @@ const Rml::FontMetrics& JtRmlFont::GetFontMetrics(const Rml::FontFaceHandle hand
 
 int JtRmlFont::GetVersion(Rml::FontFaceHandle)
 {
-    /* Faces never change once created, so cached geometry never needs
-     * regenerating. */
-    return 0;
+    /* Faces themselves never change, but their rasterisation does when the
+     * physical scale changes; RmlUi compares this to regenerate text. */
+    return m_version;
+}
+
+void JtRmlFont::setRasterScale(const float physicalPerLogical)
+{
+    /* Quantise to quarter steps so sub-pixel jitter in the reported scale
+     * (window drags between monitors, zoom) cannot thrash the cache, and clamp
+     * to a sane range so a bad value cannot allocate huge textures. */
+    const float s = juce::jlimit(1.0f, 4.0f,
+                                 std::round(physicalPerLogical * 4.0f) / 4.0f);
+    if (juce::approximatelyEqual(s, m_rasterScale))
+        return;                                     // common case: unchanged
+
+    m_rasterScale = s;
+    m_cache.clear();                                // textures are scale-specific
+    ++m_version;                                    // RmlUi regenerates geometry
 }
 
 void JtRmlFont::ReleaseFontResources()
@@ -173,9 +189,10 @@ int JtRmlFont::GetStringWidth(const Rml::FontFaceHandle handle,
 // =============================================================================
 JtRmlFont::Entry* JtRmlFont::lookup(Rml::RenderManager& rm,
                                     const Rml::FontFaceHandle handle,
+                                    const std::uint32_t argb,
                                     const std::string& text)
 {
-    const auto key = std::make_pair(static_cast<std::uintptr_t>(handle), text);
+    const Key key(static_cast<std::uintptr_t>(handle), argb, text);
     const auto it = m_cache.find(key);
     if (it != m_cache.end())
     {
@@ -190,18 +207,28 @@ JtRmlFont::Entry* JtRmlFont::lookup(Rml::RenderManager& rm,
     const juce::Font jf = makeFont(f->family, f->size, f->bold, f->italic);
     const juce::String s(text);
 
-    const int w = static_cast<int>(std::ceil(jf.getStringWidthFloat(s))) + kPad * 2;
-    const int h = static_cast<int>(std::ceil(jf.getHeight())) + kPad * 2;
+    /* Logical box (what RmlUi lays out) and physical texture (what is drawn).
+     * The texture is the logical box x scale, so drawing it into the logical
+     * quad maps one texel to one physical pixel - no stretch, no blur. */
+    const float scale = m_rasterScale;
+    const float textW = jf.getStringWidthFloat(s);
+    const float logicalW = std::ceil(textW) + static_cast<float>(kPad * 2);
+    const float logicalH = std::ceil(jf.getHeight()) + static_cast<float>(kPad * 2);
+    const int w = static_cast<int>(std::ceil(logicalW * scale));
+    const int h = static_cast<int>(std::ceil(logicalH * scale));
     if (w <= 0 || h <= 0)
         return nullptr;
 
-    /* Rendered WHITE so the vertex colour can tint it; one texture then serves
-     * the same string in any colour. */
+    /* Rendered in its final colour (part of the cache key) - the renderer
+     * applies only the alpha of a vertex colour, so a white texture tinted by
+     * the vertex colour lost its RGB. Glyphs are rasterised by JUCE at the
+     * physical size via the transform, so hinting happens at the real size. */
     juce::Image img(juce::Image::ARGB, w, h, true);
     {
         juce::Graphics g(img);
+        g.addTransform(juce::AffineTransform::scale(scale));
         g.setFont(jf);
-        g.setColour(juce::Colours::white);
+        g.setColour(juce::Colour(argb));
         g.drawSingleLineText(s, kPad, kPad + static_cast<int>(jf.getAscent()));
     }
 
@@ -221,9 +248,10 @@ JtRmlFont::Entry* JtRmlFont::lookup(Rml::RenderManager& rm,
     }
 
     auto entry = std::make_unique<Entry>();
-    entry->width = w;
-    entry->height = h;
+    entry->width = logicalW;
+    entry->height = logicalH;
     entry->ascent = jf.getAscent() + static_cast<float>(kPad);
+    entry->advance = std::ceil(textW);
     entry->used = ++m_clock;
 
     /* The callback is invoked by RmlUi when it needs the pixels; the data is
@@ -260,38 +288,57 @@ int JtRmlFont::GenerateString(Rml::RenderManager& renderManager,
                               const Rml::StringView string,
                               const Rml::Vector2f position,
                               const Rml::ColourbPremultiplied colour,
-                              float, const Rml::TextShapingContext&,
+                              float /*opacity*/,  // already folded into `colour`; RmlUi
+                                                  // passes it separately for font effects
+                              const Rml::TextShapingContext&,
                               Rml::TexturedMeshList& meshList)
 {
     const std::string text(string.begin(), string.end());
     if (text.empty())
         return 0;
 
-    Entry* e = lookup(renderManager, faceHandle, text);
+    /* RmlUi hands over a PREMULTIPLIED colour (element opacity already in its
+     * alpha); the texture wants the straight colour. */
+    const float a = static_cast<float>(colour.alpha) / 255.0f;
+    if (a <= 0.0f)
+        return 0;                                   // fully transparent: nothing to draw
+    const auto un = [a](const Rml::byte v)
+    {
+        return static_cast<juce::uint8>(juce::jlimit(0.0f, 255.0f,
+                                                     static_cast<float>(v) / a));
+    };
+    const juce::Colour straight(un(colour.red), un(colour.green), un(colour.blue),
+                                juce::jlimit(0.0f, 1.0f, a));
+
+    Entry* e = lookup(renderManager, faceHandle, straight.getARGB(), text);
     if (e == nullptr)
         return 0;
+
+    /* Colour and alpha are already in the texels, so the vertex colour is
+     * plain opaque white - the renderer's untinted fast path. */
+    const Rml::ColourbPremultiplied white(255, 255, 255, 255);
 
     /* `position` is the baseline of the first character; the texture's origin
      * is its top-left, so it is lifted by the ascent. */
     const float x0 = position.x - static_cast<float>(kPad);
     const float y0 = position.y - e->ascent;
-    const float x1 = x0 + static_cast<float>(e->width);
-    const float y1 = y0 + static_cast<float>(e->height);
+    const float x1 = x0 + e->width;
+    const float y1 = y0 + e->height;
 
     Rml::TexturedMesh tm;
     tm.texture = e->texture;
     tm.mesh.vertices = {
-        Rml::Vertex{ Rml::Vector2f(x0, y0), colour, Rml::Vector2f(0.0f, 0.0f) },
-        Rml::Vertex{ Rml::Vector2f(x1, y0), colour, Rml::Vector2f(1.0f, 0.0f) },
-        Rml::Vertex{ Rml::Vector2f(x1, y1), colour, Rml::Vector2f(1.0f, 1.0f) },
-        Rml::Vertex{ Rml::Vector2f(x0, y1), colour, Rml::Vector2f(0.0f, 1.0f) },
+        Rml::Vertex{ Rml::Vector2f(x0, y0), white, Rml::Vector2f(0.0f, 0.0f) },
+        Rml::Vertex{ Rml::Vector2f(x1, y0), white, Rml::Vector2f(1.0f, 0.0f) },
+        Rml::Vertex{ Rml::Vector2f(x1, y1), white, Rml::Vector2f(1.0f, 1.0f) },
+        Rml::Vertex{ Rml::Vector2f(x0, y1), white, Rml::Vector2f(0.0f, 1.0f) },
     };
     /* Two triangles forming an axis-aligned rectangle - exactly the shape
      * JtRmlRenderer takes on its fast path. */
     tm.mesh.indices = { 0, 1, 2, 0, 2, 3 };
     meshList.push_back(std::move(tm));
 
-    return e->width - kPad * 2;
+    return static_cast<int>(e->advance);
 }
 
 } // namespace jt

@@ -71,6 +71,10 @@ public:
     // mode the plugin feeds its dots/playhead from here instead of MIDI.
     uint16_t statusWord() const { return core_.statusWord(); }
 
+    // Bass-sequencer playhead word (SynthCore::bassStatusWord): [5..1] step,
+    // [0] running.  Engine-only for now — the firmware does not broadcast it.
+    uint16_t bassStatusWord() const { return core_.bassStatusWord(); }
+
     static constexpr double kEngineSampleRate = (double)JT::kSampleRate;
 
 private:

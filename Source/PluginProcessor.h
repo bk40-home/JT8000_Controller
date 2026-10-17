@@ -39,6 +39,10 @@
 #include "SyxProtocol.h"
 #include "NrpnLink.h"
 
+// Forward declaration: the generated row type (gen/JtParamTable.h).  Only the
+// .cpp needs the table itself; the header just names the row in sendParamValue.
+namespace JtParams { struct Param; }
+
 // Phase J2: the embedded firmware engine.  JT8000_HAS_ENGINE is defined by
 // CMake only when JT_ENGINE_DIR is set — see CMakeLists.txt.
 #ifndef JT8000_HAS_ENGINE
@@ -143,8 +147,23 @@ public:
     // Option B: send a v2-only param (no v1 CC) by ParamID directly — the seq
     // aux lane.  Same 6-CC NRPN, addressed by ParamID instead of via the bridge.
     void sendParamNrpnById(uint16_t paramId, int ccVal);
+    // Normalised APVTS value -> wire: 7-bit for every param that used it,
+    // full 14-bit for integer params with > 128 values (bass.seed etc.).
+    void sendParamValue(const JtParams::Param& p, float norm01);
     void requestResync();                          // full-state pull (0x3F00)
+
+    // --- Bass sequencer actions (skin buttons; message thread only) --------
+    // Each writes bass.seed / bass.mutation through the APVTS, so the pattern
+    // is saved, automatable and reaches the engine by the normal path.
+    void bassNewSeed();     // random new seed, mutation -> 0
+    void bassMutate();      // mutation + 1 (ceiling 255)
+    void bassUndo();        // restore the previous (seed, mutation), one level
 private:
+    void bassRememberForUndo();
+    int  _bassUndoSeed     = 0;
+    int  _bassUndoMutation = 0;
+    bool _bassUndoValid    = false;
+
     void queueShortMidi(const NrpnLink::Short3* msgs, size_t n);
     // One decoder per independent input stream (VST3 bus vs standalone
     // direct-in) — NRPN selection state must never interleave.
@@ -201,8 +220,16 @@ private:
     // derive link liveness from count movement, not word changes.
     std::atomic<uint16_t> _statusWord  { 0 };
     std::atomic<uint32_t> _statusCount { 0 };
+    // Bass-sequencer playhead, latched from the EMBEDDED engine only (Sound
+    // mode; grid decision 7b).  [5..1] step, [0] running.  Stays 0 — "not
+    // running" — when the engine is silent or not compiled in.
+    std::atomic<uint16_t> _bassStatusWord { 0 };
 public:
     uint16_t statusWord()  const { return _statusWord.load(); }
+    // 0 ("not running") whenever the engine is not the sound source, so a
+    // switch back to Controller mode cannot leave a stale playhead behind.
+    uint16_t bassStatusWord() const
+    { return engineAudible() ? _bassStatusWord.load() : (uint16_t) 0; }
     uint32_t statusCount() const { return _statusCount.load(std::memory_order_relaxed); }
 
     // Editor-facing engine surface — real when the engine is compiled in,

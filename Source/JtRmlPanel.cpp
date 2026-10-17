@@ -8,15 +8,93 @@
 #include "JtRmlBinding.h"
 #include "JtRmlComponent.h"
 #include "JtRmlElements.h"
+#include "JtRmlBassGrid.h"
 #include "JtRmlFile.h"
 
 #include "BinaryData.h"
 
+#if JT8000_HAS_ENGINE
+ #include "core/dsp/BassSequencer.h"   // shadow generator (grid decision 1a)
+#endif
+
+#include <array>
 #include <map>
 #include <vector>
 
 namespace jt
 {
+
+// =============================================================================
+// Bass pattern model
+// =============================================================================
+/* What the <bassgrid> draws is the RESOLVED pattern: generated steps plus the
+ * hand edits.  The generator is deterministic, so a private copy of the
+ * firmware's own BassSequencer, fed with the same parameter values, produces
+ * exactly what the engine plays — no telemetry, instant feedback while a
+ * knob turns, and it works with no hardware connected.
+ *
+ * Without the engine compiled in (controller-only build) only the hand edits
+ * can be shown; generated steps draw as empty. */
+struct JtRmlPanel::BassModel
+{
+    static constexpr int kSteps = JtRmlBassGrid::kMaxSteps;
+
+    std::array<uint16_t, kSteps> edits {};    // bass.step_n, 0 = generated
+    int length = 16;                          // bass.length
+#if JT8000_HAS_ENGINE
+    JT::BassSequencer gen;                    // shadow of the engine generator
+#endif
+
+    /* One parameter in engineering units.  Returns true when it changes what
+     * the grid shows, so unrelated bass params (rate, gate...) cost nothing. */
+    bool apply(const juce::String& id, float eng)
+    {
+        const int iv = juce::roundToInt(eng);
+
+        if (id.startsWith("bass.step_"))
+        {
+            const int i = id.substring(10).getIntValue() - 1;     // 1-based key
+            if (i < 0 || i >= kSteps)
+                return false;
+            edits[(size_t) i] = (uint16_t) juce::jlimit(0, 2047, iv);
+           #if JT8000_HAS_ENGINE
+            gen.setStepPacked(i, edits[(size_t) i]);
+           #endif
+            return true;
+        }
+        if (id == "bass.length")
+        {
+            length = juce::jlimit(1, kSteps, iv);
+           #if JT8000_HAS_ENGINE
+            gen.setLength(length);
+           #endif
+            return true;
+        }
+       #if JT8000_HAS_ENGINE
+        if (id == "bass.seed")     { gen.setSeed((uint16_t) juce::jlimit(0, 16383, iv)); return true; }
+        if (id == "bass.mutation") { gen.setMutation((uint16_t) juce::jlimit(0, 255, iv)); return true; }
+        if (id == "bass.density")  { gen.setDensity(eng);       return true; }
+        if (id == "bass.accent")   { gen.setAccentAmount(eng);  return true; }
+        if (id == "bass.slide")    { gen.setSlideAmount(eng);   return true; }
+        if (id == "bass.octave")   { gen.setOctaveAmount(eng);  return true; }
+        if (id == "bass.range")    { gen.setRange(iv);          return true; }
+       #endif
+        return false;
+    }
+
+    void resolve(std::array<uint16_t, kSteps>& out)
+    {
+        for (int i = 0; i < kSteps; ++i)
+        {
+           #if JT8000_HAS_ENGINE
+            out[(size_t) i] = gen.stepPacked(i);     // resolves lazily, once
+           #else
+            const uint16_t e = edits[(size_t) i];
+            out[(size_t) i] = (e & JtRmlBassGrid::kUserBit) ? e : (uint16_t) 0;
+           #endif
+        }
+    }
+};
 
 juce::File JtRmlPanel::logFile()
 {
@@ -67,6 +145,7 @@ JtRmlPanel::JtRmlPanel(juce::AudioProcessorValueTreeState& state)
             onAction(a);
     };
 
+    m_bass = std::make_unique<BassModel>();     // before the first sync
     m_binding = std::make_unique<JtRmlBinding>(m_state, *m_panel);
 
     /* The LCD's two lines are elements in the document, so the binding's
@@ -83,8 +162,22 @@ JtRmlPanel::JtRmlPanel(juce::AudioProcessorValueTreeState& state)
             setLcd(l1, l2);
     };
 
+    /* Bass/arp page flip (bass-seq decision 2a).  bass.enable is a 2-option
+     * select (Off/On), so its normalised value is 0 or 1.  "bass-on" on <body>
+     * lets the RCSS hide the arp controls and show the bass-sequencer controls
+     * on the ARP page — they share the same panel rectangle.  Set BEFORE
+     * syncAll so the first sync already flips the page correctly. */
+    m_binding->onValueApplied = [this](const juce::String& id, float v)
+    {
+        if (id == "bass.enable")
+            m_panel->setBodyFlag("bass-on", v >= 0.5f);
+        else if (id.startsWith("bass."))
+            onBassValue(id, v);                 // pattern model + grid
+    };
+
     m_binding->syncAll();
     wireStepGrids();
+    wireBassGrids();
 
     juce::String built;
     built << "JtRmlPanel: constructed, assets="
@@ -348,6 +441,106 @@ void JtRmlPanel::reloadSkin()
     if (m_binding != nullptr)
         m_binding->syncAll();
     wireStepGrids();
+    wireBassGrids();
+}
+
+// =============================================================================
+// Bass pattern grid
+// =============================================================================
+void JtRmlPanel::onBassValue(const juce::String& id, const float norm)
+{
+    auto* p = m_state.getParameter(id);
+    if (p == nullptr || m_bass == nullptr)
+        return;
+    if (m_bass->apply(id, p->convertFrom0to1(norm)))
+        refreshBassGrids();
+}
+
+void JtRmlPanel::refreshBassGrids()
+{
+    if (m_bass == nullptr)
+        return;
+    std::array<uint16_t, BassModel::kSteps> pattern {};
+    m_bass->resolve(pattern);
+    const int len = m_bass->length;
+    m_panel->forEachBassGrid([&pattern, len](JtRmlBassGrid& g)
+    {
+        g.setPattern(pattern.data(), (int) pattern.size(), len);   // change-driven
+    });
+}
+
+void JtRmlPanel::wireBassGrids()
+{
+    m_panel->forEachBassGrid([this](JtRmlBassGrid& g)
+    {
+        g.onEdit     = [this](int step, uint16_t packed) { writeBassStep(step, packed); };
+        g.onStepInfo = [this](int step, uint16_t packed) { showBassStep(step, packed); };
+    });
+    refreshBassGrids();                   // a freshly loaded grid starts empty
+}
+
+void JtRmlPanel::writeBassStep(const int step, const uint16_t packed)
+{
+    /* Through the APVTS like any knob: saved with the patch, sent to the engine
+     * at full 14-bit resolution (needsWire14), and echoed back into the model
+     * by the binding's drain, which then confirms the grid's optimistic draw. */
+    juce::String id;
+    id << "bass.step_" << (step + 1);
+    if (auto* p = m_state.getParameter(id))
+        p->setValueNotifyingHost(p->convertTo0to1((float) packed));
+}
+
+void JtRmlPanel::showBassStep(const int step, const uint16_t packed)
+{
+    juce::String l2;
+    l2 << "STEP " << juce::String(step + 1).paddedLeft('0', 2) << "   ";
+    if (packed == 0)
+        l2 << "GENERATED";
+    else if ((packed & JtRmlBassGrid::kGateBit) == 0)
+        l2 << "REST";
+    else
+    {
+        const int oct = (packed & JtRmlBassGrid::kOctMask) >> JtRmlBassGrid::kOctShift;
+        l2 << "DEG " << (int) (packed & JtRmlBassGrid::kDegreeMask)
+           << (oct == 2 ? "  OCT +1" : (oct == 0 ? "  OCT -1" : ""))
+           << ((packed & JtRmlBassGrid::kAccentBit) ? "  ACC" : "")
+           << ((packed & JtRmlBassGrid::kSlideBit)  ? "  SLIDE" : "");
+    }
+    const juce::String l1 = (m_binding != nullptr) ? m_binding->patchName() : juce::String();
+    if (onLcdText) onLcdText(l1, l2);       // the menu owns the LCD when present
+    else           setLcd(l1, l2);
+}
+
+void JtRmlPanel::setBassPlayhead(const int step)
+{
+    m_panel->forEachBassGrid([step](JtRmlBassGrid& g) { g.setPlayhead(step); });
+}
+
+void JtRmlPanel::bassPatternAction(const juce::String& action)
+{
+    if (m_bass == nullptr)
+        return;
+    constexpr int kSteps = BassModel::kSteps;
+
+    if (action == "bass_clear")
+    {
+        // Hand-edited REST, octave field 1 (= no jump): a blank canvas the
+        // generator will not refill whatever the density says.
+        const uint16_t rest = (uint16_t) (JtRmlBassGrid::kUserBit
+                                          | (1u << JtRmlBassGrid::kOctShift));
+        for (int i = 0; i < kSteps; ++i) writeBassStep(i, rest);
+    }
+    else if (action == "bass_freeze")
+    {
+        std::array<uint16_t, kSteps> pattern {};
+        m_bass->resolve(pattern);
+        for (int i = 0; i < kSteps; ++i)
+            writeBassStep(i, (uint16_t) (pattern[(size_t) i] | JtRmlBassGrid::kUserBit));
+    }
+    else if (action == "bass_revert")
+    {
+        for (int i = 0; i < kSteps; ++i) writeBassStep(i, 0);
+    }
 }
 
 void JtRmlPanel::resized()

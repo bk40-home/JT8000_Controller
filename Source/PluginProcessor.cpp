@@ -50,6 +50,18 @@ const JtParams::Param* jtParamById(uint16_t paramId)
 // value (Curves::normFrom7bit on its side). One conversion, both directions.
 inline int norm01ToWire7 (float norm01) { return juce::jlimit(0, 127, juce::roundToInt(norm01 * 127.0f)); }
 
+// FULL 14-bit form of the same law, for params the 7-bit model cannot address
+// (see needsWire14).  The firmware decodes v14 / 16383 either way.
+inline uint16_t norm01ToWire14 (float norm01)
+{ return (uint16_t) juce::jlimit(0, 16383, juce::roundToInt(norm01 * 16383.0f)); }
+
+// True for INTEGER params with more than 128 values — bass.seed (16384),
+// bass.mutation (256), bass.step_n (2048).  Only these travel at 14 bits:
+// every other param keeps its 7-bit wire value bit-for-bit (decision 1a), so
+// nothing that already works changes on the wire.
+inline bool needsWire14 (const JtParams::Param& p)
+{ return p.type == JtParams::Type::Int && (p.max - p.min) > 127.0f; }
+
 // Build the APVTS range for a continuous param from its params.yaml curve, so
 // the plugin stores ENGINEERING units (Hz, ms, slope) and the host shows real
 // values. The three curves are reproduced exactly, matching the firmware:
@@ -433,6 +445,7 @@ void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
             // Engine telemetry replaces the hardware status feed while
             // audible — same word format, same editor consumers (J1d).
             _statusWord.store(_engine->statusWord());
+            _bassStatusWord.store(_engine->bassStatusWord());
             _statusCount.fetch_add(1, std::memory_order_relaxed);
         }
     }
@@ -696,18 +709,96 @@ void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float n
     // send a RAW 7-bit value: normalise the parameter's current value through
     // its own range (engineering units for continuous; index/0-1 for
     // choice/toggle) and scale to 0..127. No cc, no ccByteFromPlain.
-    int wire7 = 0;
+    float norm01 = newValue;                             // defensive fallback
     if (auto* rap = apvts.getParameter(id))
-        wire7 = norm01ToWire7(rap->getValue());          // getValue() is 0..1
-    else
-        wire7 = norm01ToWire7(newValue);                 // defensive fallback
+        norm01 = rap->getValue();                        // getValue() is 0..1
 
     // Layer routing travels as bit 13 of the NRPN address (not a SysEx frame),
-    // so every edit stays a self-contained cluster. sendParamNrpnById reads
-    // editTarget and addresses A, B, or both by the 14-bit ParamID.
+    // so every edit stays a self-contained cluster, addressed by the 14-bit
+    // ParamID.  sendParamValue picks the 7-bit or full 14-bit data word.
     DBG("[ParamChg] " << id << " pid=0x" << juce::String::toHexString(p->paramId)
-        << " wire7=" << wire7 << " -> NRPN");
-    sendParamNrpnById(p->paramId, wire7);
+        << " norm=" << norm01 << " -> NRPN");
+    sendParamValue(*p, norm01);
+}
+
+// =============================================================================
+// sendParamValue — the ONE place a normalised APVTS value becomes wire data.
+// 7-bit (v7 * 129) for everything that already used it; full 14-bit only for
+// the large integer params (needsWire14).  parameterChanged and sendBankDump
+// both come through here, so a patch dump and a knob turn can never disagree.
+// =============================================================================
+void JT8000ControllerProcessor::sendParamValue(const JtParams::Param& p, float norm01)
+{
+    if (needsWire14(p))
+    {
+        NrpnLink::Short3 m[6];
+        const size_t n = NrpnLink::encodeParamById14(p.paramId, norm01ToWire14(norm01),
+                                                     1 /*channel*/, m, 0);
+        queueShortMidi(m, n);
+        return;
+    }
+    sendParamNrpnById(p.paramId, norm01ToWire7(norm01));
+}
+
+// =============================================================================
+// Bass-sequencer ACTIONS (New seed / Mutate / Undo).
+//
+// The pattern is fully defined by (bass.seed, bass.mutation) — the firmware's
+// generator is deterministic — so an action is nothing more than writing those
+// two parameters through the APVTS.  That makes every action automatable,
+// saved with the patch, and sent to the engine/hardware by the normal
+// parameterChanged path; no new wire message exists.  Message thread only.
+// =============================================================================
+namespace {
+// Engineering value -> APVTS. Returns the value actually stored (int-rounded).
+int writeIntParam(juce::AudioProcessorValueTreeState& s, const char* id, int value)
+{
+    auto* p = s.getParameter(id);
+    if (p == nullptr) return -1;
+    p->setValueNotifyingHost(p->convertTo0to1((float) value));
+    return value;
+}
+int readIntParam(juce::AudioProcessorValueTreeState& s, const char* id)
+{
+    auto* p = s.getParameter(id);
+    return (p == nullptr) ? 0 : juce::roundToInt(p->convertFrom0to1(p->getValue()));
+}
+constexpr int kBassSeedMax     = 16383;   // == BassSequencer::kSeedMax
+constexpr int kBassMutationMax = 255;     // == BassSequencer::kMaxMutation
+} // namespace
+
+void JT8000ControllerProcessor::bassRememberForUndo()
+{
+    _bassUndoSeed     = readIntParam(apvts, "bass.seed");
+    _bassUndoMutation = readIntParam(apvts, "bass.mutation");
+    _bassUndoValid    = true;
+}
+
+void JT8000ControllerProcessor::bassNewSeed()
+{
+    bassRememberForUndo();
+    const int current = _bassUndoSeed;
+    int seed = current;
+    while (seed == current)                              // always a NEW pattern
+        seed = juce::Random::getSystemRandom().nextInt(kBassSeedMax + 1);
+    writeIntParam(apvts, "bass.mutation", 0);            // a new seed starts clean
+    writeIntParam(apvts, "bass.seed", seed);
+}
+
+void JT8000ControllerProcessor::bassMutate()
+{
+    const int m = readIntParam(apvts, "bass.mutation");
+    if (m >= kBassMutationMax) return;                   // ceiling: no-op, keep undo
+    bassRememberForUndo();
+    writeIntParam(apvts, "bass.mutation", m + 1);
+}
+
+void JT8000ControllerProcessor::bassUndo()
+{
+    if (!_bassUndoValid) return;                         // one level only
+    _bassUndoValid = false;
+    writeIntParam(apvts, "bass.seed",     _bassUndoSeed);
+    writeIntParam(apvts, "bass.mutation", _bassUndoMutation);
 }
 
 // =============================================================================
@@ -1002,9 +1093,9 @@ void JT8000ControllerProcessor::sendBankDump()
         auto* param = apvts.getParameter(p.juceId);
         if (param == nullptr) continue;
 
-        // Raw 7-bit from the normalised value; firmware owns the law. Same
-        // single path as parameterChanged, addressed by 14-bit ParamID.
-        sendParamNrpnById(p.paramId, norm01ToWire7(param->getValue()));
+        // Same single path as parameterChanged (7-bit, or 14-bit for the large
+        // integer params), addressed by 14-bit ParamID.
+        sendParamValue(p, param->getValue());
     }
 }
 

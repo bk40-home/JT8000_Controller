@@ -126,6 +126,20 @@ public:
      * default document name, and reloads. */
     void resetSkin();
 
+    /* ---- Bass sequencer pattern grid (bass-seq grid delivery) -----------
+     * Playhead for every <bassgrid>: -1 clears it.  Fed from the embedded
+     * engine in Sound mode (decision 7b - no hardware telemetry yet). */
+    void setBassPlayhead(int step);
+
+    /* Pattern actions from the skin's buttons, routed by the editor:
+     *   "bass_clear"  every step becomes a hand-edited REST (blank canvas)
+     *   "bass_freeze" copy the generated pattern into hand edits, so later
+     *                 seed / amount changes no longer move it
+     *   "bass_revert" hand every step back to the generator
+     * All three only write bass.step_1..32, so the result is saved with the
+     * patch and reaches the engine by the normal parameter path. */
+    void bassPatternAction(const juce::String& action);
+
     void resized() override;
 
     /* Draws a diagnostic report if the inner component is missing or has no
@@ -140,6 +154,19 @@ public:
 private:
     void registerEmbeddedAssets();
     void wireStepGrids();
+
+    /* Bass pattern model: the hand edits, the length and (with the engine
+     * compiled in) a SHADOW copy of the firmware generator fed with the same
+     * parameters, so the grid can show the generated pattern with no wire
+     * traffic (grid decision 1a).  Defined in the .cpp so this header stays
+     * free of engine includes. */
+    struct BassModel;
+    std::unique_ptr<BassModel> m_bass;
+    void wireBassGrids();                                  // after any reload
+    void refreshBassGrids();                               // model -> every grid
+    void onBassValue(const juce::String& id, float norm);  // APVTS -> model
+    void writeBassStep(int step, uint16_t packed);         // grid -> APVTS
+    void showBassStep(int step, uint16_t packed);          // LCD readout
 
     juce::AudioProcessorValueTreeState& m_state;
     std::unique_ptr<JtRmlComponent> m_panel;

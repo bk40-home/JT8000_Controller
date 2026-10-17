@@ -112,6 +112,27 @@ inline size_t encodeParam(uint16_t v1cc, uint8_t value7,
     return 6;
 }
 
+// FULL-RESOLUTION variant (bass-seq): the caller supplies the 14-bit data word
+// itself (0..16383).  For integer params whose range exceeds 127 steps —
+// bass.seed (0..16383), bass.mutation (0..255), bass.step_n (0..2047) — the
+// 7-bit model (v7 * 129) can only reach 128 of their values.  The firmware
+// already decodes the full 14 bits (MidiParamTransport normFrom14bit), so only
+// this end changes.  Same 6-CC self-contained cluster.  out[] >= 6.
+inline size_t encodeParamById14(uint16_t paramId, uint16_t v14,
+                                uint8_t channel, Short3* out, uint8_t layer = 0)
+{
+    const uint16_t addr = (uint16_t)((paramId & kIdMask) |
+                                     (layer ? kLayerBit : 0u));
+    if (v14 > 16383u) v14 = 16383u;          // 14-bit data field
+    out[0] = cc(channel, 99, (uint8_t)((addr >> 7) & 0x7F));
+    out[1] = cc(channel, 98, (uint8_t)( addr       & 0x7F));
+    out[2] = cc(channel,  6, (uint8_t)((v14 >> 7) & 0x7F));
+    out[3] = cc(channel, 38, (uint8_t)( v14       & 0x7F));
+    out[4] = cc(channel, 101, 127);
+    out[5] = cc(channel, 100, 127);
+    return 6;
+}
+
 // Encode one parameter edit BY ParamID directly (no v1-CC bridge lookup).
 // For v2-only params that were never assigned a 7-bit v1 CC — the seq aux
 // lane (SEQ_AUX_*, 0x068C..0x068F).  Same 6-CC self-contained NRPN as

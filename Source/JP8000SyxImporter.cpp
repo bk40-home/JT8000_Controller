@@ -128,22 +128,23 @@ static void resetSharedToDefaults(juce::AudioProcessorValueTreeState& apvts)
 // OSC1 wave — JP order: 0 SuperSaw, 1 Tri-mod, 2 Noise, 3 Feedback,
 //                       4 Square,   5 Saw,     6 Triangle
 // JT osc1.wave options: 0 SIN,1 SAW,2 SQR,3 TRI,4 ARB,5 PLS,6 rSAW,7 S&H,
-//   8 vTRI,9 BLS,10 rBLS,11 BLSQ,12 BLP,13 SSAW,14 vSAW,15 BLvSAW,16 vTRI,17 BLvTRI
+//   8 vTRI,9 BLS,10 rBLS,11 BLSQ,12 BLP,13 SSAW,14 vSAW,15 BLvSAW,16 vTRI,17 BLvTRI,
+//   18 JvSAW,19 JvTRI  (JP-measured variable saw / triangle, 2026-10-16)
 static constexpr uint8_t kOsc1WaveMap[] = {
     13,   // 0 SuperSaw   -> SSAW
     17,   // 1 Tri-mod    -> BLvTRI
      1,   // 2 Noise      -> SAW (neutral; mix.noise raised separately, M9)
      1,   // 3 Feedback   -> SAW (osc1.feedback_* set separately, M10)
      5,   // 4 Square     -> PLS
-    15,   // 5 Saw        -> BLvSAW
-     3,   // 6 Triangle   -> TRI
+    18,   // 5 Saw        -> JvSAW  (was BLvSAW)
+    19,   // 6 Triangle   -> JvTRI  (was TRI)
 };
 
 // OSC2 wave — JP order: 0 Square, 1 Saw, 2 Triangle, 3 S&H (M12)
 static constexpr uint8_t kOsc2WaveMap[] = {
      5,   // 0 Square   -> PLS
-    15,   // 1 Saw      -> BLvSAW
-     3,   // 2 Triangle -> TRI
+    18,   // 1 Saw      -> JvSAW  (was BLvSAW)
+    19,   // 2 Triangle -> JvTRI  (was TRI)
      7,   // 3 S&H      -> S&H   (M12 — edit here if the JP order differs)
 };
 
@@ -156,13 +157,21 @@ static constexpr uint8_t kLfo1WaveMap[] = {
      4,   // 3 S&H      -> S&H
 };
 
-// Filter type — JP order: 0 LPF, 1 HPF, 2 BPF (?)  M15:
-//   12 dB HP/BP -> SVF;  24 dB LP -> Diode.  Slope byte ignored for now.
-// JT filter.va_type: 0 SVF LP2,1 SVF HP2,2 SVF BP2,...,8 Diode LP4,...
-static constexpr uint8_t kFilterTypeMap[] = {
-     8,   // 0 LPF -> Diode LP4  (24 dB LP per M15)
-     1,   // 1 HPF -> SVF HP2    (12 dB HP)
-     2,   // 2 BPF -> SVF BP2    (12 dB BP)
+// Filter type x slope -> JT filter.va_type CHOICE INDEX  (gap audit
+// 2026-10-17, signed off).  Authoritative JP byte orders, from the JE-8086
+// parameter table (gearmulator parameterDescriptions_je.json):
+//   0x27 Filter Type : 0 HPF, 1 BPF, 2 LPF     (the old map assumed LPF,HPF,BPF)
+//   0x28 Cutoff Slope: 0 -12 dB, 1 -24 dB      (previously ignored)
+// Rows = JP type byte, columns = JP slope byte.
+// JT filter.va_type: 0 SVF LP2,1 SVF HP2,2 SVF BP2,...,8 Diode LP4,...,
+//                    15 MoogDV HP4,16 MoogDV BP
+// The result goes to filter.va_type (CC 115).  The old slot wrote the type to
+// CC 112 = filter.mode (the OBXa mode list) — which is why "2P BP" showed.
+static constexpr uint8_t kFilterVaTypeMap[3][2] = {
+    //  -12 dB        -24 dB
+    {   1,            15 },   // 0 HPF -> SVF HP2   | MoogDV HP4
+    {   2,            16 },   // 1 BPF -> SVF BP2   | MoogDV BP
+    {   0,             8 },   // 2 LPF -> SVF LP2   | Diode LP4 (M15)
 };
 
 // Multi-FX type: JP-8000 chorus-type byte -> JT fx.mod_effect enum index.
@@ -245,8 +254,10 @@ static constexpr DefaultCC kDefaults[] = {
     // cc111/117 (obxa multimode / res-mod depth) and cc84 (octave) are
     // Continuous — 0 and 64 stay as raw bytes.
     {113, 1}, {115, 8}, {111, 0}, {114, 0}, {117, 0}, {84, 64},
-    // Cross-mod & sync — JP-8000 has no cross-mod
-    {19, 0}, {20, 0},
+    // Cross-mod (CC19) & sync (CC20): NOT defaulted here any more.  The JP
+    // DOES have both (0x16 X-MOD depth, 0x22 OSC2 sync) — they are now
+    // imported in Step 3 (gap audit 2026-10-17).  The old {19,0},{20,0}
+    // "JP-8000 has no cross-mod" entries were wrong and zeroed them.
     // Drive — J3c: saturation defaults SOFT.  Decision A: fx.drive is a Select,
     // so this is the choice INDEX 1 (Soft) [was 32 -> Hard, WRONG].  Bass/treble
     // (Continuous) pre-set to 64 (flat); the dump's tone bytes overwrite later.
@@ -270,7 +281,9 @@ static constexpr DefaultCC kDefaults[] = {
     {15, 64},
     // Pitch envelope sustain/release — JP-8000 has no pitch env S/R
     {67, 0}, {68, 0},
-    // LFO PWM depths — not in JP-8000 SysEx
+    // LFO PWM depths — base value 0.  LFO1 PWM (CC35) is raised in Step 3c
+    // when a JP SQR oscillator carries a PWM depth (Ctrl2).  LFO2 PWM has no
+    // JP equivalent and stays 0.
     {35, 0}, {40, 0},
     // LFO master depths (lfo1.depth CC55 / lfo2.depth CC52): NOT defaulted
     // here.  These are Continuous 0..1 (def 0.0), and the old {55,64},{52,64}
@@ -296,7 +309,6 @@ enum class Xform
     Osc1Wave,        // JP-8000 waveform index → JT-8000 CC value
     Osc2Wave,
     Lfo1Wave,
-    FilterType,
     MfxType,
     DelayType,
     Osc2Range,       // JP-8000 range encoding → normalised CC
@@ -320,7 +332,9 @@ static constexpr Slot kSlots[] = {
     {0x12, 37, Xform::Direct},            // LFO1 delay time
     {0x13, 51, Xform::Direct},            // LFO2 rate (JP maps this here)
     {0x17, 47, Xform::Signed64},          // Osc balance (bipolar)
-    {0x18, 56, Xform::Direct},            // LFO1 destination
+    // 0x18 LFO1 & ENV destination (0 OSC1+2, 1 OSC2, 2 X-MOD) is NOT a slot:
+    // it drives mix.pitch_mod_dest (M19) in Step 3.  The old {0x18,56} slot
+    // wrote it raw into lfo1.destination, which the firmware never reads.
     {0x19, 33, Xform::Signed64ToUni},     // LFO1 → pitch depth
     {0x1A, 38, Xform::Signed64ToUni},     // LFO2 → pitch depth
     {0x1B, 69, Xform::Signed64},          // Pitch envelope depth
@@ -333,7 +347,8 @@ static constexpr Slot kSlots[] = {
     {0x24, 46, Xform::Osc2Fine},         // OSC2 fine tune
 
     // Filter
-    {0x27, 112, Xform::FilterType},       // Filter type (HPF/BPF/LPF)
+    // 0x22 OSC2 sync and 0x26 OSC2 Ctrl2 are handled in Step 3/3c.
+    // 0x27 type + 0x28 slope are read together in Step 3 (kFilterVaTypeMap).
     {0x29, 23,  Xform::Direct},           // Cutoff frequency
     {0x2A, 24,  Xform::Direct},           // Resonance
     {0x2B, 50,  Xform::Signed64},         // Cutoff key follow
@@ -400,7 +415,6 @@ static int applyTransform(Xform xf, uint8_t raw)
         case Xform::Osc1Wave:      return (raw < 7)  ? kOsc1WaveMap[raw]   : 1;  // fallback SAW
         case Xform::Osc2Wave:      return (raw < 4)  ? kOsc2WaveMap[raw]   : 1;  // fallback SAW
         case Xform::Lfo1Wave:      return (raw < 4)  ? kLfo1WaveMap[raw]   : 1;  // fallback TRI
-        case Xform::FilterType:    return (raw < 3)  ? kFilterTypeMap[raw] : 8;  // fallback Diode LP4
         case Xform::MfxType:       return (raw < 12) ? kMfxTypeMap[raw]    : 11; // >11 -> Super Chorus (Kris)
         case Xform::DelayType:     return (raw < 5)  ? kDelayTypeMap[raw]  : 3;  // fallback Pan L>R
         case Xform::Osc2Range:     return clamp7((static_cast<int>(raw) * 127 + 25) / 50);
@@ -907,12 +921,53 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
     // Some JP-8000 waveforms route Ctrl1/Ctrl2 to different CCs depending
     // on which waveform is selected (e.g., SuperSaw Ctrl1 → detune CC 77,
     // PW Ctrl1 → mix level CC 60).
-    // Q3 (J3, signed off): ring/cross-mod is a switch + depth PAIR —
-    // 0x15 on/off, 0x16 depth (position-certain: bracketed by the ring
-    // switch and osc balance; 12 distinct values across the reference
-    // bank).  The old single Bool127 slot slammed depth to 0/127 and
-    // threw the dump's actual depth away.
-    setParamByCC(apvts, 91, d(0x15) != 0 ? d(0x16) : 0);
+    // ---- Ring / X-MOD / Sync  (gap audit 2026-10-17, signed off) ----
+    // JE-8086 parameter table: 0x15 = Ring switch, 0x16 = Cross-mod depth,
+    // 0x22 = OSC2 sync.  Ring and X-MOD are INDEPENDENT controls on the JP.
+    // (Supersedes Q3/J3, which treated 0x15/0x16 as one switch+depth pair and
+    // wrote the X-MOD depth into osc1.ring_mix — losing X-MOD whenever ring
+    // was off, and never setting a true ring level.)
+
+    // X-MOD depth -> mix.cross_mod (CC19, Continuous): linear byte/127.
+    // Firmware fit against the JE-8086 was ~0.39; this byte law gives 0.35 for
+    // AI AI AI (byte 44) — close; A/B to confirm before adding any scale.
+    setParamByCC(apvts, 19, d(0x16));
+
+    // OSC2 sync -> mix.osc_sync (CC20, Toggle: >=64 = on).  Firmware already
+    // follows the JP topology: OSC1 master, OSC2 slave.
+    setParamByCC(apvts, 20, d(0x22) != 0 ? 127 : 0);
+
+    // Ring (option a — import-only bake).  On the JP the ring product
+    // (OSC1 x OSC2) REPLACES OSC2 in the mix, and OSC BALANCE crossfades OSC1
+    // against the ring.  The JT adds ring ON TOP with its own gain and no
+    // balance term, so on import:
+    //   - mix.osc2 (CC61) = 0  : OSC2 still runs as the ring modulator
+    //                            (firmware need2 stays true via ringG) but is
+    //                            not heard directly;
+    //   - osc2.ring_mix (CC92) = the OSC2-side balance gain the JT applies,
+    //     computed from the SAME byte law setParamByCC uses for mix.balance
+    //     (norm = byte/127 -> -1..1), so ring sits where OSC2 would have.
+    // Limitation: the ring level is fixed at load; moving BALANCE afterwards
+    // does not track it (option b = firmware mode, deferred).
+    // osc1.ring_mix (CC91) stays at its reset default 0 — firmware SUMS the
+    // two ring gains, so only one carries the level.
+    if (d(0x15) != 0)
+    {
+        const float bal   = (float)juce::jlimit(0, 127, (int)d(0x17)) / 127.0f * 2.0f - 1.0f;
+        const float balG2 = (bal < 0.0f) ? (1.0f + bal) : 1.0f;   // firmware balance law
+        setParamByCC(apvts, 61, 0);                                // mix.osc2 off
+        setParamByCC(apvts, 92, juce::roundToInt(balG2 * 127.0f)); // osc2.ring_mix
+    }
+
+    // Filter type x slope -> filter.va_type (CC115, Select index).  Engine is
+    // already VA from kDefaults.  Out-of-range bytes fall back to LPF -24.
+    {
+        const uint8_t fType  = d(0x27);
+        const uint8_t fSlope = d(0x28);
+        const int vaType = (fType < 3 && fSlope < 2) ? kFilterVaTypeMap[fType][fSlope]
+                                                     : 8;          // Diode LP4
+        setParamByCC(apvts, 115, vaType);
+    }
 
     // J3d (signed off 2026-07-21): Oscillator Shift 0x49 (±2 octaves, OSC
     // COMMON on the JP; the reference bank uses 0..3) folds into the
@@ -960,36 +1015,59 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
     // resetLayerToDefaults leaves lfo2.waveform at def 0 = SIN.
     setParamByCC(apvts, 63, 1);              // lfo2.waveform -> TRI
 
-    // M19: LFO1 → pitch modulation destination.  The JP routes LFO1 pitch to
-    // OSC1+2 / OSC2 / X-MOD; mix.pitch_mod_dest (0x0107) carries that on the
-    // JT.  LFO2 pitch is ALWAYS both, so it needs no destination write.
-    // mix.pitch_mod_dest is UNMAPPED in JtBridge (no v1 CC), so it is set
-    // directly by juceId, not via setParamByCC.
-    //   Option indices: [0] OSC1+2  [1] OSC2  [2] X-MOD
-    // TODO(JP dest byte): replace `0` below with the decoded JP destination.
-    //   The JP "LFO1 pitch destination" byte offset/encoding is not yet known;
-    //   until then every import defaults to OSC1+2 (index 0), matching the JP
-    //   power-on default.  One-line change once the offset is confirmed, e.g.
-    //     const int jpDest = /* map d(0xNN) -> 0/1/2 */;
+    // Step 3c: JP SQR oscillator PWM depth (Ctrl2) -> per-osc LFO1->PW scale.
+    // JE-8086 table: for SQR, Ctrl1 = pulse width (already -> shape_dc above),
+    // Ctrl2 = PWM depth (LFO1).  JT: pwm = LFO1 x lfo1.pwm_depth (master,
+    // CC35) x osc<n>.pwm_lfo1_depth (per-osc scale, def 1.0).  kDefaults zeroed
+    // the master, so no import ever had LFO1 PWM.  When either osc is SQR the
+    // master goes full and each osc's scale carries its own JP depth; a non-SQR
+    // osc gets scale 0 so it does not pick up the other's PWM.  Untouched when
+    // neither osc is SQR (defaults stand, master stays 0).
+    // osc<n>.pwm_lfo1_depth are unmapped in JtBridge -> set by juceId.
+    // Swing calibration (JP depth 127 vs JT width excursion) to be A/B'd.
     {
-        const int pitchModDestIdx = 0;       // TODO(JP dest byte): 0=OSC1+2 default
+        const bool osc1Sqr = (osc1Wave == 4);   // JP OSC1 order: 4 = SQR
+        const bool osc2Sqr = (osc2Wave == 0);   // JP OSC2 order: 0 = SQR
+        if (osc1Sqr || osc2Sqr)
+        {
+            setParamByCC(apvts, 35, 127);       // lfo1.pwm_depth master full
+
+            auto setScale = [&](const char* id, uint8_t byte)
+            {
+                if (auto* p = apvts.getParameter(id))
+                    p->setValueNotifyingHost(p->convertTo0to1((float)byte / 127.0f));
+            };
+            setScale("osc1.pwm_lfo1_depth", osc1Sqr ? d(0x20) : 0);
+            setScale("osc2.pwm_lfo1_depth", osc2Sqr ? d(0x26) : 0);
+        }
+    }
+
+    // M19: LFO1 & ENV destination.  The JP routes OSC LFO1 depth AND pitch-env
+    // depth to OSC1+2 / OSC2 / X-MOD from ONE byte, 0x18 (JE-8086 table,
+    // "Lfo1AndEnvelopeDestination", 0..2) — the byte the old TODO waited for.
+    // mix.pitch_mod_dest uses the same order ([0] OSC1+2 [1] OSC2 [2] X-MOD)
+    // and the firmware routes both LFO1 and pitch-env through it.  LFO2 pitch
+    // is always both, so it needs no destination write.  Unmapped in JtBridge
+    // (no v1 CC) -> set by juceId.
+    {
+        const int pitchModDestIdx = juce::jlimit(0, 2, (int)d(0x18));
         if (auto* p = apvts.getParameter("mix.pitch_mod_dest"))
             p->setValueNotifyingHost(p->convertTo0to1((float)pitchModDestIdx));
     }
 
-    // Step 4: JP-8000 MFX type overrides
-    // MFX types 8-12 are distortion variants — map to JT-8000 drive CC
-    if (mfxType >= 8 && mfxType <= 12)
+    // Step 4: JP-8080 Distortion MFX (gap audit 2026-10-17, signed off).
+    // JP chorus-type byte order (JE-8086 table): 0-3 Super Chorus SLW/MID/FST/
+    // CLR, 4-6 Flanger Slow/Deep/Fast, 7 Deep Phasing, 8 Jet, 9 Twisting,
+    // 10-11 Freeze Phase 1/2, 12 DISTORTION (rack JP-8080 only).
+    // The old overrides treated 5-7 as "delay variants" and 8-12 as
+    // "distortion", which silently undid kMfxTypeMap for 5-11 (mod FX off,
+    // delay hijacked or drive forced).  Only byte 12 needs an override:
+    // drive Hard, mod FX off.  fx.drive is a Select -> choice INDEX 2 (Hard);
+    // the old raw 32..127 bytes only worked by clamping.
+    if (mfxType == 12)
     {
-        setParamByCC(apvts, 16, juce::jmin(127, 32 + (mfxType - 8) * 24));
-        setParamByCC(apvts, 103, 0);  // disable mod FX (drive replaces it)
-    }
-    // MFX types 5-7 are delay variants — map to JT-8000 delay params
-    if (mfxType >= 5 && mfxType <= 7)
-    {
-        setParamByCC(apvts, 107, 0);          // delay type off
-        setParamByCC(apvts, 108, d(0x3E));    // delay mix from MFX level
-        setParamByCC(apvts, 103, 0);          // mod FX off
+        setParamByCC(apvts, 16, 2);   // fx.drive -> Hard
+        setParamByCC(apvts, 103, 0);  // fx.mod_effect -> OFF (drive replaces it)
     }
 
     // Step 5: import-time fixups (2026-09-19)
