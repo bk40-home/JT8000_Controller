@@ -104,6 +104,8 @@
 	<knob class="knob v-main v-shift" param="mix.cross_mod" key="mix.cross_mod" default="0.0" style="left:914dp; top:648dp; width:164dp; height:164dp;"/>
 	<div class="legend v-main v-shift" style="left:1088dp; top:630dp; width:152dp; text-align:left;">MOD DEST</div>
 	<combo class="combo v-main v-shift" param="mix.pitch_mod_dest" key="mix.pitch_mod_dest" default="0.0" options="OSC1+2, OSC2, X-MOD" index="0" style="left:1088dp; top:674dp; width:152dp; height:56dp;"/>
+	<div class="legend v-main v-shift" style="left:1088dp; top:742dp; width:152dp; text-align:left;">XM TYPE</div>
+	<combo class="combo v-main v-shift" param="mix.xmod_type" key="mix.xmod_type" default="0.0" options="JtXmod, JpXmod" index="0" style="left:1088dp; top:786dp; width:152dp; height:56dp;"/>
 
 	<!-- Oscillator 2 -->
 	<div class="sectitle v-main v-shift" style="left:1300dp; top:260dp; width:1216dp; text-align:left;">OSCILLATOR 2</div>
@@ -240,7 +242,7 @@
 	<div class="legend shiftalt v-shift" style="left:1812dp; top:1046dp; width:152dp; text-align:left;">DESTINATION</div>
 	<combo class="combo v-main v-shift" param="lfo1.waveform" key="lfo1.waveform" default="0.0" options="SIN, TRI, SAW, SQR, S&amp;amp;H, NOISE" index="0" style="left:1812dp; top:1090dp; width:152dp; height:56dp;"/>
 	<div class="legend v-main v-shift" style="left:1812dp; top:1158dp; width:152dp; text-align:left;">SYNC</div>
-	<combo class="combo v-main v-shift" param="lfo1.sync" key="lfo1.sync" default="0.0" options="Free, 4 Bars, 2 Bars, 1 Bar, 1/2, 1/4, 1/8, 1/16, 1/32, 1/4T, 1/8T, 1/16T" index="0" style="left:1812dp; top:1202dp; width:152dp; height:56dp;"/>
+	<combo class="combo v-main v-shift" param="lfo1.sync" key="lfo1.sync" default="0.0" options="Free, 4 Bars, 2 Bars, 1 Bar, 1/2, 1/4, 1/8, 1/16, 1/32, 1/4T, 1/8T, 1/16T, 1/4D, 1/8D, 1/16D" index="0" style="left:1812dp; top:1202dp; width:152dp; height:56dp;"/>
 	<div class="legend v-main v-shift" style="left:1636dp; top:1336dp; width:168dp; text-align:center;">PITCH</div>
 	<knob class="knob v-main v-shift" param="lfo1.pitch_depth" key="lfo1.pitch_depth" default="0.0" style="left:1638dp; top:1354dp; width:164dp; height:164dp;"/>
 	<div class="legend v-main v-shift" style="left:1804dp; top:1336dp; width:168dp; text-align:center;">FILTER</div>
@@ -261,7 +263,7 @@
 	<div class="legend shiftalt v-shift" style="left:2720dp; top:1046dp; width:152dp; text-align:left;">DESTINATION</div>
 	<combo class="combo v-main v-shift" param="lfo2.waveform" key="lfo2.waveform" default="0.0" options="SIN, TRI, SAW, SQR, S&amp;amp;H, NOISE" index="0" style="left:2720dp; top:1090dp; width:152dp; height:56dp;"/>
 	<div class="legend v-main v-shift" style="left:2720dp; top:1158dp; width:152dp; text-align:left;">SYNC</div>
-	<combo class="combo v-main v-shift" param="lfo2.sync" key="lfo2.sync" default="0.0" options="Free, 4 Bars, 2 Bars, 1 Bar, 1/2, 1/4, 1/8, 1/16, 1/32, 1/4T, 1/8T, 1/16T" index="0" style="left:2720dp; top:1202dp; width:152dp; height:56dp;"/>
+	<combo class="combo v-main v-shift" param="lfo2.sync" key="lfo2.sync" default="0.0" options="Free, 4 Bars, 2 Bars, 1 Bar, 1/2, 1/4, 1/8, 1/16, 1/32, 1/4T, 1/8T, 1/16T, 1/4D, 1/8D, 1/16D" index="0" style="left:2720dp; top:1202dp; width:152dp; height:56dp;"/>
 	<div class="legend v-main v-shift" style="left:2544dp; top:1336dp; width:168dp; text-align:center;">PITCH</div>
 	<knob class="knob v-main v-shift" param="lfo2.pitch_depth" key="lfo2.pitch_depth" default="0.0" style="left:2546dp; top:1354dp; width:164dp; height:164dp;"/>
 	<div class="legend v-main v-shift" style="left:2712dp; top:1336dp; width:168dp; text-align:center;">FILTER</div>
@@ -272,8 +274,8 @@
 	<knob class="knob v-main v-shift" param="lfo2.amp_depth" key="lfo2.amp_depth" default="0.0" style="left:3050dp; top:1354dp; width:164dp; height:164dp;"/>
 	<div class="legend v-main v-shift" style="left:3216dp; top:1336dp; width:168dp; text-align:center;">DELAY</div>
 	<knob class="knob v-main v-shift" param="lfo2.delay" key="lfo2.delay" default="0.0" style="left:3218dp; top:1354dp; width:164dp; height:164dp;"/>
-	<div class="legend v-main v-shift" style="left:3056dp; top:1046dp; width:152dp; text-align:left;">MOD WHEEL</div>
-	<combo class="combo v-main v-shift" param="lfo2_mod_wheel" key="lfo2.mod_wheel" default="0.0" options="" index="0" style="left:3056dp; top:1090dp; width:152dp; height:56dp;"/>
+	<div class="legend v-main v-shift" style="left:3048dp; top:1046dp; width:168dp; text-align:center;">MOD WHEEL</div>
+	<toggle class="toggle v-main v-shift" param="lfo2.mod_wheel" key="lfo2.mod_wheel" default="1.0" style="left:3084dp; top:1098dp; width:96dp; height:72dp;"/>
 
 	<!-- Mixer -->
 	<div class="sectitle v-main v-shift" style="left:3428dp; top:966dp; width:348dp; text-align:left;">MIXER</div>
@@ -322,7 +324,7 @@
 	<div class="legend v-main v-shift" style="left:1859dp; top:2042dp; width:320dp; text-align:left;">TYPE</div>
 	<combo class="combo v-main v-shift" param="fx.delay_effect" key="fx.delay_effect" default="0.0" options="OFF, Mono Short, Mono Long, Pan L&gt;R, Pan R&gt;L, Pan Stereo" index="0" style="left:1859dp; top:2086dp; width:320dp; height:56dp;"/>
 	<div class="legend v-main v-shift" style="left:2195dp; top:2042dp; width:320dp; text-align:left;">SYNC</div>
-	<combo class="combo v-main v-shift" param="fx.delay_sync" key="fx.delay_sync" default="0.0" options="Free, 4 Bars, 2 Bars, 1 Bar, 1/2, 1/4, 1/8, 1/16, 1/32, 1/4T, 1/8T, 1/16T" index="0" style="left:2195dp; top:2086dp; width:320dp; height:56dp;"/>
+	<combo class="combo v-main v-shift" param="fx.delay_sync" key="fx.delay_sync" default="0.0" options="Free, 4 Bars, 2 Bars, 1 Bar, 1/2, 1/4, 1/8, 1/16, 1/32, 1/4T, 1/8T, 1/16T, 1/4D, 1/8D, 1/16D" index="0" style="left:2195dp; top:2086dp; width:320dp; height:56dp;"/>
 	<div class="legend v-main v-shift" style="left:2531dp; top:2042dp; width:320dp; text-align:left;">ENGINE</div>
 	<combo class="combo v-main v-shift" param="fx_delay_engine" key="fx.delay_engine" default="0.0" options="Digital, Tape" index="0" style="left:2531dp; top:2086dp; width:320dp; height:56dp;"/>
 
@@ -351,7 +353,7 @@
 	<div class="legend v-reverb" style="left:1080dp; top:1752dp; width:168dp; text-align:center;">SHIMMER</div>
 	<knob class="knob v-reverb" param="reverb.shimmer" key="reverb.shimmer" default="0.0" style="left:1082dp; top:1770dp; width:164dp; height:164dp;"/>
 	<div class="legend v-reverb" style="left:80dp; top:2042dp; width:320dp; text-align:left;">ALGORITHM</div>
-	<combo class="combo v-reverb" param="reverb_algorithm" key="reverb.algorithm" default="0.0" options="" index="0" style="left:80dp; top:2086dp; width:320dp; height:56dp;"/>
+	<combo class="combo v-reverb" param="reverb.algorithm" key="reverb.algorithm" default="0.0" options="Plate, Shimmer, Hall" index="0" style="left:80dp; top:2086dp; width:320dp; height:56dp;"/>
 	<div class="legend v-reverb" style="left:408dp; top:2042dp; width:168dp; text-align:center;">BYPASS</div>
 	<toggle class="toggle v-reverb" param="reverb.bypass" key="reverb.bypass" default="0.0" style="left:444dp; top:2094dp; width:96dp; height:72dp;"/>
 	<div class="legend v-reverb" style="left:576dp; top:2042dp; width:168dp; text-align:center;">FREEZE</div>
@@ -409,7 +411,7 @@
 	<div class="legend v-seq" style="left:408dp; top:1752dp; width:168dp; text-align:center;">STEPS</div>
 	<knob class="knob v-seq" param="seq.steps" key="seq.steps" default="0.5333" style="left:410dp; top:1770dp; width:164dp; height:164dp;"/>
 	<div class="legend v-seq" style="left:584dp; top:1752dp; width:152dp; text-align:left;">SYNC</div>
-	<combo class="combo v-seq" param="seq.timing_mode" key="seq.timing_mode" default="0.0" options="Free, 4 Bars, 2 Bars, 1 Bar, 1/2, 1/4, 1/8, 1/16, 1/32, 1/4T, 1/8T, 1/16T" index="0" style="left:584dp; top:1796dp; width:152dp; height:56dp;"/>
+	<combo class="combo v-seq" param="seq.timing_mode" key="seq.timing_mode" default="0.0" options="Free, 4 Bars, 2 Bars, 1 Bar, 1/2, 1/4, 1/8, 1/16, 1/32, 1/4T, 1/8T, 1/16T, 1/4D, 1/8D, 1/16D" index="0" style="left:584dp; top:1796dp; width:152dp; height:56dp;"/>
 	<div class="legend v-seq" style="left:744dp; top:1752dp; width:168dp; text-align:center;">RATE</div>
 	<knob class="knob v-seq" param="seq.rate" key="seq.rate" default="0.5" style="left:746dp; top:1770dp; width:164dp; height:164dp;"/>
 	<div class="legend v-seq" style="left:920dp; top:1752dp; width:152dp; text-align:left;">DIRECTION</div>
@@ -423,7 +425,7 @@
 	<div class="legend v-seq" style="left:1752dp; top:1752dp; width:168dp; text-align:center;">DEPTH</div>
 	<knob class="knob v-seq" param="seq.depth" key="seq.depth" default="0.5" style="left:1754dp; top:1770dp; width:164dp; height:164dp;"/>
 	<div class="legend v-seq" style="left:2096dp; top:1752dp; width:152dp; text-align:left;">AUX DEST</div>
-	<combo class="combo v-seq" param="seq.aux_destination" key="seq.aux_destination" default="0.0" options="None, Filter, Pan, DelaySend, Drive" index="0" style="left:2096dp; top:1796dp; width:152dp; height:56dp;"/>
+	<combo class="combo v-seq" param="seq.aux_destination" key="seq.aux_destination" default="0.0" options="None, Filter, Pan, DelaySend, Tone, Drive" index="0" style="left:2096dp; top:1796dp; width:152dp; height:56dp;"/>
 	<div class="legend v-seq" style="left:2256dp; top:1752dp; width:168dp; text-align:center;">AUX DEPTH</div>
 	<knob class="knob v-seq" param="seq.aux_depth" key="seq.aux_depth" default="0.5" style="left:2258dp; top:1770dp; width:164dp; height:164dp;"/>
 	<stepgrid class="stepgrid v-seq" param="" key="step_sequencer.pattern" lanes="2" steps="16" stepprefix="seq.step_,seq.aux_step_" style="left:72dp; top:2022dp; width:3696dp; height:308dp;"/>
@@ -439,7 +441,7 @@
 	<div class="legend v-arp" style="left:584dp; top:1752dp; width:152dp; text-align:left;">OCTAVES</div>
 	<combo class="combo v-arp" param="arp.octaves" key="arp.octaves" default="0.0" options="1, 2, 3, 4" index="0" style="left:584dp; top:1796dp; width:152dp; height:56dp;"/>
 	<div class="legend v-arp" style="left:752dp; top:1752dp; width:152dp; text-align:left;">RATE</div>
-	<combo class="combo v-arp" param="arp.rate" key="arp.rate" default="0.6364" options="Free, 4 Bars, 2 Bars, 1 Bar, 1/2, 1/4, 1/8, 1/16, 1/32, 1/4T, 1/8T, 1/16T" index="0" style="left:752dp; top:1796dp; width:152dp; height:56dp;"/>
+	<combo class="combo v-arp" param="arp.rate" key="arp.rate" default="0.5" options="Free, 4 Bars, 2 Bars, 1 Bar, 1/2, 1/4, 1/8, 1/16, 1/32, 1/4T, 1/8T, 1/16T, 1/4D, 1/8D, 1/16D" index="0" style="left:752dp; top:1796dp; width:152dp; height:56dp;"/>
 	<div class="legend v-arp" style="left:912dp; top:1752dp; width:168dp; text-align:center;">FREE HZ</div>
 	<knob class="knob v-arp" param="arp.free_hz" key="arp.free_hz" default="0.5" style="left:914dp; top:1770dp; width:164dp; height:164dp;"/>
 	<div class="legend v-arp" style="left:1080dp; top:1752dp; width:168dp; text-align:center;">GATE</div>

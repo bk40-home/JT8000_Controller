@@ -296,6 +296,10 @@ static constexpr Option kOpt_voice_split[] = {
     { "6+2" },
     { "7+1" },
 };
+static constexpr Option kOpt_xmod_type[] = {
+    { "JtXmod" },
+    { "JpXmod" },
+};
 static constexpr Option kOpt_xpander_mode[] = {
     { "LP4" },
     { "LP3" },
@@ -315,9 +319,9 @@ static constexpr Option kOpt_xpander_mode[] = {
 };
 
 // ---------------------------------------------------------------------------
-// Parameters (303)
+// Parameters (304)
 // ---------------------------------------------------------------------------
-static constexpr int kNumParams = 303;
+static constexpr int kNumParams = 304;
 
 static constexpr Param kParams[kNumParams] = {
     { 0x0000, "osc1.wave",               "osc1.wave",               "Osc1 Wave",             "WAVE",      Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      19.0f,     0.0f,      0.0f,      "",      false,  kOpt_osc_wave,         20,  0 },
@@ -356,6 +360,7 @@ static constexpr Param kParams[kNumParams] = {
     { 0x0105, "mix.cross_mod",           "mix.cross_mod",           "Cross Mod",             "XMOD",      Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  2 },
     { 0x0106, "mix.osc_sync",            "mix.osc_sync",            "Osc Sync",              "SYNC",      Widget::Toggle, Type::Toggle,      Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "",      false,  nullptr,                0,  2 },
     { 0x0107, "mix.pitch_mod_dest",      "mix.pitch_mod_dest",      "Pitch Mod Dest",        "P.DEST",    Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      2.0f,      0.0f,      0.0f,      "",      false,  kOpt_pitch_mod_dest,    3,  2 },
+    { 0x0108, "mix.xmod_type",           "mix.xmod_type",           "X-Mod Type",            "XM TYPE",   Widget::Combo, Type::Select,      Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "",      false,  kOpt_xmod_type,         2,  2 },
     { 0x0180, "filter.cutoff",           "filter.cutoff",           "Cutoff",                "CUTOFF",    Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Log, 20.0f,     20000.0f,  0.0f,      20000.0f,  "Hz",    false,  nullptr,                0,  3 },
     { 0x0181, "filter.resonance",        "filter.resonance",        "Resonance",             "RESO",      Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, 0.0f,      1.0f,      0.0f,      0.0f,      "norm",  false,  nullptr,                0,  3 },
     { 0x0182, "filter.env_amount",       "filter.env_amount",       "Filt Env Amt",          "ENV",       Widget::Knob,  Type::Continuous,  Scope::Patch,        Curve::Lin, -1.0f,     1.0f,      0.0f,      0.0f,      "norm",  true,   nullptr,                0,  3 },

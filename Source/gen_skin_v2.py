@@ -142,8 +142,8 @@ body  { decorator: image(bg_v2.png); }
 
 /* Header: captions centred by line-height (set per element in the RML),
  * the lit state is a flat orange plate drawn UNDER the caption. */
+/* .shiftcap is left to jt8000.rcss: it is dim until SHIFT latches, then lit. */
 .btncap   { font-size: 30dp; font-weight: bold; color: #e6e9eeff; }
-.shiftcap { color: #ff9c86ff; }
 .layerlit { decorator: none; background-color: #d26a14ff; }
 
 /* Step grids: same frame language as the panels. */
@@ -228,6 +228,8 @@ def build_panels():
                   w=third, h=BAND_H, ncols=7, items=osc_items(1, [
                       ("mix.cross_mod",      "X-MOD",    None, 5, 1, 1, None),
                       ("mix.pitch_mod_dest", "MOD DEST", None, 6, 1, 1, 0),
+                      # X-MOD law select (2026-10-18), stacked under MOD DEST
+                      ("mix.xmod_type",      "XM TYPE",  None, 6, 1, 1, 1),
                   ])))
     P.append(dict(name="OSCILLATOR 2", views=MAIN, x=x0 + third + GUTTER,
                   y=ROW_A_Y, w=third, h=BAND_H, ncols=7, items=osc_items(2, [
@@ -468,7 +470,56 @@ EXTRA_CTRLS = OrderedDict([
     ("bass.accent_filter",  ("knob",   "knob v-bass",          "0.5",    None)),
     # The pattern grid: not a parameter (param=""), wired by JtRmlPanel.
     ("bass_sequencer.pattern", ("bassgrid", "bassgrid v-bass",  "0.0",    None)),
+    # X-MOD law select (2026-10-18): JtXmod (default) / JpXmod.
+    ("mix.xmod_type",       ("combo",  "combo v-main v-shift", "0.0",    "JtXmod, JpXmod")),
 ])
+
+# Corrections to controls that ARE in the WIP but whose binding attributes are
+# wrong against the param table (found 2026-10-18).  Unlike EXTRA_CTRLS these
+# are applied even when the WIP has the key, so they also survive using a
+# generated jt8000.rml as the next WIP (re-applying them is a no-op).
+#   key -> (tag, class or None = keep, default or None = keep, options or None)
+# A combo's value is index/(options-1): with too few options every pick past
+# the first is decoded as a different value, and with none it shows blank and
+# always sends 0.  verify() now checks this against JtParamTable.h.
+AUX_DEST_OPTS = "None, Filter, Pan, DelaySend, Tone, Drive"
+CTRL_FIXES = OrderedDict([
+    # Toggle param drawn as an option-less combo (blank, stuck at 0).  Table
+    # default is ON, so the reset value is 1.0.
+    ("lfo2.mod_wheel",      ("toggle", "toggle v-main v-shift", "1.0",  None)),
+    # Option list was empty.
+    ("reverb.algorithm",    ("combo",  None,                    None,   "Plate, Shimmer, Hall")),
+    # 12-option timing lists predate 1/4D, 1/8D, 1/16D (15 options now).
+    ("lfo1.sync",           ("combo",  None,                    None,   TIMING_OPTS)),
+    ("lfo2.sync",           ("combo",  None,                    None,   TIMING_OPTS)),
+    ("fx.delay_sync",       ("combo",  None,                    None,   TIMING_OPTS)),
+    ("seq.timing_mode",     ("combo",  None,                    None,   TIMING_OPTS)),
+    ("arp.rate",            ("combo",  None,                    "0.5",  TIMING_OPTS)),   # 1/16 = 7/14
+    # "Tone" was missing (5 options vs 6).
+    ("seq.aux_destination", ("combo",  None,                    None,   AUX_DEST_OPTS)),
+])
+
+
+def apply_fixes(ctrls):
+    """Apply CTRL_FIXES to controls the WIP already defines."""
+    for key, (tag, cls, default, options) in CTRL_FIXES.items():
+        if key not in ctrls:
+            continue
+        _, a = ctrls[key]
+        a["param"] = key                    # dotted id (old files had underscores)
+        if cls is not None:
+            a["class"] = cls
+        if default is not None:
+            a["default"] = default
+        if tag == "combo":
+            if options is not None:
+                a["options"] = options
+            a.setdefault("index", "0")
+        else:
+            a.pop("options", None)
+            a.pop("index", None)
+        ctrls[key] = (tag, a)
+    return ctrls
 
 
 def merge_extra(ctrls):
@@ -756,8 +807,59 @@ def views_of(cls):
     return {v for v in cls.split() if v.startswith("v-")}
 
 
+# Param-table cross-check: Source/gen/JtParamTable.h sits beside this script.
+PTABLE_RE = re.compile(
+    r'\{\s*0x[0-9A-Fa-f]+,\s*"([^"]+)",\s*"[^"]*",\s*"[^"]*",\s*"[^"]*",\s*'
+    r'Widget::\w+,\s*Type::(\w+),\s*Scope::\w+,\s*Curve::\w+,\s*'
+    r'([-0-9.]+)f,\s*([-0-9.]+)f,\s*[-0-9.]+f,\s*([-0-9.]+)f,.*?,\s*(?:kOpt_\w+|nullptr),\s*(\d+),')
+
+
+def read_ptable():
+    """{key: (type, min, max, default, optionCount)} or None if not found."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gen", "JtParamTable.h")
+    if not os.path.exists(path):
+        print("WARNING: %s not found - option counts NOT checked" % path)
+        return None
+    t = {}
+    for m in PTABLE_RE.finditer(open(path, encoding="utf-8").read()):
+        t[m.group(1)] = (m.group(2), float(m.group(3)), float(m.group(4)),
+                         float(m.group(5)), int(m.group(6)))
+    return t
+
+
+def verify_bindings(elems, table):
+    """Select params: combo with exactly the table's option count, default =
+    index/(n-1).  Toggle params: toggle element, default = table default.
+    Continuous params shown as combos (perf.balance A/AB/B) are a deliberate
+    stepped view and are not checked."""
+    errs = []
+    for e in elems:
+        key, tag, a = e["key"], e["tag"], e["attrs"]
+        if key not in table:
+            continue
+        typ, lo, hi, dflt, nopt = table[key]
+        if typ == "Select":
+            opts = [o for o in a.get("options", "").split(",") if o.strip()]
+            if tag != "combo":
+                continue                    # e.g. bass.enable: 2-option select as a toggle
+            if len(opts) != nopt:
+                errs.append("%s: %d options in skin, %d in param table" % (key, len(opts), nopt))
+            want = (dflt - lo) / (nopt - 1) if nopt > 1 else 0.0
+            if abs(float(a.get("default", "0")) - want) > 1e-3:
+                errs.append("%s: default %s, table gives %.4f" % (key, a.get("default"), want))
+        elif typ == "Toggle":
+            if tag != "toggle":
+                errs.append("%s: toggle param drawn as <%s>" % (key, tag))
+            elif abs(float(a.get("default", "0")) - (dflt - lo) / (hi - lo)) > 1e-3:
+                errs.append("%s: default %s, table gives %.1f" % (key, a.get("default"), dflt))
+    return errs
+
+
 def verify(panels, elems, wip):
     errs = []
+    table = read_ptable()
+    if table is not None:
+        errs += verify_bindings(elems, table)
     placed = {e["key"] for e in elems}
     for k in wip:
         if k not in placed:
@@ -794,7 +896,7 @@ def verify(panels, elems, wip):
 def main():
     wip_path, outdir = sys.argv[1], sys.argv[2]
     os.makedirs(outdir, exist_ok=True)
-    wip = merge_extra(read_wip(wip_path))
+    wip = apply_fixes(merge_extra(read_wip(wip_path)))
     panels = build_panels()
     elems = place(panels, wip)
     errs = verify(panels, elems, wip)
