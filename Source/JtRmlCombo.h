@@ -6,11 +6,16 @@
  *   whole job is to tell you which option is selected, and that is text. It was
  *   held back until JtRmlFont existed rather than shipped showing a blank bar.
  *
- * OPTIONS COME FROM THE SKIN
- *   The option strings are written into the document as an `options` attribute
- *   by gen_skin.py, taken from params.yaml. The element therefore needs no
- *   knowledge of the parameter model - consistent with every other control
- *   here, which reports a normalised value and an opaque key and nothing more.
+ * OPTIONS COME FROM THE PARAMETER TABLE (N4, 2026-10-22)
+ *   When `key` names a Select parameter in gen/JtParamTable.h, the option list
+ *   is taken from that table and any `options` attribute in the skin is
+ *   IGNORED.  Why: the normalised value is index / (count - 1), so the count
+ *   MUST equal the APVTS choice count.  Skins froze the list at the time they
+ *   were written; when fx.mod_effect grew from 12 to 24 options, a stale
+ *   12-entry skin list sent "Super Chorus" (index 11 -> 1.0) as "Freeze Ph 2".
+ *   The table is generated from params.yaml with the APVTS, so it cannot
+ *   drift.  The `options` attribute is still honoured for a key the table
+ *   does not know (e.g. a skin-only control), exactly as before.
  *
  * VALUE
  *   Reported as normalised 0..1 like every other control, so the host binding
@@ -77,6 +82,10 @@ protected:
 
 private:
     void parseOptions(const Rml::String& csv);
+    // N4: fill m_options from JtParams::kParams when m_param is a Select row.
+    // Returns false (and leaves m_options alone) for an unknown or non-Select
+    // key.  Runs on attribute change only (skin load), never per frame.
+    bool loadOptionsFromTable();
     void refreshText();
     void openList();
     void closeList();
@@ -84,6 +93,7 @@ private:
     Rml::String m_param;
     std::vector<std::string> m_options;
     int m_index = 0;
+    bool m_tableOptions = false;   // N4: true = list came from the table
 
     /* Owned by the document once created; cleared in closeList(). Held as a raw
      * pointer because RmlUi owns the lifetime and we only ever remove it

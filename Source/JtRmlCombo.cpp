@@ -6,7 +6,10 @@
 
 #include "JtRmlCombo.h"
 
+#include "gen/JtParamTable.h"   // N4: JtParams::kParams — the APVTS's own option lists
+
 #include <algorithm>
+#include <cstring>
 #include <cmath>
 #include <sstream>
 
@@ -73,14 +76,49 @@ void JtRmlCombo::parseOptions(const Rml::String& csv)
     refreshText();
 }
 
+bool JtRmlCombo::loadOptionsFromTable()
+{
+    if (m_param.empty())
+        return false;
+
+    /* Linear scan of ~300 rows, once per combo at skin load. A map would cost
+     * more to build than the handful of combos ever look up. */
+    for (int i = 0; i < JtParams::kNumParams; ++i)
+    {
+        const JtParams::Param& p = JtParams::kParams[i];
+        if (std::strcmp(p.juceId, m_param.c_str()) != 0)
+            continue;
+        if (p.type != JtParams::Type::Select || p.options == nullptr || p.optionCount == 0)
+            return false;                       // known key, but not a list
+
+        m_options.clear();
+        for (int o = 0; o < p.optionCount; ++o)
+            m_options.emplace_back(p.options[o].name);
+
+        m_index = std::clamp(m_index, 0, static_cast<int>(m_options.size()) - 1);
+        refreshText();
+        return true;
+    }
+    return false;                               // skin-only key: use the attribute
+}
+
 void JtRmlCombo::OnAttributeChange(const Rml::ElementAttributes& changed)
 {
     Rml::Element::OnAttributeChange(changed);
 
     if (changed.count(kAttrParam))
+    {
         m_param = GetAttribute<Rml::String>(kAttrParam, "");
+        m_tableOptions = loadOptionsFromTable();
 
-    if (changed.count(kAttrOptions))
+        /* Key no longer in the table: fall back to the skin's own list. */
+        if (!m_tableOptions && HasAttribute(kAttrOptions))
+            parseOptions(GetAttribute<Rml::String>(kAttrOptions, ""));
+    }
+
+    /* N4: the table wins over a stale skin list (see the header).  Skipped
+     * when the key change above already handled the attribute. */
+    if (changed.count(kAttrOptions) && !m_tableOptions && !changed.count(kAttrParam))
         parseOptions(GetAttribute<Rml::String>(kAttrOptions, ""));
 
     if (changed.count(kAttrIndex))

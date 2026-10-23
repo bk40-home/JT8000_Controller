@@ -129,22 +129,32 @@ static void resetSharedToDefaults(juce::AudioProcessorValueTreeState& apvts)
 //                       4 Square,   5 Saw,     6 Triangle
 // JT osc1.wave options: 0 SIN,1 SAW,2 SQR,3 TRI,4 ARB,5 PLS,6 rSAW,7 S&H,
 //   8 vTRI,9 BLS,10 rBLS,11 BLSQ,12 BLP,13 SSAW,14 vSAW,15 BLvSAW,16 vTRI,17 BLvTRI,
-//   18 JvSAW,19 JvTRI  (JP-measured variable saw / triangle, 2026-10-16)
+//   18 JvSAW,19 JvTRI,20 JTRIM  (JP-measured, 2026-10-22 — see project doc
+//   osc-shapes/jp-osc1-capture-analysis-2026-10-22.md)
+//
+// BAND-LIMITED TARGETS (2026-10-22, sign-off item 6): JE-8086 captures show the
+// JP-8000's OSC1 SAW/SQR/TRI are band-limited (−42..−52 dB alias at C7) and only
+// its SUPER SAW aliases.  So the JP waves land on the band-limited JT waves
+// (BLP, JvSAW, JvTRI, JTRIM); SSAW stays the naive-saw supersaw, as measured.
+// Ctrl1 needs no change for the SHAPE waves: osc<n>.shape_dc = 2·byte/127 − 1
+// gives morph = byte/127 — exactly the calibrated knob the JT laws are fitted to.
 static constexpr uint8_t kOsc1WaveMap[] = {
-    13,   // 0 SuperSaw   -> SSAW
-    17,   // 1 Tri-mod    -> BLvTRI
+    13,   // 0 SuperSaw   -> SSAW   (JP supersaw aliases: naive is faithful)
+    20,   // 1 Tri-mod    -> JTRIM  (measured wrap law; was BLvTRI)
      1,   // 2 Noise      -> SAW (neutral; mix.noise raised separately, M9)
      1,   // 3 Feedback   -> SAW (osc1.feedback_* set separately, M10)
-     5,   // 4 Square     -> PLS
-    18,   // 5 Saw        -> JvSAW  (was BLvSAW)
-    19,   // 6 Triangle   -> JvTRI  (was TRI)
+    12,   // 4 Square     -> BLP    (band-limited pulse; was naive PLS)
+    18,   // 5 Saw        -> JvSAW  (measured closed form since 2026-10-22)
+    19,   // 6 Triangle   -> JvTRI  (re-measured 33-frame table, 2026-10-22)
 };
 
 // OSC2 wave — JP order: 0 Square, 1 Saw, 2 Triangle, 3 S&H (M12)
+// OSC2 SHAPE was NOT in the 2026-10-22 captures (OSC1 only): it is assumed to
+// share OSC1's laws (same JP SHAPE control) — confirm with an OSC2 capture.
 static constexpr uint8_t kOsc2WaveMap[] = {
-     5,   // 0 Square   -> PLS
-    18,   // 1 Saw      -> JvSAW  (was BLvSAW)
-    19,   // 2 Triangle -> JvTRI  (was TRI)
+    12,   // 0 Square   -> BLP    (band-limited pulse; was naive PLS)
+    18,   // 1 Saw      -> JvSAW
+    19,   // 2 Triangle -> JvTRI
      7,   // 3 S&H      -> S&H   (M12 — edit here if the JP order differs)
 };
 
@@ -176,45 +186,48 @@ static constexpr uint8_t kFilterVaTypeMap[3][2] = {
 
 // Multi-FX type: JP-8000 chorus-type byte -> JT fx.mod_effect enum index.
 //
-// The JP-8000 has 12 "Chorus Type" variants (manual order below); the JT
-// FxChain has 11 mod presets grouped by family (Chorus 1-3, Flanger 1-3,
-// Phaser 1-4, Super Chorus), and fx.mod_effect enum index = preset index + 1
-// (0 = OFF).  The JT presets were designed to reproduce the JP set, so this
-// maps each JP type to the JT preset that models it, matched by the FxChain
-// preset DSP (rate / depth / feedback / taps).  Confirmed anchor: JP byte 0
-// (Super Chorus SLW) -> JT Super Chorus (11), the 3-tap preset.
+// N3 (2026-10-22, signed off): EXACT mapping.  The firmware now carries the
+// twelve JP-8000 Multi-FX types themselves, appended to fx.mod_effect at
+// indices 12..23 in the JP dropdown order (JE-8086 table), so JP byte n lands
+// on index 12 + n.  This REPLACES the Delivery-2 mapping, which pointed each
+// JP type at the nearest v1 preset (Chorus 1-3 / Flanger 1-3 / Phaser 1-4 /
+// Super Chorus) because no JP types existed then.
+// Provenance: chorus-fx/jp-chorus-capture-gap-2026-10-22.md and
+// chorus-fx/delivery-2026-10-22.md.  The JP voicings in FxChain are still
+// PROVISIONAL (tuning waits on the noise capture), but the type identity is
+// exact.
 //
-//   JP byte  JP-8000 type          -> JT enum  (JT preset)
-//   0        Super Chorus SLW         11        SUPER_CHORUS (3-tap, slow)  [confirmed]
-//   1        Super Chorus MID          3        CHORUS3 (deep, rate 0.30)
-//   2        Super Chorus FST          1        CHORUS1 (shallow, rate 0.80)
-//   3        Super Chorus CLR          2        CHORUS2 (medium)
-//   4        Flanger Slow              4        FLANGER1 (rate 0.30)
-//   5        Flanger Deep              6        DEEP_FLANGER (fb 0.85)
-//   6        Flanger Fast              5        FLANGER2
-//   7        Deep Phasing SLW          9        PHASER3 (slow, rate 0.10)
-//   8        Jet Phasing               8        PHASER2 (rate 0.50)
-//   9        Twisting                 10        PHASER4 (fast, rate 1.20)
-//   10       Freeze Phase 1            7        PHASER1 (metallic short)
-//   11       Freeze Phase 2            7        PHASER1 (JT has 4 phasers; shares)
+//   JP byte  JP-8000 type          -> JT enum  (JT option label)
+//   0        Super Chorus SLW         12        SChorus SLW
+//   1        Super Chorus MID         13        SChorus MID
+//   2        Super Chorus FST         14        SChorus FST
+//   3        Super Chorus CLR         15        SChorus CLR
+//   4        Flanger Slow             16        Flanger SLW
+//   5        Flanger Deep             17        Flanger DEEP
+//   6        Flanger Fast             18        Flanger FST
+//   7        Deep Phasing SLW         19        DeepPhs SLW
+//   8        Jet Phasing              20        Jet Phasing
+//   9        Twisting                 21        Twisting
+//   10       Freeze Phase 1           22        Freeze Ph 1
+//   11       Freeze Phase 2           23        Freeze Ph 2
 //
-// Families are exact; within-family variant is a best sonic match and may be
-// fine-tuned by ear later.  MFX level 0 is silent regardless of type (JP
-// behaviour), so no OFF-gating is needed.  Any byte > 11 clamps to Super
-// Chorus in applyTransform.
+// MFX level 0 is silent regardless of type (JP behaviour), so no OFF-gating
+// is needed.  Any byte > 11 still clamps to the v1 Super Chorus (11) in
+// applyTransform (unchanged); byte 12 (JP-8080 DISTORTION) is overridden
+// further down.
 static constexpr uint8_t kMfxTypeMap[] = {
-    11,   // 0  Super Chorus SLW -> Super Chorus  (confirmed)
-     3,   // 1  Super Chorus MID -> Chorus 3
-     1,   // 2  Super Chorus FST -> Chorus 1
-     2,   // 3  Super Chorus CLR -> Chorus 2
-     4,   // 4  Flanger Slow     -> Flanger 1
-     6,   // 5  Flanger Deep     -> Flanger 3 (Deep Flanger)
-     5,   // 6  Flanger Fast     -> Flanger 2
-     9,   // 7  Deep Phasing SLW -> Phaser 3
-     8,   // 8  Jet Phasing      -> Phaser 2
-    10,   // 9  Twisting         -> Phaser 4
-     7,   // 10 Freeze Phase 1   -> Phaser 1
-     7,   // 11 Freeze Phase 2   -> Phaser 1
+    12,   // 0  Super Chorus SLW
+    13,   // 1  Super Chorus MID
+    14,   // 2  Super Chorus FST
+    15,   // 3  Super Chorus CLR
+    16,   // 4  Flanger Slow
+    17,   // 5  Flanger Deep
+    18,   // 6  Flanger Fast
+    19,   // 7  Deep Phasing SLW
+    20,   // 8  Jet Phasing
+    21,   // 9  Twisting
+    22,   // 10 Freeze Phase 1
+    23,   // 11 Freeze Phase 2
 };
 
 // Delay type -> JT fx.delay_effect index.
@@ -1042,6 +1055,13 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
         }
     }
 
+    // PWM law (2026-10-22, sign-off 5b): JP imports use the measured JP-8000
+    // pulse law — width + LFO floored at 50 % (mix.pwm_law = JpPwm, index 1).
+    // Only pulse waves read it, so it is set unconditionally.  Unmapped in
+    // JtBridge (no v1 CC) -> set by juceId.
+    if (auto* p = apvts.getParameter("mix.pwm_law"))
+        p->setValueNotifyingHost(p->convertTo0to1(1.0f));
+
     // M19: LFO1 & ENV destination.  The JP routes OSC LFO1 depth AND pitch-env
     // depth to OSC1+2 / OSC2 / X-MOD from ONE byte, 0x18 (JE-8086 table,
     // "Lfo1AndEnvelopeDestination", 0..2) — the byte the old TODO waited for.
@@ -1243,4 +1263,4 @@ void loadPerformance(JT8000ControllerProcessor& proc,
     proc.setPatchName(displayName);
 }
 
-} // namespace JP8000SyxImporter
+} // namespace JP8000SyxImporter
