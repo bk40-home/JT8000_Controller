@@ -291,8 +291,8 @@
 	<knob class="knob v-main v-shift" param="fx.bass_gain" key="fx.bass_gain" default="0.5" style="left:158dp; top:1770dp; width:164dp; height:164dp;"/>
 	<div class="legend v-main v-shift" style="left:324dp; top:1752dp; width:168dp; text-align:center;">TREBLE</div>
 	<knob class="knob v-main v-shift" param="fx.treble_gain" key="fx.treble_gain" default="0.5" style="left:326dp; top:1770dp; width:164dp; height:164dp;"/>
-	<div class="legend v-main v-shift" style="left:164dp; top:2042dp; width:152dp; text-align:left;">DRIVE</div>
-	<combo class="combo v-main v-shift" param="fx.drive" key="fx.drive" default="0.0" options="OFF, Soft, Hard" index="0" style="left:164dp; top:2086dp; width:152dp; height:56dp;"/>
+	<div class="legend v-main v-shift" style="left:156dp; top:2042dp; width:168dp; text-align:center;">DRIVE</div>
+	<knob class="knob v-main v-shift" param="fx.drive" key="fx.drive" default="0.0" style="left:158dp; top:2060dp; width:164dp; height:164dp;"/>
 
 	<!-- Mod Fx -->
 	<div class="sectitle v-main v-shift" style="left:629dp; top:1672dp; width:829dp; text-align:left;">MOD FX</div>

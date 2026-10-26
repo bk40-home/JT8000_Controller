@@ -271,10 +271,11 @@ static constexpr DefaultCC kDefaults[] = {
     // DOES have both (0x16 X-MOD depth, 0x22 OSC2 sync) — they are now
     // imported in Step 3 (gap audit 2026-10-17).  The old {19,0},{20,0}
     // "JP-8000 has no cross-mod" entries were wrong and zeroed them.
-    // Drive — J3c: saturation defaults SOFT.  Decision A: fx.drive is a Select,
-    // so this is the choice INDEX 1 (Soft) [was 32 -> Hard, WRONG].  Bass/treble
-    // (Continuous) pre-set to 64 (flat); the dump's tone bytes overwrite later.
-    {16, 1}, {99, 64}, {100, 64},
+    // Drive — 2026-10-24: fx.drive is now a continuous AMOUNT (0..127 wire
+    // byte); the JP has no drive, so import with it OFF (was Soft, a level
+    // boost no longer needed).  Bass/treble are Int steps -64..+63: pre-set 0
+    // (flat); the dump's tone bytes overwrite later via Signed64ToStep.
+    {16, 0}, {99, 0}, {100, 0},
     // Reverb — all JT-8000-exclusive
     {72, 0}, {73, 0}, {94, 127},
     {95, 64}, {96, 36}, {97, 0}, {98, 64},
@@ -319,6 +320,7 @@ enum class Xform
     Bool127,         // 0 → 0, nonzero → 127
     Signed64,        // bipolar with centre at 64 (pass through)
     Signed64ToUni,   // bipolar → unipolar: abs(raw - 64) * 2
+    Signed64ToStep,  // bipolar byte → signed step raw - 64 (Int -64..+63 params)
     Osc1Wave,        // JP-8000 waveform index → JT-8000 CC value
     Osc2Wave,
     Lfo1Wave,
@@ -387,8 +389,8 @@ static constexpr Slot kSlots[] = {
     {0x39, 28, Xform::Direct},            // Amp Env Release
 
     // EQ / effects
-    {0x3B, 99,  Xform::Signed64},         // Tone ctrl bass
-    {0x3C, 100, Xform::Signed64},         // Tone ctrl treble
+    {0x3B, 99,  Xform::Signed64ToStep},   // Tone ctrl bass   (-64..+63 step)
+    {0x3C, 100, Xform::Signed64ToStep},   // Tone ctrl treble (-64..+63 step)
     {0x3D, 103, Xform::MfxType},          // Multi-FX type
     {0x3E, 104, Xform::Direct},           // Multi-FX level / mix
     {0x3F, 107, Xform::DelayType},        // Delay type
@@ -425,6 +427,7 @@ static int applyTransform(Xform xf, uint8_t raw)
         case Xform::Bool127:       return (raw != 0) ? 127 : 0;
         case Xform::Signed64:      return raw;
         case Xform::Signed64ToUni: return clamp7(std::abs(static_cast<int>(raw) - 64) * 2);
+        case Xform::Signed64ToStep: return static_cast<int>(raw) - 64;   // JP tone == JT step lattice
         case Xform::Osc1Wave:      return (raw < 7)  ? kOsc1WaveMap[raw]   : 1;  // fallback SAW
         case Xform::Osc2Wave:      return (raw < 4)  ? kOsc2WaveMap[raw]   : 1;  // fallback SAW
         case Xform::Lfo1Wave:      return (raw < 4)  ? kLfo1WaveMap[raw]   : 1;  // fallback TRI
@@ -950,6 +953,13 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
     // follows the JP topology: OSC1 master, OSC2 slave.
     setParamByCC(apvts, 20, d(0x22) != 0 ? 127 : 0);
 
+    // X-MOD law (2026-10-25, sign-off 2a): JP imports use the measured JP-8000
+    // law — mix.xmod_type = JpXmod (index 1): fixed 69 Hz/knob through-zero
+    // FM, no lock, x0.623 under sync (xmod/xmod-sync-delivery-2026-10-25.md).
+    // Unmapped in JtBridge (no v1 CC) -> set by juceId.
+    if (auto* p = apvts.getParameter("mix.xmod_type"))
+        p->setValueNotifyingHost(p->convertTo0to1(1.0f));
+
     // Ring (option a — import-only bake).  On the JP the ring product
     // (OSC1 x OSC2) REPLACES OSC2 in the mix, and OSC BALANCE crossfades OSC1
     // against the ring.  The JT adds ring ON TOP with its own gain and no
@@ -1005,6 +1015,26 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
     if (int cc = osc1Ctrl1CC(osc1Wave)) setParamByCC(apvts, cc, d(0x1F));
     if (int cc = osc1Ctrl2CC(osc1Wave)) setParamByCC(apvts, cc, d(0x20));
     if (int cc = osc2Ctrl1CC(osc2Wave)) setParamByCC(apvts, cc, d(0x25));
+
+    // SQUARE pulse width (2026-10-25, sign-off 2a — AI AI AI build-up capture,
+    // syx-import/aiaiai-buildup-analysis-2026-10-25.md).  The line above sends
+    // Ctrl1 through the SHAPE-wave law (shape_dc = 2*byte/127 - 1, width =
+    // byte/127), which is right for SAW/TRI but not for the JP square: there
+    // Ctrl1 0 = 50 % and 127 = 97.2 % (JE-8086 OSC1 measurement, 2026-10-22).
+    // JT pulse width = 0.5 + 0.5*shape_dc (clamped to the JpPwm floor / 95 %),
+    // so shape_dc = 0.944 * byte/127.  Overrides the generic write for SQR only
+    // (JP OSC1 wave 4, OSC2 wave 0); set by engineering value.  The OSC2 law is
+    // assumed equal to OSC1's (confirm with the X-MOD grid capture, PW 0/79).
+    {
+        constexpr float kJpPwSpan = 0.944f;   // 0.5 + 0.5*0.944 = 97.2 % at 127
+        auto setPw = [&](const char* id, uint8_t byte)
+        {
+            if (auto* p = apvts.getParameter(id))
+                p->setValueNotifyingHost(p->convertTo0to1(kJpPwSpan * (float)byte / 127.0f));
+        };
+        if (osc1Wave == 4) setPw("osc1.shape_dc", d(0x1F));   // JP OSC1 order: 4 = SQR
+        if (osc2Wave == 0) setPw("osc2.shape_dc", d(0x25));   // JP OSC2 order: 0 = SQR
+    }
 
     // Step 3b: JP OSC1 waves with no direct JT wave equivalent (Delivery 2b).
     //   M9  — JP Noise osc: the wave map lands osc1.wave on SAW (neutral); the
@@ -1062,6 +1092,16 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
     if (auto* p = apvts.getParameter("mix.pwm_law"))
         p->setValueNotifyingHost(p->convertTo0to1(1.0f));
 
+    // LFO rate law (2026-10-25, option b): JP imports read the LFO1 / LFO2 RATE
+    // bytes (slots 0x11 -> lfo1.freq, 0x13 -> lfo2.freq, Direct) through the
+    // measured JP-8000 curve — lfo1/lfo2.rate_law = JpRate, index 1.  The bytes
+    // are unchanged, so the firmware lands on the JP rate exactly (LFO2 curve
+    // assumed = LFO1's until captured).  Unmapped in JtBridge (no v1 CC) -> set
+    // by juceId.
+    for (const char* id : { "lfo1.rate_law", "lfo2.rate_law" })
+        if (auto* p = apvts.getParameter(id))
+            p->setValueNotifyingHost(p->convertTo0to1(1.0f));
+
     // M19: LFO1 & ENV destination.  The JP routes OSC LFO1 depth AND pitch-env
     // depth to OSC1+2 / OSC2 / X-MOD from ONE byte, 0x18 (JE-8086 table,
     // "Lfo1AndEnvelopeDestination", 0..2) — the byte the old TODO waited for.
@@ -1082,11 +1122,11 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
     // The old overrides treated 5-7 as "delay variants" and 8-12 as
     // "distortion", which silently undid kMfxTypeMap for 5-11 (mod FX off,
     // delay hijacked or drive forced).  Only byte 12 needs an override:
-    // drive Hard, mod FX off.  fx.drive is a Select -> choice INDEX 2 (Hard);
-    // the old raw 32..127 bytes only worked by clamping.
+    // drive full, mod FX off.  fx.drive is a continuous Amount (2026-10-24),
+    // so the value is a 0..127 wire byte: 127 = 100 %.
     if (mfxType == 12)
     {
-        setParamByCC(apvts, 16, 2);   // fx.drive -> Hard
+        setParamByCC(apvts, 16, 127); // fx.drive -> 100 %
         setParamByCC(apvts, 103, 0);  // fx.mod_effect -> OFF (drive replaces it)
     }
 
