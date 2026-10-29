@@ -173,15 +173,20 @@ static constexpr uint8_t kLfo1WaveMap[] = {
 //   0x27 Filter Type : 0 HPF, 1 BPF, 2 LPF     (the old map assumed LPF,HPF,BPF)
 //   0x28 Cutoff Slope: 0 -12 dB, 1 -24 dB      (previously ignored)
 // Rows = JP type byte, columns = JP slope byte.
-// JT filter.va_type: 0 SVF LP2,1 SVF HP2,2 SVF BP2,...,8 Diode LP4,...,
-//                    15 MoogDV HP4,16 MoogDV BP
+// JT filter.va_type 17..22 are the JP-8000 modes themselves (JpFilter,
+// 2026-10-26, sign-off S1/F1): two cascaded TPT SVF sections whose cutoff law,
+// resonance law and -24 level trim are fitted to the JE-8086 (scene 14,
+// syx-import/scene14-noise-filter-analysis-2026-10-26.md).  Every type x
+// slope now lands on its own JP mode, so the cutoff and resonance bytes keep
+// their JP meaning (code = byte; 127 = open).  This REPLACES the nearest-
+// topology map (SVF / MoogDV / Diode LP4), which measured up to 7 octaves off.
 // The result goes to filter.va_type (CC 115).  The old slot wrote the type to
 // CC 112 = filter.mode (the OBXa mode list) — which is why "2P BP" showed.
 static constexpr uint8_t kFilterVaTypeMap[3][2] = {
-    //  -12 dB        -24 dB
-    {   1,            15 },   // 0 HPF -> SVF HP2   | MoogDV HP4
-    {   2,            16 },   // 1 BPF -> SVF BP2   | MoogDV BP
-    {   0,             8 },   // 2 LPF -> SVF LP2   | Diode LP4 (M15)
+    //  -12 dB              -24 dB
+    {   20,                 19 },   // 0 HPF -> JP HPF-12 | JP HPF-24
+    {   22,                 21 },   // 1 BPF -> JP BPF-12 | JP BPF-24
+    {   18,                 17 },   // 2 LPF -> JP LPF-12 | JP LPF-24
 };
 
 // Multi-FX type: JP-8000 chorus-type byte -> JT fx.mod_effect enum index.
@@ -257,16 +262,18 @@ static constexpr uint8_t kDelayTypeMap[] = {
 struct DefaultCC { int cc; int val; };
 static constexpr DefaultCC kDefaults[] = {
     // Filter engine & topology — J3c import policy (signed off 2026-07-20):
-    // every JP-8000 import lands on the DIODE ladder — engine VA Bank +
-    // va_type Diode LP4.  Q2c: the JP's -12/-24 dB slope byte (0x28) is
-    // ignored (M15 revisits this).  Decision A: these Select defaults are
-    // CHOICE INDICES now, not table-A bucket-midpoint bytes:
+    // engine VA Bank; va_type is then set from the JP type x slope bytes
+    // (Step 3, kFilterVaTypeMap -> JP modes 17..22, 2026-10-26).  The
+    // 2026-07-20 policy (Diode LP4, slope ignored) is superseded.
+    // Decision A: these Select defaults are CHOICE INDICES now, not table-A
+    // bucket-midpoint bytes:
     //   cc113 filter.engine  -> 1 (VA Bank)      [was 96, clamped]
-    //   cc115 filter.va_type -> 8 (Diode LP4)    [was 64 -> MoogDV BP, WRONG]
+    //   cc115 filter.va_type -> 17 (JP LPF-24)   [2026-10-26; was 8 Diode LP4]
+    //         (Step 3 always overwrites it from the type x slope bytes.)
     //   cc114 filter.obxa_xpander_mode -> 0 (LP4)
     // cc111/117 (obxa multimode / res-mod depth) and cc84 (octave) are
     // Continuous — 0 and 64 stay as raw bytes.
-    {113, 1}, {115, 8}, {111, 0}, {114, 0}, {117, 0}, {84, 64},
+    {113, 1}, {115, 17}, {111, 0}, {114, 0}, {117, 0}, {84, 64},
     // Cross-mod (CC19) & sync (CC20): NOT defaulted here any more.  The JP
     // DOES have both (0x16 X-MOD depth, 0x22 OSC2 sync) — they are now
     // imported in Step 3 (gap audit 2026-10-17).  The old {19,0},{20,0}
@@ -892,7 +899,7 @@ void setParamByCC(juce::AudioProcessorValueTreeState& apvts, int cc, int value)
 //
 // Writes a JP-8000 patch into the APVTS. Does NOT send MIDI.
 // Steps:
-//   1. Apply JT-8000 defaults + J3c import policy (Diode LP4, JPFX-only
+//   1. Apply JT-8000 defaults + J3c import policy (VA engine, JPFX-only
 //      output path, SOFT saturation, flat EQ pre-set)
 //   2. Walk the slot table and apply transforms
 //   3. Handle waveform-dependent Ctrl1/Ctrl2 routing
@@ -920,7 +927,7 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
     resetLayerToDefaults(apvts);
 
     // Step 1: set JT-8000-exclusive defaults (JP-import overrides applied
-    // ON TOP of the init reset — VA Bank + Diode LP4, JPFX routing, etc.).
+    // ON TOP of the init reset — VA Bank + JP filter, JPFX routing, etc.).
     for (const auto& def : kDefaults)
         setParamByCC(apvts, def.cc, def.val);
 
@@ -988,7 +995,7 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
         const uint8_t fType  = d(0x27);
         const uint8_t fSlope = d(0x28);
         const int vaType = (fType < 3 && fSlope < 2) ? kFilterVaTypeMap[fType][fSlope]
-                                                     : 8;          // Diode LP4
+                                                     : 17;         // JP LPF-24
         setParamByCC(apvts, 115, vaType);
     }
 
