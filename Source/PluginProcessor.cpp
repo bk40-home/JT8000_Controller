@@ -304,7 +304,30 @@ void JT8000ControllerProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                     applyIncomingCC(v1cc, v7);
             }
             else if (! NrpnLink::isClusterCC(num))
+            {
                 applyIncomingCC(num, val);   // plain hardware CC, as before
+
+                // Performance CCs are not parameters: the Teensy must hear
+                // them the way it hears notes.  Today that is only the mod
+                // wheel (CC1 -> LFO2 depth on the hardware too); pitch bend
+                // already rides the channel-voice branch below.  Same routing
+                // as notes: never in Sound mode (the hardware wire is silent),
+                // direct device when open, host bus otherwise.
+                if (isPerformanceCC(num) && ! hardwareWireSilent())
+                {
+                    bool sentDirect = false;
+                    {
+                        const juce::ScopedLock sl(midiOutLock);
+                        if (directMidiOut != nullptr)
+                        {
+                            directMidiOut->sendMessageNow(msg);
+                            sentDirect = true;
+                        }
+                    }
+                    if (! sentDirect)
+                        filtered.addEvent(msg, metadata.samplePosition);
+                }
+            }
 
             // Status feed 0x3FFF (Phase J1d): intercepted inside the
             // decoder BEFORE param routing; here we just latch the word

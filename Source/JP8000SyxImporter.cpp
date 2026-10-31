@@ -409,7 +409,9 @@ static constexpr Slot kSlots[] = {
     {0x42, 108, Xform::Direct},           // Delay mix
 
     // Performance
-    {0x43, 127, Xform::Direct},           // Pitch bend range
+    // 0x43 / 0x44 pitch bend range up / down: NOT a CC slot — see Step 3d.
+    // (Was {0x43, 127, Direct}: CC127 scales byte/127 over 0..24 st, so a JP
+    //  range of 2 imported as 0.38 st.  Scene 19, 2026-10-31.)
     {0x45, 81,  Xform::Bool127},          // Glide on/off
     {0x46, 82,  Xform::Direct},           // Glide time
     {0x47, 14,  Xform::MonoMode},         // Mono/Poly mode
@@ -1065,6 +1067,32 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
     // resetLayerToDefaults leaves lfo2.waveform at def 0 = SIN.
     setParamByCC(apvts, 63, 1);              // lfo2.waveform -> TRI
 
+    // Step 3d (2026-10-31, scenes 18/19): pitch bend ranges, legato and the
+    // envelope law, written in engineering units by juceId.
+    //   0x43 BEND RANGE UP   -> voice.bend_range      (semitones, the byte itself)
+    //   0x44 BEND RANGE DOWN -> voice.bend_range_down (semitones, the byte itself)
+    //   0x48 LEGATO          -> voice.legato          (0/1)
+    // The JE-8086 measured bend = byte semitones, up and down independent; the
+    // firmware range is 0..24 st, so the clamp only guards corrupt files.  The
+    // importer previously mapped neither 0x44 nor 0x48 (down = up, legato off).
+    {
+        auto setEng = [&](const char* id, float value)
+        {
+            if (auto* p = apvts.getParameter(id))
+                p->setValueNotifyingHost(p->convertTo0to1(value));
+        };
+        setEng("voice.bend_range",      (float)juce::jlimit(0, 24, (int)d(0x43)));
+        setEng("voice.bend_range_down", (float)juce::jlimit(0, 24, (int)d(0x44)));
+        setEng("voice.legato",          d(0x48) ? 1.0f : 0.0f);
+
+        // Envelope law (sign-off 1a): JP imports read every envelope TIME byte
+        // (amp / filter / pitch env, already sent as byte/127 above) and the LFO1
+        // FADE byte (0x12 -> lfo1.delay) through the measured JP-8000 tau table:
+        // exponential decay/release, attack charging toward 1.25 x full.
+        // voice.env_law = JpEnv (index 1); JtEnv stays the default elsewhere.
+        setEng("voice.env_law",         1.0f);
+    }
+
     // Step 3c: JP SQR oscillator PWM depth (Ctrl2) -> per-osc LFO1->PW scale.
     // JE-8086 table: for SQR, Ctrl1 = pulse width (already -> shape_dc above),
     // Ctrl2 = PWM depth (LFO1).  JT: pwm = LFO1 x lfo1.pwm_depth (master,
@@ -1102,8 +1130,8 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
     // LFO rate law (2026-10-25, option b): JP imports read the LFO1 / LFO2 RATE
     // bytes (slots 0x11 -> lfo1.freq, 0x13 -> lfo2.freq, Direct) through the
     // measured JP-8000 curve — lfo1/lfo2.rate_law = JpRate, index 1.  The bytes
-    // are unchanged, so the firmware lands on the JP rate exactly (LFO2 curve
-    // assumed = LFO1's until captured).  Unmapped in JtBridge (no v1 CC) -> set
+    // are unchanged, so the firmware lands on the JP rate exactly (LFO2 has
+    // its own measured curve since 2026-10-31).  Unmapped in JtBridge (no v1 CC) -> set
     // by juceId.
     for (const char* id : { "lfo1.rate_law", "lfo2.rate_law" })
         if (auto* p = apvts.getParameter(id))

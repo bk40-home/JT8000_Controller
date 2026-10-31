@@ -21,13 +21,17 @@ void EngineHost::controlChange(uint8_t cc, uint8_t value)
 {
     // The transport consumes parameter traffic (NRPN clusters, curated CCs)
     // and returns false for everything else — which WE must then route, the
-    // same contract the firmware's main.cpp honours.  Only the three
-    // channel-level controls the engine exposes are relevant on desktop.
+    // same contract the firmware's main.cpp honours: the channel-level
+    // controls below mirror its onControlChangeFor() switch one for one.
     if (transport_.handleControlChange(cc, value))
         return;
 
     switch (cc)
     {
+        // Mod wheel -> LFO2 master depth (JP-8000 behaviour, gated per patch
+        // by lfo2.mod_wheel).  Was missing here, so the embedded engine
+        // ignored the wheel and LFO2 stayed silent (scene 18, 2026-10-30).
+        case 1:   core_.modWheel(value);      break;
         case 64:  core_.sustain(value >= 64); break;   // MIDI sustain convention
         case 120: core_.allSoundOff();        break;
         case 123: core_.allNotesOff();        break;

@@ -209,9 +209,17 @@ private:
     {
         return _engine != nullptr && _engineMode.load() != kModeController;
     }
+    // Sound mode keeps the hardware wire silent: no notes, no wheel.
+    bool hardwareWireSilent() const { return _engineMode.load() == kModeSound; }
 #else
     bool engineAudible() const { return false; }
+    bool hardwareWireSilent() const { return false; }   // controller-only build
 #endif
+
+    // Host-bus CCs that are PERFORMANCE controls, not parameters: forwarded
+    // to the hardware like notes (see processBlock).  Only the mod wheel for
+    // now; extend here (e.g. 64 sustain) only with an explicit decision.
+    static constexpr bool isPerformanceCC(int cc) { return cc == 1; }
 
     // ---- Engine status feed (Phase J1d, NRPN 0x3FFF) -----------------------
     // Word layout per firmware SynthCore::statusWord() — unpack with the
