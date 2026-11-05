@@ -26,6 +26,7 @@
 #include "JtBridgeTable.h"     // JtBridge::paramIdFromV1Cc — CURRENT generated
                                // v1-CC -> 14-bit ParamID bridge (CI-checked)
 #include "gen/JtParamTable.h"  // JtParams::kParams — the REAL APVTS rows (dotted juceId)
+#include "JpLfoSync.h"         // J6: JP part LFO1 SYNC (0..22) -> lfo1.sync option
 
 namespace JP8000SyxImporter
 {
@@ -537,6 +538,13 @@ struct SlotGroup
     Patch         upper;
     bool          hasLower    = false;
     Patch         lower;
+
+    // Part blocks (a2=0x10 upper, 0x11 lower): only LFO1 SYNC is read (J6).
+    // hasPartLo: a lower part block was seen; without one the lower layer
+    // (which then duplicates the upper patch) takes the upper part's sync.
+    int           lfo1SyncUp  = 0;       // JP 0..22, 0 = OFF
+    int           lfo1SyncLo  = 0;
+    bool          hasPartLo   = false;
 };
 
 static ParsedBank parseSyxBuffer(const uint8_t* buf, size_t len)
@@ -611,6 +619,27 @@ static ParsedBank parseSyxBuffer(const uint8_t* buf, size_t len)
                     current->balance    = buf[dataOff + 0x13];
                 }
             }
+            else if ((a2 == 0x10 || a2 == 0x11) && current != nullptr)
+            {
+                // ---- Part block (upper 0x10 / lower 0x11) — J6 ----
+                // Read only LFO1 SYNC (part offset 5).  The block may be sent
+                // whole or from a sub-offset a3, so locate offset 5 within
+                // this message's data; skip it if the message doesn't hold it.
+                const int a3 = buf[msgStart + 8];
+                const int at = JpLfoSync::kPartOffset - a3;   // index into data
+                if (at >= 0 && at < dataLen)
+                {
+                    const int v    = buf[dataOff + at] & 0x7F;
+                    const int sync = v < JpLfoSync::kJpCount ? v : 0;   // bad -> OFF
+                    if (a2 == 0x10)
+                        current->lfo1SyncUp = sync;
+                    else
+                    {
+                        current->lfo1SyncLo = sync;
+                        current->hasPartLo  = true;
+                    }
+                }
+            }
             else if (a2 == 0x40 && dataLen >= 74)
             {
                 // ---- Upper patch ----
@@ -657,8 +686,8 @@ static ParsedBank parseSyxBuffer(const uint8_t* buf, size_t len)
                 };
                 bank.orphanPatches.push_back(p);
             }
-            // Tone common messages (a2=0x10, 0x11) are small metadata
-            // blocks — we don't extract any params from them, so skip.
+            // Part blocks (a2=0x10, 0x11) are handled above (LFO1 SYNC only);
+            // any other small block is skipped.
         }
 
         ++i;  // skip past F7
@@ -676,6 +705,8 @@ static ParsedBank parseSyxBuffer(const uint8_t* buf, size_t len)
             perf.splitPoint = juce::jlimit(0, 127, slot.splitPoint);
             perf.balance    = juce::jlimit(0, 127, slot.balance);
             perf.upper      = slot.upper;
+            perf.lfo1SyncUpper = slot.lfo1SyncUp;
+            perf.lfo1SyncLower = slot.hasPartLo ? slot.lfo1SyncLo : slot.lfo1SyncUp;
 
             if (slot.hasLower)
             {
@@ -1268,6 +1299,18 @@ void loadPatchToLayer(JT8000ControllerProcessor& proc,
 // BANK_DUMP for the lower targeting kLayerB, send it. The firmware sees
 // two BANK_DUMPs — one for A, one for B — and applies them in order.
 // =========================================================================
+// J6 (Kris 5 Nov): a JP part's LFO1 SYNC onto the layer loadPatch() just
+// filled.  Called AFTER loadPatch(), which resets lfo1.sync to Free.  lfo1.sync
+// is a Select: the APVTS value is the option index (JpLfoSync gives it; 10 of
+// the JP's 23 values have no exact JT option and snap to the nearest note
+// length — the table in JpLfoSync.cpp lists each one).
+static void applyJpLfo1Sync(juce::AudioProcessorValueTreeState& apvts, int jpSync)
+{
+    if (auto* p = apvts.getParameter("lfo1.sync"))
+        p->setValueNotifyingHost(p->convertTo0to1(
+            static_cast<float>(JpLfoSync::jtIndexFromJp(jpSync))));
+}
+
 void loadPerformance(JT8000ControllerProcessor& proc,
                      const Performance& perf)
 {
@@ -1307,6 +1350,7 @@ void loadPerformance(JT8000ControllerProcessor& proc,
     // ---- Pass 1: upper patch -> Layer A bank dump ----
     proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerA);
     loadPatch(proc.apvts, perf.upper);
+    applyJpLfo1Sync(proc.apvts, perf.lfo1SyncUpper);   // J6: the part's sync
 
     proc._suppressEcho.store(false);
     proc.sendBankDump();    // flush current APVTS as kLayerA entries only
@@ -1316,6 +1360,7 @@ void loadPerformance(JT8000ControllerProcessor& proc,
     proc._suppressEcho.store(true);
     proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerB);
     loadPatch(proc.apvts, perf.lower);
+    applyJpLfo1Sync(proc.apvts, perf.lfo1SyncLower);   // J6: the part's sync
     proc._suppressEcho.store(false);
     proc.sendBankDump();
 

@@ -84,6 +84,12 @@ struct Performance
     Patch         upper;             // always present in a valid perf
     Patch         lower;             // always present (may duplicate upper)
     bool          hasDistinctLower = false;   // true when names differ
+
+    // J6 (Kris 5 Nov): each part's LFO1 SYNC as the JP stores it (0 = OFF,
+    // 1..22 = 1/16 .. 8 measures), from the part blocks 03 pp 10 / 11.
+    // loadPerformance() maps it to lfo1.sync through JpLfoSync.
+    int           lfo1SyncUpper = 0;
+    int           lfo1SyncLower = 0;
 };
 
 /** Result of parsing a .syx or .mid file. */

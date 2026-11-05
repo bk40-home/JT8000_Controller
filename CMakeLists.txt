@@ -148,6 +148,8 @@ set(JT_APP_SOURCES
     Source/Envelopedisplay.cpp
     Source/JP8000SyxImporter.h
     Source/JP8000SyxImporter.cpp
+    Source/JpLfoSync.h
+    Source/JpLfoSync.cpp
     Source/JtTheme.h
     Source/PatchLibraryBrowser.h
     Source/PatchLibraryBrowser.cpp
