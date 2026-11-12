@@ -27,6 +27,7 @@
                                // v1-CC -> 14-bit ParamID bridge (CI-checked)
 #include "gen/JtParamTable.h"  // JtParams::kParams — the REAL APVTS rows (dotted juceId)
 #include "JpLfoSync.h"         // J6: JP part LFO1 SYNC (0..22) -> lfo1.sync option
+#include "DumpPlan.h"          // scoped, per-layer dumps (perf import, 5 Nov)
 
 namespace JP8000SyxImporter
 {
@@ -149,14 +150,16 @@ static constexpr uint8_t kOsc1WaveMap[] = {
     19,   // 6 Triangle   -> JvTRI  (re-measured 33-frame table, 2026-10-22)
 };
 
-// OSC2 wave — JP order: 0 Square, 1 Saw, 2 Triangle, 3 S&H (M12)
+// OSC2 wave — JP order: 0 Square, 1 Saw, 2 Triangle, 3 Noise (J3, Kris 5 Nov;
+// M12 had read 3 as S&H — the JE parameter table names it NOISE)
 // OSC2 SHAPE was NOT in the 2026-10-22 captures (OSC1 only): it is assumed to
 // share OSC1's laws (same JP SHAPE control) — confirm with an OSC2 capture.
 static constexpr uint8_t kOsc2WaveMap[] = {
     12,   // 0 Square   -> BLP    (band-limited pulse; was naive PLS)
     18,   // 1 Saw      -> JvSAW
     19,   // 2 Triangle -> JvTRI
-     7,   // 3 S&H      -> S&H   (M12 — edit here if the JP order differs)
+     1,   // 3 Noise    -> SAW (neutral; mix.noise raised separately, J3 —
+          //                as M9 does for OSC1 noise)
 };
 
 // LFO1 wave — JP order (M13): 0 triangle, 1 saw, 2 pulse, 3 S&H
@@ -272,9 +275,10 @@ static constexpr DefaultCC kDefaults[] = {
     //   cc115 filter.va_type -> 17 (JP LPF-24)   [2026-10-26; was 8 Diode LP4]
     //         (Step 3 always overwrites it from the type x slope bytes.)
     //   cc114 filter.obxa_xpander_mode -> 0 (LP4)
-    // cc111/117 (obxa multimode / res-mod depth) and cc84 (octave) are
-    // Continuous — 0 and 64 stay as raw bytes.
-    {113, 1}, {115, 17}, {111, 0}, {114, 0}, {117, 0}, {84, 64},
+    // cc111/117 (obxa multimode / res-mod depth) are Continuous — 0 stays
+    // a raw byte.  cc84 filter.octave_control (Continuous 0..1, byte/127):
+    // full range on import, 127 = 1.0 (Kris 5 Nov; was 64 = 0.5).
+    {113, 1}, {115, 17}, {111, 0}, {114, 0}, {117, 0}, {84, 127},
     // Cross-mod (CC19) & sync (CC20): NOT defaulted here any more.  The JP
     // DOES have both (0x16 X-MOD depth, 0x22 OSC2 sync) — they are now
     // imported in Step 3 (gap audit 2026-10-17).  The old {19,0},{20,0}
@@ -1093,6 +1097,18 @@ void loadPatch(juce::AudioProcessorValueTreeState& apvts, const Patch& patch)
         setParamByCC(apvts, 123, d(0x1F));   // osc1.feedback_amount from Ctrl1
     }
 
+    // J3 (Kris 5 Nov): JP OSC2 Noise (byte 3) — same approach as M9.  The JT
+    // has no noise wave, so osc2.wave lands on SAW (neutral, kOsc2WaveMap) and
+    // the shared mixer noise source carries the sound with OSC2 itself muted.
+    // Limitation (as M9): mix.noise is not under OSC BALANCE, so BALANCE then
+    // only moves OSC1.  Placed after Step 3's ring block: if ring is on too,
+    // mix.osc2 is 0 there anyway.
+    if (osc2Wave == 3)                       // Noise
+    {
+        setParamByCC(apvts, 59, 127);        // mix.noise full
+        setParamByCC(apvts, 61, 0);          // mix.osc2 off — noise replaces it
+    }
+
     // M14: LFO2 waveform is not carried in the JP-8000 patch, so import it as
     // triangle.  Set via CC 63 (lfo2.waveform, index 1 = TRI).  Without this,
     // resetLayerToDefaults leaves lfo2.waveform at def 0 = SIN.
@@ -1256,9 +1272,8 @@ void loadPatchToLayer(JT8000ControllerProcessor& proc,
                       const Patch& patch,
                       LoadTarget target)
 {
-    // Set editTarget first so the BANK_DUMP entries route correctly.
-    // Order matters: the appendEntry calls inside sendBankDump() read
-    // editTarget for patch-scope params.
+    // Set editTarget first: the dump below sends the Patch params to the
+    // layer(s) it names (Both = A and B).
     if (target == LoadTarget::LayerA)
         proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerA);
     else if (target == LoadTarget::LayerB)
@@ -1276,8 +1291,11 @@ void loadPatchToLayer(JT8000ControllerProcessor& proc,
     proc.setPatchName(patch.name);
     proc._suppressEcho.store(false);
 
-    // Now flush the entire current state to the firmware in one go.
-    proc.sendBankDump();
+    // Send what a patch owns — its Patch params to the target layer(s) and the
+    // shared FX once; never Performance or Global (Kris 5 Nov, 1a / 2a).
+    // Before this the dump went to layer A whatever the target.
+    proc.sendDump(static_cast<uint8_t>(DumpPlan::kPatch | DumpPlan::kShared),
+                  proc.editTarget.load());
 }
 
 // =========================================================================
@@ -1314,61 +1332,78 @@ static void applyJpLfo1Sync(juce::AudioProcessorValueTreeState& apvts, int jpSyn
 void loadPerformance(JT8000ControllerProcessor& proc,
                      const Performance& perf)
 {
-    // ---- Set performance-global params via APVTS ----
-    // Keyed by the REAL dotted juceIds (Phase J1 rename fix); the old
-    // underscore ids resolved to nullptr and silently dropped every perf
-    // write.  With _suppressEcho these don't fire SET_PARAMs individually;
-    // they're picked up in the BANK_DUMP.
+    // Kris 5 Nov (perf-import-diagnosis-2026-11-05.md, options 1a-6a): load a
+    // JP performance the way M-vance does.
     //
-    // Value law per row TYPE (gen/JtParamTable.h):
-    //   perf.mode       (0x0700) Select  3 opt -> choice INDEX (0/1/2)
-    //   perf.split_note (0x0705) Continuous 0..127 -> raw MIDI note
-    //   perf.balance    (0x0706) Continuous 0..127 -> raw balance byte
-    // (The perf CCs 140/142/143 in ParamMapJuce map to stale 0x100x ParamIDs
-    //  with no JtParams row, so these are set by juceId directly, not via CC.)
+    // WHICH LAYER GETS WHICH PART (3a).  The JT plays layer A below the split
+    // (PerfRouter::forNote) and gives A the low end of BALANCE
+    // (SynthCore::layerGains: 0 = A only).  On the JP both belong to LOWER, so
+    // in DUAL / SPLIT the LOWER part goes to A and UPPER to B.  In SINGLE the
+    // JT sounds layer A alone and the JP sounds UPPER, so there UPPER goes to
+    // A (LOWER is still loaded into B, silent, so a later switch to DUAL has
+    // it).  No firmware change; saved JT performances are untouched.
+    //
+    // PASS ORDER.  The part that does NOT sound in SINGLE (or LOWER) is loaded
+    // first and UPPER last, so:
+    //   - the shared FX (PatchShared: TONE, MULTI-FX, DELAY, reverb, seq) end
+    //     up as UPPER's, as on M-vance (5a, provisional until a JE capture) —
+    //     PatchShared is reset before EACH pass, so nothing of the first
+    //     part's FX survives;
+    //   - the APVTS ends holding UPPER's patch, and the UI ends on UPPER's
+    //     layer with the A/B selector matching it (6a: the UI shows the upper
+    //     patch and the selector agrees).
+    //
+    // WHAT IS SENT (1a / 2a).  Pass 1: the first part's Patch params to its
+    // layer only.  Pass 2: UPPER's Patch params to its layer, plus PatchShared
+    // and Performance once.  Global (master volume, tempo, clock) is never
+    // sent by a load.  About 3100 NRPN messages, within the 4096 queue.
+    using EditTarget = JT8000ControllerProcessor::EditTarget;
+    const bool single = (perf.mode == PerfMode::Single);
+    const EditTarget upperLayer = single ? EditTarget::LayerA : EditTarget::LayerB;
+    const EditTarget lowerLayer = single ? EditTarget::LayerB : EditTarget::LayerA;
+
+    auto setEng = [&proc](const char* id, float engineering)
+    {
+        if (auto* param = proc.apvts.getParameter(id))
+            param->setValueNotifyingHost(param->convertTo0to1(engineering));
+    };
 
     proc._suppressEcho.store(true);
 
-    // Reset shared (reverb/FX/seq) params to defaults ONCE, before either
-    // layer pass.  loadPatch() resets per-layer params on each pass, but the
-    // PatchShared singletons must NOT be reset between passes or pass 2
-    // (lower) would drop the values pass 1 (upper) put in its bank dump.
+    // ---- Pass 1: LOWER -> its layer (Patch scope only) ----
+    proc.editTarget.store(lowerLayer);
     resetSharedToDefaults(proc.apvts);
-
-    if (auto* param = proc.apvts.getParameter("perf.mode"))
-        param->setValueNotifyingHost(param->convertTo0to1(
-            static_cast<float>(static_cast<int>(perf.mode))));
-
-    if (auto* param = proc.apvts.getParameter("perf.split_note"))
-        param->setValueNotifyingHost(param->convertTo0to1(
-            static_cast<float>(perf.splitPoint)));
-
-    if (auto* param = proc.apvts.getParameter("perf.balance"))
-        param->setValueNotifyingHost(param->convertTo0to1(
-            static_cast<float>(perf.balance)));
-
-    // ---- Pass 1: upper patch -> Layer A bank dump ----
-    proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerA);
-    loadPatch(proc.apvts, perf.upper);
-    applyJpLfo1Sync(proc.apvts, perf.lfo1SyncUpper);   // J6: the part's sync
-
-    proc._suppressEcho.store(false);
-    proc.sendBankDump();    // flush current APVTS as kLayerA entries only
-
-    // ---- Pass 2: lower patch -> Layer B bank dump ----
-    // Re-suppress, swap APVTS to lower, send a Layer-B-targeted dump.
-    proc._suppressEcho.store(true);
-    proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerB);
     loadPatch(proc.apvts, perf.lower);
     applyJpLfo1Sync(proc.apvts, perf.lfo1SyncLower);   // J6: the part's sync
-    proc._suppressEcho.store(false);
-    proc.sendBankDump();
+    proc.sendDump(DumpPlan::kPatch, lowerLayer);       // (sendDump ignores the echo flag)
 
-    // After the second dump the firmware has correct A + B state. The
-    // plugin's APVTS now reflects the lower patch — switching editTarget
-    // back to A would mismatch the visible UI. Leave editTarget on B so
-    // user edits land where the UI is showing.
-    proc.editTarget.store(JT8000ControllerProcessor::EditTarget::LayerB);
+    // ---- Performance params (sent with pass 2) ----
+    // Value law per row TYPE (gen/JtParamTable.h): Select -> choice INDEX,
+    // Continuous -> engineering value.  Set by juceId (the old perf CCs map to
+    // stale ParamIDs with no JtParams row).
+    setEng("perf.mode",       static_cast<float>(static_cast<int>(perf.mode)));
+    setEng("perf.split_note", static_cast<float>(perf.splitPoint));
+    setEng("perf.balance",    static_cast<float>(perf.balance));
+    // 4a: both parts answer the same channel, as on M-vance (one keyboard plays
+    // a DUAL / SPLIT).  Layer B used to stay on its default Ch 2 and was silent
+    // from a Ch 1 keyboard.  Layer A's channel is the user's and is kept.
+    if (auto* chA = proc.apvts.getParameter("perf.midi_channel_a"))
+        setEng("perf.midi_channel_b", chA->convertFrom0to1(chA->getValue()));
+    // 4a: the voice split M-vance uses for every program: 4 + 4 (option 3).
+    setEng("perf.voice_split", 3.0f);
+    // 6a: the A/B selector follows the layer the UI will show (UPPER's).  With
+    // the echo suppressed this only updates the routing mirror (no resync).
+    setEng("perf.edit_target", static_cast<float>(static_cast<int>(upperLayer)));
+
+    // ---- Pass 2: UPPER -> its layer, plus shared FX and the performance ----
+    proc.editTarget.store(upperLayer);
+    resetSharedToDefaults(proc.apvts);                 // 5a: FX are UPPER's alone
+    loadPatch(proc.apvts, perf.upper);
+    applyJpLfo1Sync(proc.apvts, perf.lfo1SyncUpper);   // J6: the part's sync
+    proc.sendDump(static_cast<uint8_t>(DumpPlan::kPatch | DumpPlan::kShared | DumpPlan::kPerf),
+                  upperLayer);
+
+    proc._suppressEcho.store(false);
 
     // Show the performance name with sub-patch names in the LCD.
     // For dual-layer: "PerfName (Upper / Lower)"

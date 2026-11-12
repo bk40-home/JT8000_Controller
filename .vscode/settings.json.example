@@ -1,0 +1,35 @@
+// TEMPLATE: copy this file to .vscode/settings.json (which git ignores) and set
+// JUCE_DIR / JT_ENGINE_DIR to your own paths.  Each machine keeps its own copy.
+{
+  // Where CMake writes its build tree. Matches your manual `mkdir build`.
+  "cmake.buildDirectory": "${workspaceFolder}/build",
+
+  // Cache variables — the GUI equivalent of your `-DJUCE_DIR=... -DJT_ENGINE_DIR=...`
+  // flags. Set once here; every configure/build reuses them.
+  "cmake.configureSettings": {
+    // Adjust to wherever you cloned JUCE. Forward slashes work on Windows in CMake.
+    "JUCE_DIR": "C:/path/to/JUCE",
+
+    // Optional: point at your firmware checkout to enable Sound modes +
+    // the JT8000_Synth target. Leave as "" for a controller-only build.
+    "JT_ENGINE_DIR": "C:/path/to/Jteensy8000"
+  },
+
+  // Release matches your `--config Release`. MSVC is multi-config, so this
+  // is chosen at BUILD time (see status bar) rather than configure time —
+  // this key just sets the default the CMake Tools status bar starts on.
+  "cmake.buildBeforeRun": true,
+  "cmake.defaultVariants": {
+  "buildType": {
+    "default": "release",
+    "choices": {
+      "debug":   { "short": "Debug",   "buildType": "Debug" },
+      "release": { "short": "Release", "buildType": "Release" },
+      "relwithdebinfo": { "short": "RelWithDebInfo", "buildType": "RelWithDebInfo" }
+    }
+  }
+},
+"cmake.options.statusBarVisibility": "visible"
+
+  
+}

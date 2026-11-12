@@ -19,3 +19,7 @@ build_log*.txt
 # OS clutter
 Thumbs.db
 .DS_Store
+
+# Per-machine VS Code settings (local JUCE / engine paths).  The template
+# .vscode/settings.json.example is committed instead.
+.vscode/settings.json

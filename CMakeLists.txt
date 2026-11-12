@@ -150,6 +150,8 @@ set(JT_APP_SOURCES
     Source/JP8000SyxImporter.cpp
     Source/JpLfoSync.h
     Source/JpLfoSync.cpp
+    Source/DumpPlan.h
+    Source/DumpPlan.cpp
     Source/JtTheme.h
     Source/PatchLibraryBrowser.h
     Source/PatchLibraryBrowser.cpp

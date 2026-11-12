@@ -137,19 +137,26 @@ public:
     // / kLayerBoth / kLayerPerf / kLayerGlobalFx.
     void sendSysExSetParam(uint8_t layer, uint16_t paramId14, float nativeValue);
 
-    // Send one BANK_DUMP containing every APVTS-bound param's current value.
-    // Used by JP8000SyxImporter::loadPatch for atomic preset loading. The
-    // firmware applies the whole dump under AudioNoInterrupts.
+    // SEND ALL: every APVTS-bound param's current value — Patch scope to the
+    // layer(s) of the current editTarget, every other scope once.
     void sendBankDump();
+
+    // A scoped dump (DumpPlan::What bits) with Patch scope sent to `target`
+    // (Both = A and B).  The importer uses it so a load sends only what it
+    // owns and each layer's patch reaches its own layer (Kris 5 Nov, 1a / 2a).
+    void sendDump(uint8_t what, EditTarget target);
 
     // --- Phase E: NRPN wire (see NrpnLink.h for the protocol contract) ------
     void sendParamNrpn(int v1cc, int ccVal);       // one edit -> 6 short msgs
     // Option B: send a v2-only param (no v1 CC) by ParamID directly — the seq
     // aux lane.  Same 6-CC NRPN, addressed by ParamID instead of via the bridge.
-    void sendParamNrpnById(uint16_t paramId, int ccVal);
+    void sendParamNrpnById(uint16_t paramId, int ccVal, uint8_t layer = 0);
     // Normalised APVTS value -> wire: 7-bit for every param that used it,
     // full 14-bit for integer params with > 128 values (bass.seed etc.).
+    // Patch scope goes to the editTarget's layer(s); other scopes once (1a).
     void sendParamValue(const JtParams::Param& p, float norm01);
+    // The same for one explicit layer (0 = A, 1 = B): the single wire path.
+    void sendParamValueToLayer(const JtParams::Param& p, float norm01, uint8_t layer);
     void requestResync();                          // full-state pull (0x3F00)
 
     // --- Bass sequencer actions (skin buttons; message thread only) --------
@@ -355,11 +362,14 @@ private:
     // handles the lock-free synchronisation.
     // =========================================================================
     static constexpr int kSysExSlotBytes = 16;   // SET_PARAM is 15; round up
-    // Phase E: a full-patch NRPN burst on the host-bus FALLBACK path is
-    // ~150 params x 6 short messages ~= 900 slots; 1024 gives headroom.
-    // (With a direct MIDI device open — the primary transport — the FIFO
-    // is bypassed entirely, exactly as before.)
-    static constexpr int kQueueSize      = 1024;
+    // Phase E: every param is a 6-message NRPN cluster.  A performance load
+    // (layer A Patch, then layer B Patch + PatchShared + Performance) is
+    // (221 + 221 + 70 + 9) x 6 = 3126 messages, and SEND ALL to Both about
+    // 3200, all queued on the message thread before processBlock drains them.
+    // 1024 overflowed and silently dropped the tail of the table — perf.*,
+    // reverb, master (Kris 5 Nov, option 2a).  4096 slots = about 70 KB.
+    // (With a direct MIDI device open the FIFO is bypassed, as before.)
+    static constexpr int kQueueSize      = 4096;
 
     struct SysExSlot { uint8_t data[kSysExSlotBytes]; uint8_t numBytes; };
     juce::AbstractFifo fifo { kQueueSize };

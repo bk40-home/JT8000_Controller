@@ -18,6 +18,7 @@
 #include "ParamMapJuce.h"
 #include "SyxProtocol.h"
 #include "JT8000Log.h"
+#include "DumpPlan.h"           // which params a dump sends, and to which layer
 #include "gen/JtParamTable.h"   // JtParams::kParams — generated from params.yaml;
                                 // the single source for the plugin's parameters.
 
@@ -752,15 +753,32 @@ void JT8000ControllerProcessor::parameterChanged(const juce::String& id, float n
 // =============================================================================
 void JT8000ControllerProcessor::sendParamValue(const JtParams::Param& p, float norm01)
 {
+    // Kris 5 Nov (1a): Patch-scope params are per layer, so a knob edit goes
+    // to the layer(s) being edited — before this every edit landed on layer A
+    // whatever the A/B/Both selector said.  Other scopes have one slot in the
+    // firmware and are sent once, unlayered.
+    if (p.scope != JtParams::Scope::Patch)
+    {
+        sendParamValueToLayer(p, norm01, 0);
+        return;
+    }
+    const EditTarget t = editTarget.load();
+    if (t != EditTarget::LayerB) sendParamValueToLayer(p, norm01, 0);   // A or Both
+    if (t != EditTarget::LayerA) sendParamValueToLayer(p, norm01, 1);   // B or Both
+}
+
+void JT8000ControllerProcessor::sendParamValueToLayer(const JtParams::Param& p,
+                                                      float norm01, uint8_t layer)
+{
     if (needsWire14(p))
     {
         NrpnLink::Short3 m[6];
         const size_t n = NrpnLink::encodeParamById14(p.paramId, norm01ToWire14(norm01),
-                                                     1 /*channel*/, m, 0);
+                                                     1 /*channel*/, m, layer);
         queueShortMidi(m, n);
         return;
     }
-    sendParamNrpnById(p.paramId, norm01ToWire7(norm01));
+    sendParamNrpnById(p.paramId, norm01ToWire7(norm01), layer);
 }
 
 // =============================================================================
@@ -992,15 +1010,17 @@ void JT8000ControllerProcessor::sendParamNrpn(int v1cc, int ccVal)
 // params that have no v1 CC and thus no bridge entry.  Same wire + transport
 // as sendParamNrpn; only the addressing differs.  value7 is the raw 7-bit
 // value the firmware decodes (norm = value7 * 129 / 16383).
-void JT8000ControllerProcessor::sendParamNrpnById(uint16_t paramId, int ccVal)
+void JT8000ControllerProcessor::sendParamNrpnById(uint16_t paramId, int ccVal,
+                                                  uint8_t layer)
 {
     NrpnLink::Short3 m[6];
     // Single-layer send by design: the v2-only ids routed here are the seq aux
     // lane, and seq.* is Scope::PatchShared — one instance, so a second copy
     // addressed to layer B would be the same write twice.
+    // `layer` (0 A, 1 B) rides in the NRPN address; the seq aux lane keeps 0.
     const size_t n = NrpnLink::encodeParamById(paramId,
                                                (uint8_t)juce::jlimit(0, 127, ccVal),
-                                               1 /*channel*/, m, 0);
+                                               1 /*channel*/, m, layer);
     queueShortMidi(m, n);
 }
 
@@ -1104,21 +1124,28 @@ void JT8000ControllerProcessor::queueSysEx(const uint8_t* data, int len)
 // =============================================================================
 void JT8000ControllerProcessor::sendBankDump()
 {
-    // Phase E: "send patch to synth" is now simply every APVTS-bound param
-    // as NRPN — the same single code path as a knob turn.  The v1 BANK_DUMP
-    // blob (layer bytes, 5-byte floats, count patching) has no v2 receiver;
-    // the firmware assembles state param-by-param, then its own broadcast
-    // mirrors the result to every other editor (live view for free).
-    for (int i = 0; i < JtParams::kNumParams; ++i)
+    // Phase E: "send patch to synth" is every APVTS-bound param as NRPN — the
+    // same single code path as a knob turn.  The firmware assembles state
+    // param-by-param, then its own broadcast mirrors the result to every other
+    // editor.  SEND ALL keeps sending every scope, Global included.
+    sendDump(DumpPlan::kAll, editTarget.load());
+}
+
+void JT8000ControllerProcessor::sendDump(uint8_t what, EditTarget target)
+{
+    // DumpPlan decides WHAT (scopes) and WHERE (Patch scope per layer, the
+    // rest once) — pure C++, host-tested.  Static: two entries per param is
+    // the worst case, and this runs on the message thread only.
+    static DumpPlan::Item plan[2 * JtParams::kNumParams];
+    const bool toA = (target != EditTarget::LayerB);
+    const bool toB = (target != EditTarget::LayerA);
+    const size_t n = DumpPlan::build(what, toA, toB, plan, 2 * JtParams::kNumParams);
+
+    for (size_t k = 0; k < n; ++k)
     {
-        const auto& p = JtParams::kParams[i];
-
-        auto* param = apvts.getParameter(p.juceId);
-        if (param == nullptr) continue;
-
-        // Same single path as parameterChanged (7-bit, or 14-bit for the large
-        // integer params), addressed by 14-bit ParamID.
-        sendParamValue(p, param->getValue());
+        const auto& p = JtParams::kParams[plan[k].index];
+        if (auto* param = apvts.getParameter(p.juceId))
+            sendParamValueToLayer(p, param->getValue(), plan[k].layer);
     }
 }
 
